@@ -10,3 +10,9 @@
 [submodule "dep/cargo/ai-sat"]
 	path = dep/cargo/ai-sat
 	url = ssh://cargo-cult/home/bsilverthorn/git/cargo/ai-sat
+[submodule "dep/third/argosat"]
+	path = dep/third/argosat
+	url = git@github.com:bsilverthorn/argosat.git
+[submodule "dep/cargo/log"]
+	path = dep/cargo/log
+	url = ssh://cargo-cult/home/bsilverthorn/git/cargo/log
