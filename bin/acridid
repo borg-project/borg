@@ -1,0 +1,10 @@
+#!/bin/bash
+
+ACRIDID_PATH_FILE=~/.quest/paths/acridid
+
+[ -f $ACRIDID_PATH_FILE ] || (echo "Configuration file not present." && exit -1)
+
+R=$(eval "echo $(cat $ACRIDID_PATH_FILE)")
+
+PYTHONPATH=$R/dep/cargo/kit/src/python:$R/dep/cargo/ai-sat/src/python:$R/dep/cargo/unix/src/python:$R/src/python python $@
+
