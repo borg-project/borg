@@ -43,9 +43,9 @@ def main(positional):
     solver = ArgoSAT_Solver()
 
     for file in files_under(flags.benchmark_root, "*.cnf"):
-        (outcome, seed) = solver.solve(4.0, file)
+        (outcome, elapsed, _) = solver.solve(4.0, file)
 
-        log.info("%s", outcome)
+        log.info("solver returned %s after %.2fs", outcome, elapsed)
 
 if __name__ == '__main__':
     main()
