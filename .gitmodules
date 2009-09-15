@@ -16,3 +16,6 @@
 [submodule "dep/cargo/log"]
 	path = dep/cargo/log
 	url = ssh://cargo-cult/home/bsilverthorn/git/cargo/log
+[submodule "dep/third/sqlalchemy"]
+	path = dep/third/sqlalchemy
+	url = git@github.com:bsilverthorn/sqlalchemy.git
