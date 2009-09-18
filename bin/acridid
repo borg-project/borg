@@ -6,5 +6,5 @@ ACRIDID_PATH_FILE=~/.quest/paths/acridid
 
 R=$(eval "echo $(cat $ACRIDID_PATH_FILE)")
 
-PYTHONPATH=$R/dep/cargo/kit/src/python:$R/dep/cargo/ai-sat/src/python:$R/dep/cargo/unix/src/python:$R/src/python python $@
+$R/bin/acridid-env python $@
 
