@@ -11,5 +11,5 @@ R_THIRD=$R/dep/third
 R_CARGO=$R/dep/cargo
 
 # execute the command in the updated environment
-PYTHONPATH=$R_THIRD/sqlalchemy/lib:$R_CARGO/kit/src/python:$R_CARGO/ai-sat/src/python:$R_CARGO/unix/src/python:$R/src/python $@
+PYTHONPATH=$R_THIRD/sqlalchemy/lib:$R_CARGO/kit/src/python:$R_CARGO/ai-sat/src/python:$R_CARGO/unix/src/python:$R/src/python:$PYTHONPATH $@
 
