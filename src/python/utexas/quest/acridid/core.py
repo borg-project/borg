@@ -10,9 +10,17 @@ import os.path
 import socket
 import logging
 
-from uuid import uuid4
+from uuid import (
+    UUID,
+    uuid4,
+    uuid5,
+    )
 from datetime import timedelta
-from itertools import chain
+from itertools import (
+    izip,
+    chain,
+    product,
+    )
 from sqlalchemy import (
     Column,
     Binary,
@@ -33,6 +41,7 @@ from cargo.sql.alchemy import (
     SQL_Base,
     SQL_UUID,
     SQL_JSON,
+    SQL_List,
     SQL_Session,
     UTC_DateTime,
     )
@@ -51,6 +60,19 @@ class SAT_Task(SQL_Base):
     name = Column(String)
     hash = Column(Binary(length = 64))
     path = Column(String)
+
+    @staticmethod
+    def from_file(root, path):
+        """
+        Describe an existing file.
+        """
+
+        # hash and retrieve the task
+        (_, hash)     = hash_file(path, "sha512")
+        relative_path = os.path.relpath(path, root)
+        task          = SAT_Task(path = relative_path, name = os.path.basename(path), hash = hash)
+
+        return task
 
 class SAT_SolverDescription(SQL_Base):
     """
@@ -80,13 +102,76 @@ class ArgoSAT_Configuration(SAT_SolverConfiguration):
     Configuration of ArgoSAT.
     """
 
-    __tablename__ = "argosat_configurations"
+    __tablename__   = "argosat_configurations"
     __mapper_args__ = {"polymorphic_identity": "argosat"}
 
-    uuid                = Column(SQL_UUID, ForeignKey("sat_solver_configurations.uuid"), primary_key = True)
-    variable_selection  = Column(SQL_JSON)
-    polarity_selection  = Column(SQL_JSON)
-    restart_scheduling  = Column(SQL_JSON)
+    uuid = Column(
+        SQL_UUID,
+        ForeignKey("sat_solver_configurations.uuid"),
+        default     = uuid4,
+        primary_key = True,
+        )
+    variable_selection = Column(SQL_List(String))
+    polarity_selection = Column(SQL_List(String))
+    restart_scheduling = Column(SQL_List(String))
+
+    NAMED_CONFIGURATION_NAMESPACE = UUID("72f8c280c63f4d81a00473850a34b710")
+    VARIABLE_SELECTION_STRATEGIES = {
+        "r":   ("random",),
+        "m":   ("minisat", "init", "1.0", "1.052"),
+        "r+m": ("random", "0.05", "minisat", "init", "1.0", "1.052"),
+        }
+    POLARITY_SELECTION_STRATEGIES = {
+        "t": ("true",),
+        "f": ("false",),
+        "r": ("random", "0.5"),
+        }
+    RESTART_SCHEDULING_STRATEGIES = {
+        "n": ("no_restart",),
+        }
+
+    @staticmethod
+    def from_names(vss, pss, rss):
+        name = "v:%s,p:%s,r:%s" % (vss, pss, rss)
+
+        if vss is None:
+            vss_arguments = None
+        else:
+            vss_arguments = ArgoSAT_Configuration.VARIABLE_SELECTION_STRATEGIES[vss]
+
+        if pss is None:
+            pss_arguments = None
+        else:
+            pss_arguments = ArgoSAT_Configuration.POLARITY_SELECTION_STRATEGIES[pss]
+
+        if rss is None:
+            rss_arguments = None
+        else:
+            rss_arguments = ArgoSAT_Configuration.RESTART_SCHEDULING_STRATEGIES[rss]
+
+        return \
+            ArgoSAT_Configuration(
+                uuid = uuid5(
+                    ArgoSAT_Configuration.NAMED_CONFIGURATION_NAMESPACE,
+                    name
+                    ),
+                name               = name,
+                variable_selection = vss_arguments,
+                polarity_selection = pss_arguments,
+                restart_scheduling = rss_arguments,
+                )
+
+    @staticmethod
+    def yield_all():
+        s = \
+            product(
+                ArgoSAT_Configuration.VARIABLE_SELECTION_STRATEGIES.iterkeys(),
+                ArgoSAT_Configuration.POLARITY_SELECTION_STRATEGIES.iterkeys(),
+                ArgoSAT_Configuration.RESTART_SCHEDULING_STRATEGIES.iterkeys(),
+                )
+
+        for names in s:
+            yield ArgoSAT_Configuration.from_name(*names)
 
     @property
     def argv(self):
@@ -113,16 +198,16 @@ class SAT_SolverRun(SQL_Base):
 
     __tablename__ = "sat_solver_runs"
 
-    uuid                = Column(SQL_UUID, primary_key = True, default = uuid4)
-    task_uuid           = Column(SQL_UUID, ForeignKey("sat_tasks.uuid"), nullable = False)
-    solver_name         = Column(String, ForeignKey("sat_solvers.name"), nullable = False)
-    configuration_uuid  = Column(SQL_UUID, ForeignKey("sat_solver_configurations.uuid"), nullable = False)
-    outcome             = Column(Boolean)
-    started             = Column(UTC_DateTime)
-    elapsed             = Column(Interval)
-    censored            = Column(Boolean)
-    fqdn                = Column(String)
-    seed                = Column(Integer)
+    uuid               = Column(SQL_UUID, primary_key = True, default = uuid4)
+    task_uuid          = Column(SQL_UUID, ForeignKey("sat_tasks.uuid"), nullable = False)
+    solver_name        = Column(String, ForeignKey("sat_solvers.name"), nullable = False)
+    configuration_uuid = Column(SQL_UUID, ForeignKey("sat_solver_configurations.uuid"), nullable = False)
+    outcome            = Column(Boolean)
+    started            = Column(UTC_DateTime)
+    elapsed            = Column(Interval)
+    censored           = Column(Boolean)
+    fqdn               = Column(String)
+    seed               = Column(Integer)
 
     task          = relation(SAT_Task)
     solver        = relation(SAT_SolverDescription)
