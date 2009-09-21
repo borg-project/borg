@@ -4,5 +4,5 @@ Acridid
 Description
 -----------
 
-Proof-of-concept implementation of an anticorrelated SAT solver.
+Experiments exploring correlation, anti and otherwise, in SAT solver behavior.
 
