@@ -1,10 +1,9 @@
-#!/bin/bash
+#!/usr/bin/env python2.6
 
-ACRIDID_PATH_FILE=~/.quest/paths/acridid
+import sys
 
-[ -f $ACRIDID_PATH_FILE ] || (echo "Configuration file not present." && exit -1)
+from os.path import join
+from subprocess import call
 
-R=$(eval "echo $(cat $ACRIDID_PATH_FILE)")
-
-$R/bin/acridid-env python $@
+call([join(sys.path[0], "acridid-env"), "python", "-m"] + sys.argv[1:])
 
