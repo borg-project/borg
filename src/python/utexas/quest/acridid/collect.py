@@ -7,6 +7,7 @@ Collect run data.
 """
 
 import os.path
+import sys
 import logging
 import numpy
 
@@ -21,6 +22,10 @@ from cargo.flags import (
     with_flags_parsed,
     )
 from cargo.errors import print_ignored_error
+from cargo.condor.spawn import (
+    CondorJob,
+    CondorSubmission,
+    )
 from utexas.quest.acridid.core import (
     SAT_Task,
     SAT_SolverRun,
@@ -57,10 +62,9 @@ def yield_tasks(subdirectory = ""):
     for path in files_under(directory, "*.cnf"):
         yield (path, SAT_Task.from_file(flags.benchmark_root, path))
 
-@with_flags_parsed()
-def main(positional):
+def run_job(seed = None):
     """
-    Application body.
+    Run a job, typically under condor.
     """
 
     # configure logging
@@ -71,13 +75,10 @@ def main(positional):
     session = SQL_Session()
 
     try:
-        seed                 = numpy.random.randint(0, 2**30)
         tasks                = [(p, session.merge(t)) for (p, t) in yield_tasks("dimacs/parity")]
         solver_description   = session.merge(SAT_SolverDescription(name = "argosat"))
         solver_configuration = session.merge(ArgoSAT_Configuration.from_names("r", "r", "n"))
         solver               = ArgoSAT_Solver(argv = solver_configuration.argv)
-
-        log.info("solver random seed is %i", seed)
 
         for (path, task) in tasks:
             run = \
@@ -102,12 +103,44 @@ def main(positional):
 
             session.add(run)
             session.commit()
-    finally:
+    except:
         try:
+            log.error("unhandled exception; rolling back transaction")
+
             session.rollback()
         except:
             print_ignored_error()
 
+def yield_jobs():
+    """
+    Yield (possibly) parallel jobs in this script.
+    """
+
+    for i in xrange(16):
+        seed = numpy.random.randint(0, 2**30)
+
+        log.info("the random seed for job %i is %i", i, seed)
+
+        yield CondorJob(run_job, seed = seed)
+
+@with_flags_parsed()
+def main(positional):
+    """
+    Application body.
+    """
+
+    matching   = "InMastodon && ( Arch == \"INTEL\" ) && ( OpSys == \"LINUX\" ) && regexp(\"rhavan-.*\", ParallelSchedulingGroup)"
+    submission = \
+        CondorSubmission(
+            jobs        = list(yield_jobs()),
+            matching    = matching,
+            description = "sampling randomized heuristic solver outcome distributions",
+            )
+
+    submission.run_or_submit()
+
 if __name__ == '__main__':
+    __name__ = "utexas.quest.acridid.collect"
+
     main()
 
