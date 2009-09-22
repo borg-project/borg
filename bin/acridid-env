@@ -32,6 +32,8 @@ if current_path:
 else:
     environment["PYTHONPATH"] = paths_prefix
 
+environment["ACRIDID_ROOT"] = normpath(git_root)
+
 # make the call
 call(sys.argv[1:], env = environment)
 
