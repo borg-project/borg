@@ -6,6 +6,7 @@ Collect run data.
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+import os
 import os.path
 import sys
 import logging
@@ -75,7 +76,7 @@ def run_job(seed = None):
     session = SQL_Session()
 
     try:
-        tasks                = [(p, session.merge(t)) for (p, t) in yield_tasks("dimacs/parity")]
+        tasks                = [(p, session.merge(t)) for (p, t) in yield_tasks("satlib/dimacs/parity")]
         solver_description   = session.merge(SAT_SolverDescription(name = "argosat"))
         solver_configuration = session.merge(ArgoSAT_Configuration.from_names("r", "r", "n"))
         solver               = ArgoSAT_Solver(argv = solver_configuration.argv)
@@ -105,7 +106,7 @@ def run_job(seed = None):
             session.commit()
     except:
         try:
-            log.error("unhandled exception; rolling back transaction")
+            log.error("unhandled exception; rolling back latest transaction")
 
             session.rollback()
         except:
@@ -123,24 +124,35 @@ def yield_jobs():
 
         yield CondorJob(run_job, seed = seed)
 
+def root_relative(relative):
+    """
+    Return an absolute path given a path relative to the project root.
+    """
+
+    return os.path.normpath(os.path.join(os.environ.get("ACRIDID_ROOT", ""), relative))
+
 @with_flags_parsed()
 def main(positional):
     """
     Application body.
     """
 
+    argv = [
+        "--benchmark-root",
+        root_relative("../../tasks"),
+        "--argosat-path",
+        root_relative("dep/third/argosat/src/argosat"),
+        "--database",
+        "postgresql://postgres@zerogravitas.csres.utexas.edu:5432/acridid-20090921",
+        ]
     matching   = "InMastodon && ( Arch == \"INTEL\" ) && ( OpSys == \"LINUX\" ) && regexp(\"rhavan-.*\", ParallelSchedulingGroup)"
     submission = \
         CondorSubmission(
             jobs        = list(yield_jobs()),
             matching    = matching,
+            argv        = argv,
             description = "sampling randomized heuristic solver outcome distributions",
             )
 
     submission.run_or_submit()
-
-if __name__ == '__main__':
-    __name__ = "utexas.quest.acridid.collect"
-
-    main()
 
