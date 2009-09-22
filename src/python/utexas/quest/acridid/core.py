@@ -205,6 +205,7 @@ class SAT_SolverRun(SQL_Base):
     outcome            = Column(Boolean)
     started            = Column(UTC_DateTime)
     elapsed            = Column(Interval)
+    cutoff             = Column(Interval)
     censored           = Column(Boolean)
     fqdn               = Column(String)
     seed               = Column(Integer)

@@ -79,6 +79,7 @@ def run_job(seed = None):
         solver_description   = session.merge(SAT_SolverDescription(name = "argosat"))
         solver_configuration = session.merge(ArgoSAT_Configuration.from_names("r", "r", "n"))
         solver               = ArgoSAT_Solver(argv = solver_configuration.argv)
+        cutoff               = timedelta(seconds = 512.0)
 
         for (path, task) in tasks:
             run = \
@@ -89,7 +90,7 @@ def run_job(seed = None):
                     )
             (outcome, elapsed, censored) = \
                 solver.solve(
-                    timedelta(seconds = 32.0),
+                    cutoff,
                     path,
                     seed,
                     )
@@ -98,6 +99,7 @@ def run_job(seed = None):
 
             run.outcome  = outcome
             run.elapsed  = elapsed
+            run.cutoff   = cutoff
             run.censored = censored
             run.seed     = seed
 
