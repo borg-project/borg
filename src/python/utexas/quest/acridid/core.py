@@ -27,7 +27,6 @@ from sqlalchemy import (
     String,
     Integer,
     Boolean,
-    Interval,
     ForeignKey,
     )
 from sqlalchemy.orm import relation
@@ -44,6 +43,7 @@ from cargo.sql.alchemy import (
     SQL_List,
     SQL_Session,
     UTC_DateTime,
+    SQL_TimeDelta,
     )
 from cargo.temporal import utc_now
 
@@ -214,8 +214,8 @@ class SAT_SolverRun(SQL_Base):
     configuration_uuid = Column(SQL_UUID, ForeignKey("sat_solver_configurations.uuid"), nullable = False)
     outcome            = Column(Boolean)
     started            = Column(UTC_DateTime)
-    elapsed            = Column(Interval)
-    cutoff             = Column(Interval)
+    elapsed            = Column(SQL_TimeDelta)
+    cutoff             = Column(SQL_TimeDelta)
     censored           = Column(Boolean)
     fqdn               = Column(String)
     seed               = Column(Integer)
