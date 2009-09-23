@@ -25,7 +25,7 @@ from utexas.quest.acridid.core import (
 
 log = get_logger(__name__, level = None)
 
-def plot_variance_histograms(session):
+def plot_variance_histogram(session):
     """
     Plot relevant tasks.
     """
@@ -60,7 +60,7 @@ def plot_per_seed_lines(session):
     solver_description   = session.merge(SAT_SolverDescription(name = "argosat"))
     solver_configuration = session.merge(ArgoSAT_Configuration.from_names("r", "r", "n"))
 
-    for (seed,) in session.query(SAT_SolverRun.seed).distinct()[:8]:
+    for (seed,) in session.query(SAT_SolverRun.seed).distinct()[:32]:
         runs_query =                                                    \
             session                                                     \
             .query(SAT_Task, SAT_SolverRun)                             \
@@ -80,7 +80,7 @@ def plot_per_seed_lines(session):
             marker    = "o",
             )
 
-def plot_per_task_elapsed_histograms(session):
+def plot_per_task_elapsed_matrix(session):
     """
     Plot relevant tasks.
     """
@@ -101,11 +101,13 @@ def plot_per_task_elapsed_histograms(session):
         (histogram, _)       = \
             numpy.histogram(
                 numpy.array([math.log(1.0 + r.elapsed.as_s) for r in runs_query]),
-                bins = nbins,
+                bins  = nbins,
+                range = (0.0, math.log(512.0)),
                 )
         elapsed_matrix[:, i] = histogram
 
-    pylab.matshow(elapsed_matrix)
+    pylab.bone()
+    pylab.matshow(elapsed_matrix, fignum = False)
 
 @with_flags_parsed()
 def main(positional):
@@ -116,11 +118,11 @@ def main(positional):
     session = SQL_Session()
 
     pylab.figure(1)
-    plot_per_task_elapsed_histograms(session)
+    plot_per_task_elapsed_matrix(session)
     pylab.figure(2)
     plot_per_seed_lines(session)
     pylab.figure(3)
-    plot_variance_histograms(session)
+    plot_variance_histogram(session)
 
     pylab.show()
 
