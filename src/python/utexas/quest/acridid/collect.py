@@ -119,7 +119,7 @@ def yield_jobs():
     Yield (possibly) parallel jobs in this script.
     """
 
-    for i in xrange(16):
+    for i in xrange(48):
         seed = numpy.random.randint(0, 2**30)
 
         log.info("the random seed for job %i is %i", i, seed)

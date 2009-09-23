@@ -57,9 +57,10 @@ class SAT_Task(SQL_Base):
     __tablename__ = "sat_tasks"
 
     uuid = Column(SQL_UUID, primary_key = True, default = uuid4)
-    name = Column(String)
     hash = Column(Binary(length = 64))
     path = Column(String)
+
+    TASK_NAMESPACE = UUID("f1f6fe7bde244873ba4f7a60d51b8d42")
 
     @staticmethod
     def from_file(root, path):
@@ -70,9 +71,17 @@ class SAT_Task(SQL_Base):
         # hash and retrieve the task
         (_, hash)     = hash_file(path, "sha512")
         relative_path = os.path.relpath(path, root)
-        task          = SAT_Task(path = relative_path, name = os.path.basename(path), hash = hash)
 
-        return task
+        return \
+            SAT_Task(
+                uuid = \
+                    uuid5(
+                        SAT_Task.TASK_NAMESPACE,
+                        relative_path + hash,
+                        ),
+                path = relative_path,
+                hash = hash,
+                )
 
 class SAT_SolverDescription(SQL_Base):
     """
@@ -151,10 +160,11 @@ class ArgoSAT_Configuration(SAT_SolverConfiguration):
 
         return \
             ArgoSAT_Configuration(
-                uuid = uuid5(
-                    ArgoSAT_Configuration.NAMED_CONFIGURATION_NAMESPACE,
-                    name
-                    ),
+                uuid = \
+                    uuid5(
+                        ArgoSAT_Configuration.NAMED_CONFIGURATION_NAMESPACE,
+                        name
+                        ),
                 name               = name,
                 variable_selection = vss_arguments,
                 polarity_selection = pss_arguments,
