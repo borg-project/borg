@@ -7,7 +7,6 @@ Common acridid code.
 """
 
 import os.path
-import socket
 import logging
 
 from uuid import (
@@ -15,6 +14,7 @@ from uuid import (
     uuid4,
     uuid5,
     )
+from socket import getfqdn
 from datetime import timedelta
 from itertools import (
     izip,
@@ -114,7 +114,7 @@ class ArgoSAT_Configuration(SAT_SolverConfiguration):
     __tablename__   = "argosat_configurations"
     __mapper_args__ = {"polymorphic_identity": "argosat"}
 
-    uuid = Column(
+    uuid              = Column(
         SQL_UUID,
         ForeignKey("sat_solver_configurations.uuid"),
         default     = uuid4,
@@ -236,7 +236,7 @@ class SAT_SolverRun(SQL_Base):
         run = SAT_SolverRun(*args, **kwargs)
 
         run.started = utc_now()
-        run.fqdn    = socket.getfqdn()
+        run.fqdn    = getfqdn()
 
         return run
 
