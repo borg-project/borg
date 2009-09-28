@@ -6,6 +6,11 @@ Collect run data.
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+if __name__ == "__main__":
+    from utexas.quest.acridid.collect import main
+
+    raise SystemExit(main())
+
 import os
 import os.path
 import sys
@@ -20,12 +25,18 @@ from cargo.sql.alchemy import SQL_Session
 from cargo.flags import (
     Flag,
     FlagSet,
+    parse_given,
     with_flags_parsed,
     )
-from cargo.errors import print_ignored_error
-from cargo.condor.spawn import (
-    CondorJob,
-    CondorSubmission,
+from cargo.sugar import run_once
+from cargo.labor.jobs import (
+    Job,
+    Jobs,
+    )
+from cargo.labor.storage import outsource
+from cargo.errors import (
+    Raised,
+    print_ignored_error,
     )
 from utexas.quest.acridid.core import (
     SAT_Task,
@@ -50,6 +61,12 @@ class ModuleFlags(FlagSet):
             metavar = "PATH",
             help    = "run on CNF instances under PATH [%default]",
             )
+    outsource_flag = \
+        Flag(
+            "--outsource",
+            action  = "store_true",
+            help    = "store labor for workers",
+            )
 
 flags = ModuleFlags.given
 
@@ -63,69 +80,6 @@ def yield_tasks(subdirectory = ""):
     for path in files_under(directory, "*.cnf"):
         yield (path, SAT_Task.from_file(flags.benchmark_root, path))
 
-def run_job(seed = None):
-    """
-    Run a job, typically under condor.
-    """
-
-    # configure logging
-    get_logger("sqlalchemy.engine").setLevel(logging.WARNING)
-    get_logger("cargo.ai.sat.solvers").setLevel(logging.DEBUG)
-
-    # run the experiment
-    session = SQL_Session()
-
-    try:
-        tasks                = [(p, session.merge(t)) for (p, t) in yield_tasks("satlib/dimacs/parity")]
-        solver_description   = session.merge(SAT_SolverDescription(name = "argosat"))
-        solver_configuration = session.merge(ArgoSAT_Configuration.from_names("r", "r", "n"))
-        solver               = ArgoSAT_Solver(argv = solver_configuration.argv)
-        cutoff               = timedelta(seconds = 512.0)
-
-        for (path, task) in tasks:
-            run = \
-                SAT_SolverRun.starting_now(
-                    task          = task,
-                    solver        = solver_description,
-                    configuration = solver_configuration,
-                    )
-            (outcome, elapsed, censored) = \
-                solver.solve(
-                    cutoff,
-                    path,
-                    seed,
-                    )
-
-            log.info("solver returned %s after %s", outcome, elapsed)
-
-            run.outcome  = outcome
-            run.elapsed  = elapsed
-            run.cutoff   = cutoff
-            run.censored = censored
-            run.seed     = seed
-
-            session.add(run)
-            session.commit()
-    except:
-        try:
-            log.error("unhandled exception; rolling back latest transaction")
-
-            session.rollback()
-        except:
-            print_ignored_error()
-
-def yield_jobs():
-    """
-    Yield (possibly) parallel jobs in this script.
-    """
-
-    for i in xrange(48):
-        seed = numpy.random.randint(0, 2**30)
-
-        log.info("the random seed for job %i is %i", i, seed)
-
-        yield CondorJob(run_job, seed = seed)
-
 def root_relative(relative):
     """
     Return an absolute path given a path relative to the project root.
@@ -133,28 +87,99 @@ def root_relative(relative):
 
     return os.path.normpath(os.path.join(os.environ.get("ACRIDID_ROOT", ""), relative))
 
+class RunSolverJob(Job):
+    """
+    Run a solver on a task.
+    """
+
+    @staticmethod
+    @run_once
+    def class_set_up():
+        """
+        Common setup code.
+        """
+
+        # logging configuration
+        get_logger("sqlalchemy.engine").setLevel(logging.WARNING)
+        get_logger("cargo.ai.sat.solvers").setLevel(logging.DEBUG)
+
+    def run(self):
+        """
+        Run this job in a transaction.
+        """
+
+        session              = SQL_Session(self.database)
+        solver               = ArgoSAT_Solver(flags = ArgoSAT_Solver.Flags(argosat_path = self.solver_path))
+        task                 = session.merge(self.task)
+        solver_description   = session.merge(SAT_SolverDescription(name = "argosat"))
+        solver_configuration = session.merge(self.configuration)
+        cutoff               = timedelta(seconds = 512.0)
+
+        run = \
+            SAT_SolverRun.starting_now(
+                task          = task,
+                solver        = solver_description,
+                configuration = solver_configuration,
+                )
+        (outcome, elapsed, censored) = \
+            solver.solve(
+                cutoff,
+                self.path,
+                self.seed,
+                )
+
+        log.info("solver returned %s after %s", outcome, elapsed)
+
+        run.outcome  = outcome
+        run.elapsed  = elapsed
+        run.cutoff   = cutoff
+        run.censored = censored
+        run.seed     = self.seed
+
+        session.add(run)
+        session.commit()
+
+def yield_jobs():
+    """
+    Yield units of work.
+    """
+
+    session       = SQL_Session()
+    database      = session.connection().engine.url
+    configuration = ArgoSAT_Configuration.from_names("r", "r", "n")
+    solver        = ArgoSAT_Solver(argv = configuration.argv)
+    tasks         = [(p, session.merge(t)) for (p, t) in yield_tasks("satlib/dimacs")]
+
+    for i in xrange(64):
+        seed = numpy.random.randint(0, 2**30)
+
+        for (path, task) in tasks:
+            yield \
+                RunSolverJob(
+                    database      = database,
+                    seed          = seed,
+                    path          = path,
+                    task          = task,
+                    solver_path   = solver.flags.argosat_path,
+                    configuration = configuration,
+                    )
+
 @with_flags_parsed()
 def main(positional):
     """
     Application body.
     """
 
-    argv = [
-        "--benchmark-root",
-        root_relative("../../tasks"),
-        "--argosat-path",
-        root_relative("dep/third/argosat/src/argosat"),
-        "--database",
-        "postgresql://postgres@zerogravitas.csres.utexas.edu:5432/acridid-20090921",
-        ]
-    matching   = "InMastodon && ( Arch == \"INTEL\" ) && ( OpSys == \"LINUX\" ) && regexp(\"rhavan-.*\", ParallelSchedulingGroup)"
-    submission = \
-        CondorSubmission(
-            jobs        = list(yield_jobs()),
-            matching    = matching,
-            argv        = argv,
-            description = "sampling randomized heuristic solver outcome distributions",
-            )
+#     matching = "InMastodon && ( Arch == \"INTEL\" ) && ( OpSys == \"LINUX\" ) && regexp(\"rhavan-.*\", ParallelSchedulingGroup)"
 
-    submission.run_or_submit()
+    jobs = list(yield_jobs())
+
+    if flags.outsource:
+        log.note("outsourcing %i jobs", len(jobs))
+
+        outsource(jobs, "random argosat runs on satlib/dimacs")
+    else:
+        log.note("running %i jobs", len(jobs))
+
+        Jobs(jobs).run()
 
