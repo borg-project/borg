@@ -80,7 +80,7 @@ def plot_per_seed_lines(session):
             marker    = "o",
             )
 
-def plot_per_task_elapsed_matrix(session):
+def plot_per_task_elapsed_matrix(session, ntasks = None):
     """
     Plot relevant tasks.
     """
@@ -89,9 +89,15 @@ def plot_per_task_elapsed_matrix(session):
     solver_configuration = session.merge(ArgoSAT_Configuration.from_names("r", "r", "n"))
     tasks_query          = session.query(SAT_Task).filter(SAT_Task.path.startswith("satlib/dimacs/parity")).order_by(SAT_Task.path)
     nbins                = 8
-    elapsed_matrix       = numpy.empty((nbins, tasks_query.count()))
 
-    for (i, task) in enumerate(tasks_query):
+    if ntasks is None:
+        tasks = tasks_query[:]
+    else:
+        tasks = tasks_query[:ntasks]
+
+    elapsed_matrix       = numpy.empty((nbins, len(tasks)))
+
+    for (i, task) in enumerate(tasks):
         runs_query           = \
             session.query(SAT_SolverRun).filter(
                 (SAT_SolverRun.task == task)
@@ -120,8 +126,10 @@ def main(positional):
     pylab.figure(1)
     plot_per_task_elapsed_matrix(session)
     pylab.figure(2)
-    plot_per_seed_lines(session)
+    plot_per_task_elapsed_matrix(session, 1)
     pylab.figure(3)
+    plot_per_seed_lines(session)
+    pylab.figure(4)
     plot_variance_histogram(session)
 
     pylab.show()
