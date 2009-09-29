@@ -170,8 +170,6 @@ def main(positional):
     Application body.
     """
 
-#     matching = "InMastodon && ( Arch == \"INTEL\" ) && ( OpSys == \"LINUX\" ) && regexp(\"rhavan-.*\", ParallelSchedulingGroup)"
-
     jobs = list(yield_jobs())
 
     if flags.outsource:
