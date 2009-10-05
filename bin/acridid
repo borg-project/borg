@@ -2,8 +2,10 @@
 
 import sys
 
-from os.path import join
-from subprocess import call
+from acridid import main
 
-call([join(sys.path[0], "acridid-env"), "python", "-m"] + sys.argv[1:])
+if __name__ == "__main__":
+    sys.argv = [sys.path[0], "python", "-m"] + sys.argv[1:]
+
+    main()
 
