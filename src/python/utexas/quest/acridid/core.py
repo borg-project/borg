@@ -6,6 +6,11 @@ Common acridid code.
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+if __name__ == "__main__":
+    from utexas.quest.acridid.core import main
+
+    raise SystemExit(main())
+
 import os.path
 import logging
 
@@ -29,27 +34,47 @@ from sqlalchemy import (
     Boolean,
     ForeignKey,
     )
-from sqlalchemy.orm import relation
+from sqlalchemy.orm import (
+    relation,
+    sessionmaker,
+    )
 from sqlalchemy.orm.exc import NoResultFound
 from cargo.io import (
     hash_file,
     files_under,
     )
+from sqlalchemy.ext.declarative import declarative_base
 from cargo.log import get_logger
 from cargo.sql.alchemy import (
-    SQL_Base,
     SQL_UUID,
     SQL_JSON,
     SQL_List,
-    SQL_Session,
+    SQL_Engines,
     UTC_DateTime,
     SQL_TimeDelta,
     )
+from cargo.flags import (
+    Flag,
+    Flags,
+    with_flags_parsed,
+    )
 from cargo.temporal import utc_now
 
-log = get_logger(__name__, level = None)
+log            = get_logger(__name__, level = None)
+AcrididBase    = declarative_base()
+AcrididSession = sessionmaker()
+module_flags   = \
+    Flags(
+        "Acridid Core Configuration",
+        Flag(
+            "--acridid-database",
+            default = "sqlite:///:memory:",
+            metavar = "DATABASE",
+            help    = "use DATABASE by default [%default]",
+            ),
+        )
 
-class SAT_Task(SQL_Base):
+class SAT_Task(AcrididBase):
     """
     One satisfiability task in DIMACS CNF format.
     """
@@ -83,7 +108,7 @@ class SAT_Task(SQL_Base):
                 hash = hash,
                 )
 
-class SAT_SolverDescription(SQL_Base):
+class SAT_SolverDescription(AcrididBase):
     """
     Information about a SAT solver.
     """
@@ -91,9 +116,23 @@ class SAT_SolverDescription(SQL_Base):
     __tablename__ = "sat_solvers"
 
     name = Column(String, primary_key = True)
-    path = Column(String)
+    type = Column(String)
 
-class SAT_SolverConfiguration(SQL_Base):
+    __mapper_args__ = {"polymorphic_on": type}
+
+class SAT_2007_SolverDescription(SAT_SolverDescription):
+    """
+    Configuration of a solver from the 2007 SAT competition.
+    """
+
+    __tablename__   = "sat_2007_solvers"
+    __mapper_args__ = {"polymorphic_identity": "sat2007"}
+
+    name          = Column(String, ForeignKey(SAT_SolverDescription.name), primary_key = True)
+    relative_path = Column(String)
+    seeded        = Column(Boolean)
+
+class SAT_SolverConfiguration(AcrididBase):
     """
     Configuration of a SAT solver.
     """
@@ -102,9 +141,9 @@ class SAT_SolverConfiguration(SQL_Base):
 
     uuid        = Column(SQL_UUID, primary_key = True, default = uuid4)
     name        = Column(String)
-    solver_name = Column(String, ForeignKey("sat_solvers.name"))
+    solver_type = Column(String)
 
-    __mapper_args__ = {"polymorphic_on": solver_name}
+    __mapper_args__ = {"polymorphic_on": solver_type}
 
 class ArgoSAT_Configuration(SAT_SolverConfiguration):
     """
@@ -141,6 +180,10 @@ class ArgoSAT_Configuration(SAT_SolverConfiguration):
 
     @staticmethod
     def from_names(vss, pss, rss):
+        """
+        Create a configuration from names using a deterministic UUID.
+        """
+
         name = "v:%s,p:%s,r:%s" % (vss, pss, rss)
 
         if vss is None:
@@ -160,10 +203,10 @@ class ArgoSAT_Configuration(SAT_SolverConfiguration):
 
         return \
             ArgoSAT_Configuration(
-                uuid = \
+                uuid               = \
                     uuid5(
                         ArgoSAT_Configuration.NAMED_CONFIGURATION_NAMESPACE,
-                        name
+                        name,
                         ),
                 name               = name,
                 variable_selection = vss_arguments,
@@ -201,7 +244,7 @@ class ArgoSAT_Configuration(SAT_SolverConfiguration):
 
         return tuple(arguments)
 
-class SATensteinConfiguration(object):
+class SATensteinConfiguration(SAT_SolverConfiguration):
     """
     Configuration of SATenstein.
     """
@@ -219,7 +262,7 @@ class SATensteinConfiguration(object):
 
     NAMED_CONFIGURATION_NAMESPACE = UUID("4cdba386aa224cd5b575cf556672e0a3")
 
-class SAT_SolverRun(SQL_Base):
+class SAT_SolverRun(AcrididBase):
     """
     Information about one run of a solver on a SAT task.
     """
@@ -229,7 +272,7 @@ class SAT_SolverRun(SQL_Base):
     uuid               = Column(SQL_UUID, primary_key = True, default = uuid4)
     task_uuid          = Column(SQL_UUID, ForeignKey("sat_tasks.uuid"), nullable = False)
     solver_name        = Column(String, ForeignKey("sat_solvers.name"), nullable = False)
-    configuration_uuid = Column(SQL_UUID, ForeignKey("sat_solver_configurations.uuid"), nullable = False)
+    configuration_uuid = Column(SQL_UUID, ForeignKey("sat_solver_configurations.uuid"))
     outcome            = Column(Boolean)
     started            = Column(UTC_DateTime)
     elapsed            = Column(SQL_TimeDelta)
@@ -257,4 +300,24 @@ class SAT_SolverRun(SQL_Base):
         run.fqdn    = getfqdn()
 
         return run
+
+def acridid_connect(engines = SQL_Engines.default, flags = module_flags.given):
+    """
+    Connect to acridid storage.
+    """
+
+    flags  = module_flags.merged(flags)
+    engine = engines.get(flags.acridid_database)
+
+    AcrididBase.metadata.create_all(engine)
+
+    return engine
+
+@with_flags_parsed()
+def main(positional):
+    """
+    Create core database metadata.
+    """
+
+    acridid_connect()
 

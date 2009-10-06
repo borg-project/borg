@@ -12,6 +12,7 @@ import numpy
 import pylab
 
 from collections import defaultdict
+from sqlalchemy.sql.functions import random
 from cargo.log import get_logger
 from cargo.sql.alchemy import SQL_Session
 from cargo.flags import with_flags_parsed
@@ -41,7 +42,7 @@ def plot_variance_histogram(session):
             .filter(
                 (SAT_SolverRun.seed == seed)
                 & (SAT_Task.uuid == SAT_SolverRun.task_uuid)
-                & SAT_Task.path.startswith("satlib/dimacs/parity")
+                & SAT_Task.path.startswith("satlib/dimacs/")
                 & (SAT_SolverRun.solver == solver_description)
                 & (SAT_SolverRun.configuration == solver_configuration)
                 )                                                       \
@@ -50,9 +51,9 @@ def plot_variance_histogram(session):
         if runs_query.count() >= 30:
             variances[seed] = numpy.var([math.log(1.0 + r.elapsed.as_s) for (_, r) in runs_query])
 
-    pylab.hist(variances.values())
+    pylab.hist(variances.values(), bins = 16)
 
-def plot_per_seed_lines(session):
+def plot_per_seed_lines(session, nlines = None):
     """
     Plot relevant tasks.
     """
@@ -60,14 +61,14 @@ def plot_per_seed_lines(session):
     solver_description   = session.merge(SAT_SolverDescription(name = "argosat"))
     solver_configuration = session.merge(ArgoSAT_Configuration.from_names("r", "r", "n"))
 
-    for (seed,) in session.query(SAT_SolverRun.seed).distinct()[:32]:
+    for (seed,) in session.query(SAT_SolverRun.seed).distinct()[:nlines]:
         runs_query =                                                    \
             session                                                     \
             .query(SAT_Task, SAT_SolverRun)                             \
             .filter(
                 (SAT_SolverRun.seed == seed)
                 & (SAT_Task.uuid == SAT_SolverRun.task_uuid)
-                & SAT_Task.path.startswith("satlib/dimacs/parity")
+                & SAT_Task.path.startswith("satlib/dimacs/")
                 & (SAT_SolverRun.solver == solver_description)
                 & (SAT_SolverRun.configuration == solver_configuration)
                 )                                                       \
@@ -87,30 +88,30 @@ def plot_per_task_elapsed_matrix(session, ntasks = None):
 
     solver_description   = session.merge(SAT_SolverDescription(name = "argosat"))
     solver_configuration = session.merge(ArgoSAT_Configuration.from_names("r", "r", "n"))
-    tasks_query          = session.query(SAT_Task).filter(SAT_Task.path.startswith("satlib/dimacs/parity")).order_by(SAT_Task.path)
+    tasks_query          = session.query(SAT_Task).filter(SAT_Task.path.startswith("satlib/dimacs/")).order_by(SAT_Task.path)
     nbins                = 8
+    tasks                = tasks_query[:ntasks]
 
-    if ntasks is None:
-        tasks = tasks_query[:]
-    else:
-        tasks = tasks_query[:ntasks]
+    if not tasks:
+        raise RuntimeError("no matching tasks")
 
-    elapsed_matrix       = numpy.empty((nbins, len(tasks)))
+    elapsed_matrix = numpy.empty((nbins, len(tasks)))
 
     for (i, task) in enumerate(tasks):
-        runs_query           = \
+        runs_query           =                                          \
             session.query(SAT_SolverRun).filter(
                 (SAT_SolverRun.task == task)
                 & (SAT_SolverRun.solver == solver_description)
                 & (SAT_SolverRun.configuration == solver_configuration)
                 )
-        (histogram, _)       = \
+        (histogram, _)       =                                                      \
             numpy.histogram(
                 numpy.array([math.log(1.0 + r.elapsed.as_s) for r in runs_query]),
                 bins  = nbins,
                 range = (0.0, math.log(512.0)),
                 )
-        elapsed_matrix[:, i] = histogram
+        column               = numpy.nan_to_num(histogram / numpy.sum(histogram, dtype = float))
+        elapsed_matrix[:, i] = column
 
     pylab.bone()
     pylab.matshow(elapsed_matrix, fignum = False)
@@ -125,10 +126,10 @@ def main(positional):
 
     pylab.figure(1)
     plot_per_task_elapsed_matrix(session)
-    pylab.figure(2)
-    plot_per_task_elapsed_matrix(session, 1)
+#     pylab.figure(2)
+#     plot_per_task_elapsed_matrix(session, 1)
     pylab.figure(3)
-    plot_per_seed_lines(session)
+    plot_per_seed_lines(session, 16)
     pylab.figure(4)
     plot_variance_histogram(session)
 

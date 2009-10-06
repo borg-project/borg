@@ -18,67 +18,65 @@ import logging
 import numpy
 
 from datetime import timedelta
+from contextlib import closing
 from cargo.io import files_under
-from cargo.ai.sat.solvers import ArgoSAT_Solver
+from cargo.ai.sat.solvers import (
+    ArgoSAT_Solver,
+    SAT_Competition2007_Solver,
+    )
 from cargo.log import get_logger
-from cargo.sql.alchemy import SQL_Session
+from cargo.sql.alchemy import SQL_Engines
 from cargo.flags import (
     Flag,
-    FlagSet,
+    Flags,
     parse_given,
-    with_flags_parsed,
     )
 from cargo.sugar import run_once
 from cargo.labor.jobs import (
     Job,
     Jobs,
     )
-from cargo.labor.storage import outsource
-from cargo.errors import (
-    Raised,
-    print_ignored_error,
+from cargo.labor.storage import (
+    LaborSession,
+    outsource,
+    labor_connect,
     )
 from utexas.quest.acridid.core import (
     SAT_Task,
     SAT_SolverRun,
+    AcrididSession,
     SAT_SolverDescription,
     ArgoSAT_Configuration,
+    SAT_2007_SolverDescription,
+    acridid_connect,
     )
 
-log = get_logger(__name__, level = None)
-
-class ModuleFlags(FlagSet):
-    """
-    Flags that apply to this module.
-    """
-
-    flag_set_title = "Script Configuration"
-
-    benchmark_root_flag = \
+log          = get_logger(__name__, level = None)
+script_flags = \
+    Flags(
+        "Script Configuration",
         Flag(
             "--benchmark-root",
             default = ".",
             metavar = "PATH",
             help    = "run on CNF instances under PATH [%default]",
-            )
-    outsource_flag = \
+            ),
         Flag(
             "--outsource",
             action  = "store_true",
-            help    = "store labor for workers",
-            )
-
-flags = ModuleFlags.given
+            help    = "outsource labor to workers",
+            ),
+        )
 
 def yield_tasks(subdirectory = ""):
     """
     Yield the task descriptions.
     """
 
-    directory = os.path.join(flags.benchmark_root, subdirectory)
+    directory = os.path.join(script_flags.given.benchmark_root, subdirectory)
 
     for path in files_under(directory, "*.cnf"):
-        yield (path, SAT_Task.from_file(flags.benchmark_root, path))
+        yield (path, SAT_Task.from_file(script_flags.given.benchmark_root, path))
 
 def root_relative(relative):
     """
@@ -105,24 +103,40 @@ class RunSolverJob(Job):
 
     def run(self):
         """
+        Run this job.
+        """
+
+        # database configuration
+        session = AcrididSession(bind = SQL_Engines.default.get(self.database))
+
+        with closing(session):
+            self.run_in_transaction(session)
+
+            session.commit()
+
+    def run_in_transaction(self, session):
+        """
         Run this job in a transaction.
         """
 
-        session              = SQL_Session(self.database)
-        solver               = ArgoSAT_Solver(flags = ArgoSAT_Solver.Flags(argosat_path = self.solver_path))
-        task                 = session.merge(self.task)
-        solver_description   = session.merge(SAT_SolverDescription(name = "argosat"))
-        solver_configuration = session.merge(self.configuration)
-        cutoff               = timedelta(seconds = 512.0)
+        cutoff = timedelta(seconds = 512.0)
+
+        if self.configuration is None:
+            configuration = None
+        else:
+            configuration = session.merge(self.configuration)
+
+        if self.solver.seeded and self.seed is None:
+            self.seed = numpy.random.randint(0, 2**30)
 
         run = \
             SAT_SolverRun.starting_now(
-                task          = task,
-                solver        = solver_description,
-                configuration = solver_configuration,
+                task          = session.merge(self.task),
+                solver        = session.merge(self.description),
+                configuration = configuration,
                 )
         (outcome, elapsed, censored) = \
-            solver.solve(
+            self.solver.solve(
                 cutoff,
                 self.path,
                 self.seed,
@@ -137,15 +151,13 @@ class RunSolverJob(Job):
         run.seed     = self.seed
 
         session.add(run)
-        session.commit()
 
-def yield_jobs():
+def yield_argosat_seed_jobs():
     """
     Yield units of work.
     """
 
     session       = SQL_Session()
-    database      = session.connection().engine.url
     configuration = ArgoSAT_Configuration.from_names("r", "r", "n")
     solver        = ArgoSAT_Solver(argv = configuration.argv)
     tasks         = [(p, session.merge(t)) for (p, t) in yield_tasks("satlib/dimacs")]
@@ -156,28 +168,65 @@ def yield_jobs():
         for (path, task) in tasks:
             yield \
                 RunSolverJob(
-                    database      = database,
+                    database      = session.connection().engine.url,
                     seed          = seed,
                     path          = path,
                     task          = task,
-                    solver_path   = solver.flags.argosat_path,
+                    solver        = solver,
                     configuration = configuration,
                     )
 
-@with_flags_parsed()
-def main(positional):
+def yield_sat2007_random_jobs():
+    """
+    Yield units of work.
+    """
+
+    session = AcrididSession()
+
+    with closing(session):
+        tasks = [(p, session.merge(t)) for (p, t) in yield_tasks("sat2007/random")]
+
+        for solver_description in session.query(SAT_2007_SolverDescription).all():
+            solver = \
+                SAT_Competition2007_Solver(
+                    solver_description.relative_path,
+                    solver_description.seeded,
+                    )
+
+            for (path, task) in tasks:
+                yield \
+                    RunSolverJob(
+                        database      = session.connection().engine.url,
+                        seed          = None,
+                        path          = path,
+                        task          = task,
+                        solver        = solver,
+                        configuration = None,
+                        description   = solver_description,
+                        )
+
+        session.commit()
+
+def main():
     """
     Application body.
     """
 
-    jobs = list(yield_jobs())
+    parse_given()
 
-    if flags.outsource:
-        log.note("outsourcing %i jobs", len(jobs))
+    AcrididSession.configure(bind = acridid_connect())
 
-        outsource(jobs, "random argosat runs on satlib/dimacs")
-    else:
-        log.note("running %i jobs", len(jobs))
+    get_logger("cargo.labor.storage").setLevel(logging.NOTE)
 
-        Jobs(jobs).run()
+    with SQL_Engines.default:
+        jobs = list(yield_sat2007_random_jobs())
+
+        if script_flags.given.outsource:
+            LaborSession.configure(bind = labor_connect())
+
+            outsource(jobs, "run SAT-2007 competition solvers on the random benchmark")
+        else:
+            log.note("running %i jobs", len(jobs))
+
+            Jobs(jobs).run()
 
