@@ -111,6 +111,7 @@ class RunSolverJob(Job):
 
         with closing(session):
             self.run_in_transaction(session)
+
             session.commit()
 
     def run_in_transaction(self, session):
@@ -118,17 +119,20 @@ class RunSolverJob(Job):
         Run this job in a transaction.
         """
 
-        cutoff  = timedelta(seconds = 512.0)
+        cutoff = timedelta(seconds = 512.0)
 
         if self.configuration is None:
             configuration = None
         else:
             configuration = session.merge(self.configuration)
 
+        if self.solver.seeded and self.seed is None:
+            self.seed = numpy.random.randint(0, 2**30)
+
         run = \
             SAT_SolverRun.starting_now(
                 task          = session.merge(self.task),
-                solver        = session.merge(SAT_SolverDescription(name = "argosat")),
+                solver        = session.merge(self.description),
                 configuration = configuration,
                 )
         (outcome, elapsed, censored) = \
@@ -198,6 +202,7 @@ def yield_sat2007_random_jobs():
                         task          = task,
                         solver        = solver,
                         configuration = None,
+                        description   = solver_description,
                         )
 
         session.commit()
