@@ -201,6 +201,24 @@ class ArgoSAT_Configuration(SAT_SolverConfiguration):
 
         return tuple(arguments)
 
+class SATensteinConfiguration(object):
+    """
+    Configuration of SATenstein.
+    """
+
+    __tablename__   = "argosat_configurations"
+    __mapper_args__ = {"polymorphic_identity": "argosat"}
+
+    uuid       = Column(
+        SQL_UUID,
+        ForeignKey("sat_solver_configurations.uuid"),
+        default     = uuid4,
+        primary_key = True,
+        )
+    parameters = Column(SQL_JSON)
+
+    NAMED_CONFIGURATION_NAMESPACE = UUID("4cdba386aa224cd5b575cf556672e0a3")
+
 class SAT_SolverRun(SQL_Base):
     """
     Information about one run of a solver on a SAT task.
