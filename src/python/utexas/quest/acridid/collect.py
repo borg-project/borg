@@ -214,11 +214,11 @@ def main():
 
     parse_given()
 
-    AcrididSession.configure(bind = acridid_connect())
-
-    get_logger("cargo.labor.storage").setLevel(logging.NOTE)
-
     with SQL_Engines.default:
+        AcrididSession.configure(bind = acridid_connect())
+
+        get_logger("cargo.labor.storage").setLevel(logging.NOTE)
+
         jobs = list(yield_sat2007_random_jobs())
 
         if script_flags.given.outsource:

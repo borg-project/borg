@@ -132,6 +132,16 @@ class SAT_2007_SolverDescription(SAT_SolverDescription):
     relative_path = Column(String)
     seeded        = Column(Boolean)
 
+class SAT_ConfigurationSet(AcrididBase):
+    """
+    Related set of job records.
+    """
+
+    __tablename__ = "configuration_sets"
+
+    uuid = Column(SQL_UUID, primary_key = True, default = uuid4)
+    name = Column(String)
+
 class SAT_SolverConfiguration(AcrididBase):
     """
     Configuration of a SAT solver.
@@ -142,6 +152,9 @@ class SAT_SolverConfiguration(AcrididBase):
     uuid        = Column(SQL_UUID, primary_key = True, default = uuid4)
     name        = Column(String)
     solver_type = Column(String)
+    set_uuid    = Column(SQL_UUID, ForeignKey("configuration_sets.uuid"))
+
+    set = relation(SAT_ConfigurationSet)
 
     __mapper_args__ = {"polymorphic_on": solver_type}
 
@@ -249,8 +262,8 @@ class SATensteinConfiguration(SAT_SolverConfiguration):
     Configuration of SATenstein.
     """
 
-    __tablename__   = "argosat_configurations"
-    __mapper_args__ = {"polymorphic_identity": "argosat"}
+    __tablename__   = "satenstein_configurations"
+    __mapper_args__ = {"polymorphic_identity": "satenstein"}
 
     uuid       = Column(
         SQL_UUID,
@@ -261,6 +274,23 @@ class SATensteinConfiguration(SAT_SolverConfiguration):
     parameters = Column(SQL_JSON)
 
     NAMED_CONFIGURATION_NAMESPACE = UUID("4cdba386aa224cd5b575cf556672e0a3")
+
+    @staticmethod
+    def from_parameters(parameters, set):
+        """
+        Generate a configuration from a parameter dictionary.
+        """
+
+        return \
+            SATensteinConfiguration(
+                uuid       = \
+                    uuid5(
+                        SATensteinConfiguration.NAMED_CONFIGURATION_NAMESPACE,
+                        str(sorted(parameters.iteritems())) + "#" + str(set.uuid),
+                        ),
+                parameters = parameters,
+                set        = set,
+                )
 
 class SAT_SolverRun(AcrididBase):
     """
