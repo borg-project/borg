@@ -1,21 +1,9 @@
 [submodule "dep/cargo/kit"]
 	path = dep/cargo/kit
 	url = ssh://cargo-cult/home/bsilverthorn/git/cargo/kit
-[submodule "dep/cargo/unix"]
-	path = dep/cargo/unix
-	url = ssh://cargo-cult/home/bsilverthorn/git/cargo/unix
-[submodule "dep/cargo/flags"]
-	path = dep/cargo/flags
-	url = ssh://cargo-cult/home/bsilverthorn/git/cargo/flags
-[submodule "dep/cargo/ai-sat"]
-	path = dep/cargo/ai-sat
-	url = ssh://cargo-cult/home/bsilverthorn/git/cargo/ai-sat
 [submodule "dep/third/argosat"]
 	path = dep/third/argosat
 	url = git@github.com:bsilverthorn/argosat.git
-[submodule "dep/cargo/log"]
-	path = dep/cargo/log
-	url = ssh://cargo-cult/home/bsilverthorn/git/cargo/log
 [submodule "dep/third/sqlalchemy"]
 	path = dep/third/sqlalchemy
 	url = git@github.com:bsilverthorn/sqlalchemy.git
