@@ -30,6 +30,8 @@ from cargo.labor.storage import (
     outsource_or_run,
     )
 from utexas.quest.acridid.core import (
+    SAT_Task,
+    SAT_SolverRun,
     AcrididSession,
     SAT_ConfigurationSet,
     SAT_SolverDescription,
@@ -83,9 +85,9 @@ class RunJob(Job):
                 )
         (outcome, elapsed, censored) = \
             self.solver.solve(
-                cutoff = cutoff,
-                path   = self.path,
-                seed   = seed
+                cutoff     = cutoff,
+                input_path = self.path,
+                seed       = seed
                 )
 
         log.info("solver returned %s after %s", outcome, elapsed)
@@ -103,7 +105,7 @@ def yield_tasks(subdirectory = ""):
     Yield the task descriptions.
     """
 
-    root      = "."
+    root      = "/u/bsilvert/morgoth/acridid/tasks"
     directory = os.path.join(root, subdirectory)
 
     for path in files_under(directory, "*.cnf"):
@@ -137,15 +139,16 @@ def yield_jobs():
             solver = SATensteinSolver(parameters = configuration.parameters)
 
             for (path, task) in tasks:
-                yield \
-                    RunSolverJob(
-                        database      = session.connection().engine.url,
-                        path          = path,
-                        task          = task,
-                        solver        = solver,
-                        configuration = configuration,
-                        description   = solver_description,
-                        )
+                for i in xrange(4):
+                    yield \
+                        RunJob(
+                            database      = session.connection().engine.url,
+                            path          = path,
+                            task          = task,
+                            solver        = solver,
+                            configuration = configuration,
+                            description   = solver_description,
+                            )
 
         session.commit()
 
@@ -161,5 +164,5 @@ def main():
 
         AcrididSession.configure(bind = acridid_connect())
 
-        outsource_or_run(yield_jobs())
+        outsource_or_run(yield_jobs(), "first round of satenstein runs on sat2007/random")
 
