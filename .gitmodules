@@ -7,3 +7,6 @@
 [submodule "dep/third/sqlalchemy"]
 	path = dep/third/sqlalchemy
 	url = git@github.com:bsilverthorn/sqlalchemy.git
+[submodule "dep/third/satenstein"]
+	path = dep/third/satenstein
+	url = ssh://cargo-cult/home/bsilverthorn/git/third/satenstein
