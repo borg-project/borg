@@ -1,14 +1,12 @@
 """
-utexas/papers/nips2009/world.py
+utexas/acridid/portfolio/world.py
 
 Actions, tasks, outcomes, and other pieces of the world.
 
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-import cPickle
 import numpy
-import utexas.tables
 
 from abc import (
     ABCMeta,
@@ -19,22 +17,14 @@ from collections import (
     Sequence,
     defaultdict,
     )
-from utexas.kit import IntRanges
-from utexas.alog import DefaultLogger
-from utexas.flags import (
+from cargo.log import DefaultLogger
+from cargo.flags import (
     Flag,
     FlagSet,
-    )
-from utexas.papers.nips2009.hdf import (
-    NIPS2009_Supplies,
-    SAT_SamplesTableDescription,
+    IntRanges,
     )
 
-log = DefaultLogger("utexas.papers.nips2009.world")
-_solver_col_index = SAT_SamplesTableDescription.columns["solver"]._v_pos
-_cutoff_col_index = SAT_SamplesTableDescription.columns["cutoff"]._v_pos
-_problem_col_index = SAT_SamplesTableDescription.columns["problem"]._v_pos
-_success_col_index = SAT_SamplesTableDescription.columns["success"]._v_pos
+log = get_logger(__name__)
 
 def get_sample_key(leaf, i):
     """
@@ -502,19 +492,4 @@ class WorldDescription(object):
     ntasks = property(lambda self: len(self.tasks))
     nactions = property(lambda self: len(self.actions))
     noutcomes = property(lambda self: len(self.outcomes))
-
-def main():
-    """
-    Build the samples index apppropriately.
-    """
-
-    (indexed_samples_path,) = utexas.flags.parse_given()
-
-    world = WorldDescription()
-    samples_dict = world.samples._build_samples_dictionary()
-
-    cPickle.dump(world.samples.indexed_samples, open(indexed_samples_path, "w"), -1)
-
-if __name__ == "__main__":
-    main()
 
