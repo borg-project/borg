@@ -8,12 +8,12 @@ Various models of task/action outcomes.
 
 import numpy
 
-from utexas.alog import DefaultLogger
-from utexas.statistics.dcm import DirichletCompoundMultinomial
-from utexas.statistics.mixture import FiniteMixture
+from cargo.log import get_logger
+from cargo.statistics.dcm import DirichletCompoundMultinomial
+from cargo.statistics.mixture import FiniteMixture
 from utexas.papers.nips2009.strategies import ActionModel
 
-log = DefaultLogger("utexas.papers.nips2009.models")
+log = get_logger(__name__)
 
 class MultinomialActionModel(ActionModel):
     """

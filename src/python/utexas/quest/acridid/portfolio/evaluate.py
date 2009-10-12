@@ -31,27 +31,19 @@ from utexas.tables import (
 from utexas.papers.nips2009.hdf import (
     WorldActionsTableDescription,
     SAT_EvaluationsTableDescription,
-    MAX_SAT_EvaluationsTableDescription,
     )
 from utexas.papers.nips2009.world import WorldDescription
 from utexas.papers.nips2009.evaluees import NIPS2009_EvalueeFactory
 from utexas.papers.nips2009.strategies import ActionHistory
 
-log = DefaultLogger("utexas.papers.nips2009.evaluate")
+log = DefaultLogger(__name__)
 
 class TestEnvironment(object):
     """
     Evaluate algorithm selection strategies.
     """
 
-    class Flags(FlagSet):
-        """
-        Flags for the containing class.
-        """
-
-        flag_set_title = "Strategy Testing Run"
-
-    def __init__(self, world, test_tasks, task_time, flags = Flags.given):
+    def __init__(self, world, test_tasks, task_time):
         """
         Initialize.
         """
@@ -60,7 +52,6 @@ class TestEnvironment(object):
         self.world = world
         self.test_tasks = test_tasks
         self.task_time = task_time
-        self.flags = flags or TestEnvironment.Flags.given
 
     def evaluate(self, evaluee):
         """
@@ -76,10 +67,9 @@ class TestEnvironment(object):
             self.evaluate_on(evaluee, task)
 
             log.info(
-                "total max utility for %s: %.2f (%.2f)",
+                "total max utility for %s: %.2f",
                 evaluee.name,
                 evaluee.total_max_utility,
-                evaluee.total_max_true_utility,
                 )
 
     def evaluate_on(self, evaluee, task):
@@ -88,7 +78,6 @@ class TestEnvironment(object):
         """
 
         best_utility = 0.0
-        best_true_utility = 0.0
         remaining = self.task_time
 
         while remaining > 0.0:
@@ -100,17 +89,14 @@ class TestEnvironment(object):
 
             if outcome.utility > best_utility:
                 best_utility = outcome.utility
-            if outcome.true_utility > best_true_utility:
-                best_true_utility = outcome.true_utility
             if outcome.n == self.world.nsuccess:
                 evaluee.nsolved += 1
 
                 break
 
         evaluee.total_max_utility += best_utility
-        evaluee.total_max_true_utility += best_true_utility
 
-        log.info("%s had max utility %.2f (%.2f) with %.1fs remaining", evaluee.name, best_utility, best_true_utility, remaining)
+        log.info("%s had max utility %.2f with %.1fs remaining", evaluee.name, best_utility, remaining)
 
     def evaluate_once_on(self, evaluee, task, remaining):
         """
@@ -127,7 +113,7 @@ class TestEnvironment(object):
         # take that action
         outcome = self.world.sample_action(task, action)
 
-        log.info("%.1fs: [%i] %s -> %s (%0.1f)", remaining, task.n, action, outcome, outcome.true_utility)
+        log.info("%.1fs: [%i] %s -> %s", remaining, task.n, action, outcome)
 
         try:
             action_generator.send(outcome)
@@ -340,48 +326,24 @@ class Evaluation(object):
                 test_environment.evaluate(evaluee)
 
                 # record its performance
-                if self.world.flags.world_type == "SAT":
-                    evaluation_table = \
-                        goc_table(
-                            evaluation_file,
-                            "/%s/evaluations/%s" % (factory.flags.planner, evaluee_name),
-                            SAT_EvaluationsTableDescription,
-                            )
-                    row = evaluation_table.row
+                evaluation_table = \
+                    goc_table(
+                        evaluation_file,
+                        "/%s/evaluations/%s" % (factory.flags.planner, evaluee_name),
+                        SAT_EvaluationsTableDescription,
+                        )
+                row = evaluation_table.row
 
-                    row["tasks_test"] = self.flags.ntasks_test
-                    row["task_time"] = task_time
-                    row["tasks_train"] = ntasks_train
-                    row["restarts_train"] = nrestarts_train
-                    row["components"] = ncomponents
-                    row["solved"] = evaluee.nsolved
-                    row["spent"] = evaluee.spent
-                    row["discount"] = discount_factor
+                row["tasks_test"] = self.flags.ntasks_test
+                row["task_time"] = task_time
+                row["tasks_train"] = ntasks_train
+                row["restarts_train"] = nrestarts_train
+                row["components"] = ncomponents
+                row["solved"] = evaluee.nsolved
+                row["spent"] = evaluee.spent
+                row["discount"] = discount_factor
 
-                    row.append()
-                elif self.world.flags.world_type == "MAX-SAT":
-                    evaluation_table = \
-                        goc_table(
-                            evaluation_file,
-                            "/%s/evaluations/%s" % (factory.flags.planner, evaluee_name),
-                            MAX_SAT_EvaluationsTableDescription,
-                            )
-                    row = evaluation_table.row
-
-                    row["tasks_test"] = self.flags.ntasks_test
-                    row["task_time"] = task_time
-                    row["tasks_train"] = ntasks_train
-                    row["restarts_train"] = nrestarts_train
-                    row["components"] = ncomponents
-                    row["solved"] = evaluee.nsolved
-                    row["spent"] = evaluee.spent
-                    row["discount"] = discount_factor
-                    row["total_max_utility"] = evaluee.total_max_utility
-                    row["total_max_true_utility"] = evaluee.total_max_true_utility
-
-                    row.append()
-                else:
-                    assert False
+                row.append()
 
                 # record its action counts
                 action_log_earray = \
