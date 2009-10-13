@@ -25,8 +25,6 @@ class SAT_WorldTask(ABC):
     A task in the world.
     """
 
-    __tablename__ = "sat_world_tasks"
-
 #     world = 
 
     # FIXME should be constructed from a SAT task during world construction

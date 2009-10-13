@@ -39,11 +39,11 @@ from utexas.papers.nips2009.strategies import (
     ModelingSelectionStrategy,
     )
 
-log = DefaultLogger("utexas.papers.nips2009.evaluees")
+log = get_logger(__name__)
 
 class Evaluee(object):
     """
-    A selection strategy under evaluation.
+    A portfolio strategy under evaluation.
     """
 
     def __init__(self, name, strategy, world):
@@ -56,7 +56,6 @@ class Evaluee(object):
         self.world = world
         self.total_utility = 0.0
         self.total_max_utility = 0.0
-        self.total_max_true_utility = 0.0
         self.spent = 0.0
         self.nsolved = 0
         self.action_log = numpy.zeros(world.nactions, dtype = numpy.uint32)
@@ -69,9 +68,9 @@ class Evaluee(object):
 
         return self.total_utility / self.spent
 
-class NIPS2009_EvalueeFactory(object):
+class NamedEvalueeFactory(object):
     """
-    Construct evaluees.
+    Construct standard evaluees.
     """
 
     class Flags(FlagSet):
