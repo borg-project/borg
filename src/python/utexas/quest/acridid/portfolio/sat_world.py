@@ -220,31 +220,23 @@ class SAT_World(object):
     Components of the SAT world.
     """
 
-    def __init__(self):
+    def __init__(self, cutoffs, actions, tasks):
         """
         Initialize.
         """
 
-        self.cutoffs   = [
-            0.5,
-            2.0,
-            8.0,
-            32.0,
-            128.0,
-            512.0,
-            ]
-        self.outcomes  = (SAT_Outcome(0), SAT_Outcome(1))
-        self.samples   = SAT_Samples(self)
+        self.cutoffs   = FIXME
         self.actions   = WorldDescriptionActions(self, exclude_nnsolver = [9])
-        self.utilities = numpy.array([1.0, 0.0])
-        self.nsuccess  = 0
         self.tasks     = WorldDescriptionTasks(self, self.flags.nntasks_world)
+        self.utilities = numpy.array([1.0, 0.0])
+        self.outcomes  = (SAT_Outcome.SAT, SAT_Outcome.UNSAT)
 
     def sample_action(self, task, action):
         """
         Retrieve a random sample.
         """
 
+        # FIXME
         return self.samples.sample_action(task, action)
 
     # properties

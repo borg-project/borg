@@ -18,10 +18,7 @@ from cargo.sugar import ABC
 
 log = get_logger(__name__)
 
-# FIXME questions:
-# FIXME - do we have a notion of "task set"? (maybe?)
-# FIXME - do we map world to tasks one-to-many? (yes)
-# FIXME - do we map world to actions one-to-many? (yes)
+# general strategy: implement via script construction first; persist later
 
 class SAT_WorldTask(ABC):
     """
@@ -34,8 +31,6 @@ class SAT_WorldTask(ABC):
 
     # FIXME should be constructed from a SAT task during world construction
     # FIXME (in the particular evaluation script in Chanal)
-    # FIXME ... except that knowing the full set of tasks in a particular
-    # FIXME world is actually useful; should be persisted?
 
     def __init__(self, world, n, ntask, path):
         """
@@ -62,8 +57,6 @@ class SAT_WorldAction(object):
     """
     An action in the world.
     """
-
-    # FIXME should be persisted
 
     def __init__(self, n, nsolver, solver_name, cutoff):
         """
