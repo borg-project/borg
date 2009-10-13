@@ -18,10 +18,24 @@ from cargo.sugar import ABC
 
 log = get_logger(__name__)
 
-class Task(ABC):
+# FIXME questions:
+# FIXME - do we have a notion of "task set"? (maybe?)
+# FIXME - do we map world to tasks one-to-many? (yes)
+# FIXME - do we map world to actions one-to-many? (yes)
+
+class SAT_WorldTask(ABC):
     """
     A task in the world.
     """
+
+    __tablename__ = "sat_world_tasks"
+
+#     world = 
+
+    # FIXME should be constructed from a SAT task during world construction
+    # FIXME (in the particular evaluation script in Chanal)
+    # FIXME ... except that knowing the full set of tasks in a particular
+    # FIXME world is actually useful; should be persisted?
 
     def __init__(self, world, n, ntask, path):
         """
@@ -36,17 +50,20 @@ class Task(ABC):
     def sample_action(self, action):
         return self.world.sample_action(self, action)
 
-class Tasks(Sequence):
-    """
-    Tasks in the world.
-    """
+# FIXME should just be a tuple
+# class Tasks(Sequence):
+#     """
+#     Tasks in the world.
+#     """
 
-    pass
+#     pass
 
-class Action(object):
+class SAT_WorldAction(object):
     """
     An action in the world.
     """
+
+    # FIXME should be persisted
 
     def __init__(self, n, nsolver, solver_name, cutoff):
         """
@@ -74,6 +91,7 @@ class Actions(Sequence):
 
         pass
 
+# FIXME not persisted
 class Outcome(object):
     """
     An outcome of an action in the world.
@@ -93,6 +111,7 @@ class Outcome(object):
     # properties
     utility = property(lambda self: self.world.utilities[self.n])
 
+# FIXME should just be a tuple
 class Outcomes(Sequence):
     """
     Outcomes of actions in the world.
