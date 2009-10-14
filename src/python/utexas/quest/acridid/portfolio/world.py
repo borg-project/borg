@@ -18,17 +18,10 @@ from cargo.sugar import ABC
 
 log = get_logger(__name__)
 
-# general strategy: implement via script construction first; persist later
-
-class SAT_WorldTask(ABC):
+class WorldTask(ABC):
     """
     A task in the world.
     """
-
-#     world = 
-
-    # FIXME should be constructed from a SAT task during world construction
-    # FIXME (in the particular evaluation script in Chanal)
 
     def __init__(self, world, n, ntask, path):
         """
@@ -51,7 +44,7 @@ class SAT_WorldTask(ABC):
 
 #     pass
 
-class SAT_WorldAction(object):
+class WorldAction(object):
     """
     An action in the world.
     """
@@ -69,35 +62,23 @@ class SAT_WorldAction(object):
     def __str__(self):
         return "%s_%ims" % (self.solver_name, int(self.cutoff * 1000))
 
-class Actions(Sequence):
-    """
-    Actions in the world.
-    """
+# class Actions(Sequence):
+#     """
+#     Actions in the world.
+#     """
 
-    @abstractmethod
-    def get_by(self, nsolver, cutoff):
-        """
-        Get an action by solver index and cutoff.
-        """
+#     @abstractmethod
+#     def get_by(self, nsolver, cutoff):
+#         """
+#         Get an action by solver index and cutoff.
+#         """
 
-        pass
+#         pass
 
-# FIXME not persisted
 class Outcome(object):
     """
     An outcome of an action in the world.
     """
-
-    @staticmethod
-    def of_SAT(world, success):
-        """
-        Construct an outcome in the SAT domain.
-        """
-
-        if success:
-            return Outcome(world, 0)
-        else:
-            return Outcome(world, 1)
 
     # properties
     utility = property(lambda self: self.world.utilities[self.n])
@@ -110,13 +91,46 @@ class Outcomes(Sequence):
 
     pass
 
+class WorldEvent(object):
+    """
+    The outcome of an action on a task.
+    """
+
+    # FIXME task attribute
+    # FIXME action attribute
+    # FIXME outcome attribute
+
+    pass
+
 class World(ABC):
     """
     A description of the environment.
     """
 
+    def counts_from_events(self, events):
+        """
+        Return a counts matrix from an events dictionary.
+        """
+
+        counts = numpy.zeros((self.ntasks, self.nactions, self.noutcomes), numpy.uint)
+
+        for (task, pairs) in events:
+            for (action, outcome) in pairs:
+                counts[task.n, action.n, outcome.n] += 1
+
+        return counts
+
+    def act_all(self, tasks, actions, nrestarts = 1, random = numpy.random):
+        """
+        Return a history of C{nrestarts} outcomes sampled from each of C{tasks}.
+
+        @return: {task: (action, outcome)}
+        """
+
+        return dict((t, [(a, self.act(t, a, random)) for a in actions]) for t in tasks)
+
     @abstractmethod
-    def sample_action(self, task, action):
+    def act(self, task, action, random = numpy.random):
         """
         Retrieve a random sample.
         """

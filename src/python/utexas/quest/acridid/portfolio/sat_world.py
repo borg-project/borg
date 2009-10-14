@@ -27,14 +27,15 @@ class SAT_WorldAction(Action):
     An action in the world.
     """
 
-    def __init__(self, n, solver, cutoff):
+    def __init__(self, n, solver, configuration, cutoff):
         """
         Initialize.
         """
 
         self.n = n
-        self.solver = solver
-        self.cutoff = cutoff
+        self.solver        = solver
+        self.configuration = configuration
+        self.cutoff        = cutoff
 
     def __str__(self):
         return "%s_%ims" % (self.solver_name, int(self.cutoff * 1000))

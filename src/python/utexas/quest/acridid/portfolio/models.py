@@ -25,13 +25,12 @@ class MultinomialActionModel(ActionModel):
         Initialize.
         """
 
-        # members
-        self.__world = world
-        self.__training = training
-
-        # model
+        counts       = world.counts_from_events(training)
         total_counts = numpy.sum(training.counts, 0)
-        self.outcome_probabilities = total_counts / numpy.sum(total_counts, 1, numpy.double)[:, numpy.newaxis]
+        norm         = numpy.sum(total_counts, 1, numpy.double)[:, numpy.newaxis]
+
+        self.prediction                 = total_counts / norm
+        self.prediction.flags.writeable = False
 
     def predict(self, task, history, out = None):
         """
@@ -39,9 +38,9 @@ class MultinomialActionModel(ActionModel):
         """
 
         if out is None:
-            out = self.outcome_probabilities
+            out = self.prediction
         else:
-            out[:] = self.outcome_probabilities
+            out[:] = self.prediction
 
         return out
 
