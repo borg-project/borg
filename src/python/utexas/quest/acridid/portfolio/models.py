@@ -9,9 +9,9 @@ Various models of task/action outcomes.
 import numpy
 
 from cargo.log import get_logger
-from cargo.statistics.dcm import DirichletCompoundMultinomial
-from cargo.statistics.mixture import FiniteMixture
-from utexas.papers.nips2009.strategies import ActionModel
+# from cargo.statistics.dcm import DirichletCompoundMultinomial
+# from cargo.statistics.mixture import FiniteMixture
+from utexas.quest.acridid.portfolio.strategies import ActionModel
 
 log = get_logger(__name__)
 
@@ -44,6 +44,7 @@ class MultinomialActionModel(ActionModel):
 
         return out
 
+'''
 class MultinomialMixtureActionModel(ActionModel):
     """
     An arbitrary mixture model.
@@ -295,4 +296,5 @@ class RankingActionModel(ActionModel):
             out[:] = FIXME
 
         return out
+'''
 

@@ -18,7 +18,7 @@ from cargo.sugar import ABC
 
 log = get_logger(__name__)
 
-class WorldTask(ABC):
+class Task(ABC):
     """
     A task in the world.
     """
@@ -44,7 +44,7 @@ class WorldTask(ABC):
 
 #     pass
 
-class WorldAction(object):
+class Action(object):
     """
     An action in the world.
     """
@@ -81,26 +81,15 @@ class Outcome(object):
     """
 
     # properties
-    utility = property(lambda self: self.world.utilities[self.n])
+#     utility = property(lambda self: self.world.utilities[self.n])
 
 # FIXME should just be a tuple
-class Outcomes(Sequence):
-    """
-    Outcomes of actions in the world.
-    """
+# class Outcomes(Sequence):
+#     """
+#     Outcomes of actions in the world.
+#     """
 
-    pass
-
-class WorldEvent(object):
-    """
-    The outcome of an action on a task.
-    """
-
-    # FIXME task attribute
-    # FIXME action attribute
-    # FIXME outcome attribute
-
-    pass
+#     pass
 
 class World(ABC):
     """
@@ -114,7 +103,7 @@ class World(ABC):
 
         counts = numpy.zeros((self.ntasks, self.nactions, self.noutcomes), numpy.uint)
 
-        for (task, pairs) in events:
+        for (task, pairs) in events.iteritems():
             for (action, outcome) in pairs:
                 counts[task.n, action.n, outcome.n] += 1
 
