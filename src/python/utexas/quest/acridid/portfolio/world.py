@@ -9,6 +9,7 @@ Actions, tasks, outcomes, and other pieces of the world.
 import numpy
 
 from abc import abstractmethod
+from itertools import product
 from collections import (
     Sequence,
     defaultdict,
@@ -103,9 +104,8 @@ class World(ABC):
 
         counts = numpy.zeros((self.ntasks, self.nactions, self.noutcomes), numpy.uint)
 
-        for (task, pairs) in events.iteritems():
-            for (action, outcome) in pairs:
-                counts[task.n, action.n, outcome.n] += 1
+        for (task, action, outcome) in events:
+            counts[task.n, action.n, outcome.n] += 1
 
         return counts
 
@@ -113,10 +113,10 @@ class World(ABC):
         """
         Return a history of C{nrestarts} outcomes sampled from each of C{tasks}.
 
-        @return: {task: (action, outcome)}
+        @return: [(task, action, outcome)]
         """
 
-        return dict((t, [(a, self.act(t, a, random)) for a in actions]) for t in tasks)
+        return [(t, a, self.act(t, a, random)) for (t, a, _) in product(tasks, actions, xrange(nrestarts))]
 
     @abstractmethod
     def act(self, task, action, random = numpy.random):

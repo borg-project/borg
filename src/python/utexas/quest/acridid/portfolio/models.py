@@ -26,7 +26,7 @@ class MultinomialActionModel(ActionModel):
         """
 
         counts       = world.counts_from_events(training)
-        total_counts = numpy.sum(training.counts, 0)
+        total_counts = numpy.sum(counts, 0)
         norm         = numpy.sum(total_counts, 1, numpy.double)[:, numpy.newaxis]
 
         self.prediction                 = total_counts / norm

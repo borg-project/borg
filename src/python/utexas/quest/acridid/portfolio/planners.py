@@ -10,25 +10,25 @@ import numpy
 
 from abc import (
     ABCMeta,
-    abstractmethod)
-from utexas.alog import DefaultLogger
+    abstractmethod,
+    )
+from cargo.log import get_logger
+from cargo.sugar import ABC
 
-log = DefaultLogger("utexas.papers.nips2009.planners")
+log = get_logger(__name__)
 
-class ActionPlanner(object):
+class ActionPlanner(ABC):
     """
     Interface for action selection schemes.
     """
 
-    __metaclass__ = ABCMeta
-
     @abstractmethod
-    def select(self, predicted):
+    def select(self, predicted, actions):
         """
         Select an action given the probabilities of outcomes.
         """
 
-        pass
+        assert False
 
 class HardMyopicActionPlanner(ActionPlanner):
     """
@@ -43,7 +43,7 @@ class HardMyopicActionPlanner(ActionPlanner):
         self.world = world
         self.discount = discount
 
-    def select(self, predicted, actions, task_history):
+    def select(self, predicted, actions):
         """
         Select an action given the probabilities of outcomes.
         """
@@ -54,7 +54,7 @@ class HardMyopicActionPlanner(ActionPlanner):
 #         recentered = numpy.maximum(self.world.utilities - center, 0.0)
 #         expected = numpy.sum(predicted * recentered, 1)
         expected = numpy.sum(predicted * self.world.utilities, 1)
-        selected = max(actions, key = lambda a: expected[a.n]*(self.discount**a.cutoff))
+        selected = max(actions, key = lambda a: expected[a.n]*(self.discount**a.cutoff.as_s))
 
         return selected
 

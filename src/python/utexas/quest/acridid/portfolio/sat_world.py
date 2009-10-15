@@ -8,7 +8,6 @@ The world of SAT.
 
 import numpy
 
-from datetime import timedelta
 from itertools import izip
 from contextlib import closing
 from collections import (
@@ -52,7 +51,11 @@ class SAT_WorldAction(Action):
         self.cutoff        = cutoff
 
     def __str__(self):
-        return "%s_%ims" % (self.solver_name, int(self.cutoff * 1000))
+        """
+        Return a human-readable description of this action.
+        """
+
+        return "%s_%ims" % (self.solver.name, int(self.cutoff.as_s * 1000))
 
 class SAT_WorldTask(Task):
     """
@@ -68,6 +71,13 @@ class SAT_WorldTask(Task):
 
         self.n = n
         self.task = task
+
+    def __str__(self):
+        """
+        Return a human-readable description of this task.
+        """
+
+        return "%s" % (self.task.path,)
 
 class SAT_Outcome(Outcome):
     """
@@ -129,6 +139,38 @@ class SAT_World(World):
         self.tasks     = tasks
         self.outcomes  = (SAT_Outcome.SAT, SAT_Outcome.UNSAT)
         self.utilities = numpy.array([o.utility for o in self.outcomes])
+
+    def act_all(self, tasks, actions, nrestarts = 1, random = numpy.random):
+        """
+        Return a history of C{nrestarts} outcomes sampled from each of C{tasks}.
+
+        @return: {task: (action, outcome)}
+        """
+
+        # build a reverse task map
+        world_tasks = dict((t.task.uuid, t) for t in tasks)
+
+        # hit the database
+        session = AcrididSession()
+
+        # FIXME broken
+
+        with closing(session):
+            events = []
+
+            for action in actions:
+                filter  = \
+                    and_(
+                        SAT_SolverRun.task_uuid.in_([t.task.uuid for t in tasks]),
+                        SAT_SolverRun.solver        == action.solver,
+                        SAT_SolverRun.configuration == action.configuration,
+                        SAT_SolverRun.cutoff        >= action.cutoff,
+                        )
+                runs    = session.query(SAT_SolverRun).filter(filter).order_by(sql_random())[:nrestarts]
+
+                events.extend((world_tasks[r.task.uuid], action, SAT_Outcome.from_run(r)) for r in runs)
+
+            return events
 
     def act(self, task, action, random = numpy.random):
         """

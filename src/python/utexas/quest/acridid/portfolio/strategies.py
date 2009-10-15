@@ -76,7 +76,7 @@ class ModelingSelectionStrategy(SelectionStrategy):
         self.world = world
         self.model = model
         self.planner = planner
-        self.history = counts_matrix_from_events(world, {})
+        self.history = []
 
     def select(self, task, actions):
         """
@@ -85,9 +85,9 @@ class ModelingSelectionStrategy(SelectionStrategy):
 
         # predict, then make a selection
         predicted = self.model.predict(task, self.history)
-        action = self.planner.select(predicted, actions, self.history[task.n])
+        action = self.planner.select(predicted, actions)
         outcome = yield action
 
         # remember its result
-        self.history[task, action, outcome] += 1
+        self.history.append((task, action, outcome))
 
