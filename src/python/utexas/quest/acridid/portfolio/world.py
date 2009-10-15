@@ -37,14 +37,6 @@ class Task(ABC):
     def sample_action(self, action):
         return self.world.sample_action(self, action)
 
-# FIXME should just be a tuple
-# class Tasks(Sequence):
-#     """
-#     Tasks in the world.
-#     """
-
-#     pass
-
 class Action(object):
     """
     An action in the world.
@@ -63,34 +55,12 @@ class Action(object):
     def __str__(self):
         return "%s_%ims" % (self.solver_name, int(self.cutoff * 1000))
 
-# class Actions(Sequence):
-#     """
-#     Actions in the world.
-#     """
-
-#     @abstractmethod
-#     def get_by(self, nsolver, cutoff):
-#         """
-#         Get an action by solver index and cutoff.
-#         """
-
-#         pass
-
 class Outcome(object):
     """
     An outcome of an action in the world.
     """
 
-    # properties
-#     utility = property(lambda self: self.world.utilities[self.n])
-
-# FIXME should just be a tuple
-# class Outcomes(Sequence):
-#     """
-#     Outcomes of actions in the world.
-#     """
-
-#     pass
+    pass
 
 class World(ABC):
     """
@@ -116,18 +86,32 @@ class World(ABC):
         @return: [(task, action, outcome)]
         """
 
-        return [(t, a, self.act(t, a, random)) for (t, a, _) in product(tasks, actions, xrange(nrestarts))]
+        events = []
+
+        for (task, action) in product(tasks, actions):
+            events.extend((task, action, o) for o in self.act(task, action, nrestarts, random))
+
+        return events
 
     @abstractmethod
-    def act(self, task, action, random = numpy.random):
+    def act(self, task, action, nrestarts = 1, random = numpy.random):
         """
-        Retrieve a random sample.
+        Sample action outcomes.
         """
 
         pass
 
+    def act_once(self, task, action, random = numpy.random):
+        """
+        Sample an action outcome.
+        """
+
+        (outcome,) = self.act(task, action, random = random)
+
+        return outcome
+
     # properties
-    ntasks = property(lambda self: len(self.tasks))
-    nactions = property(lambda self: len(self.actions))
+    ntasks    = property(lambda self: len(self.tasks))
+    nactions  = property(lambda self: len(self.actions))
     noutcomes = property(lambda self: len(self.outcomes))
 

@@ -8,37 +8,37 @@ Evaluate selection strategies.
 
 import sys
 import numpy
-import tables
-import utexas.flags
 
 from itertools import product
 from contextlib import closing
-from tables import NoSuchNodeError
-from utexas.kit import (
-    random_subsets,
+from cargo.flags import (
+    Flag,
+    FlagSet,
     IntRanges,
     FloatRanges,
     )
-from utexas.alog import DefaultLogger
-from utexas.flags import (
-    Flag,
-    FlagSet,
-    )
-from utexas.tables import (
-    goc_table,
-    goc_earray,
-    )
-from utexas.papers.nips2009.hdf import (
-    WorldActionsTableDescription,
-    SAT_EvaluationsTableDescription,
-    )
-from utexas.papers.nips2009.world import WorldDescription
-from utexas.papers.nips2009.evaluees import NIPS2009_EvalueeFactory
-from utexas.papers.nips2009.strategies import ActionHistory
+from cargo.log import get_logger
+from cargo.temporal import TimeDelta
 
-log = DefaultLogger(__name__)
+log = get_logger(__name__)
 
-class TestEnvironment(object):
+class PortfolioTestScore(object):
+    """
+    The result of a portfolio test.
+    """
+
+    def __init__(self, world):
+        """
+        Initialize.
+        """
+
+        self.total_utility     = 0.0
+        self.total_max_utility = 0.0
+        self.spent             = TimeDelta()
+        self.nsolved           = 0
+        self.action_log        = numpy.zeros(world.nactions, dtype = numpy.uint32)
+
+class PortfolioTest(object):
     """
     Evaluate algorithm selection strategies.
     """
@@ -48,81 +48,83 @@ class TestEnvironment(object):
         Initialize.
         """
 
-        # parameters
-        self.world = world
+        self.world      = world
         self.test_tasks = test_tasks
-        self.task_time = task_time
+        self.task_time  = task_time
+        self.score      = PortfolioTestScore(world)
 
-    def evaluate(self, evaluee):
+    def evaluate(self, strategy):
         """
         Evaluate the specified evaluee.
         """
 
-        log.info("evaluating %s", evaluee.name)
+        log.info("evaluating %s", strategy)
 
         for (ntest, task) in enumerate(self.test_tasks):
             log.info("evaluating on task %i (test %i of %i)", task.n, ntest + 1, len(self.test_tasks))
-            log.info("task has path %s", task.path)
+            log.info("task has path %s", task.task.path)
 
-            self.evaluate_on(evaluee, task)
+            self.evaluate_on(strategy, task)
 
             log.info(
                 "total max utility for %s: %.2f",
-                evaluee.name,
-                evaluee.total_max_utility,
+                strategy,
+                self.score.total_max_utility,
                 )
 
-    def evaluate_on(self, evaluee, task):
+        return self.score
+
+    def evaluate_on(self, strategy, task):
         """
         Evaluate on a specific task.
         """
 
         best_utility = 0.0
-        remaining = self.task_time
+        remaining    = self.task_time
 
-        while remaining > 0.0:
+        while remaining > TimeDelta():
             # let the evaluee take an action
-            (outcome, spent) = self.evaluate_once_on(evaluee, task, remaining)
+            (outcome, spent) = self.evaluate_once_on(strategy, task, remaining)
 
             # deal with that action's outcome
             remaining -= spent
 
             if outcome.utility > best_utility:
                 best_utility = outcome.utility
-            if outcome.n == self.world.nsuccess:
-                evaluee.nsolved += 1
+            if outcome.utility >= self.world.success_utility:
+                self.score.nsolved += 1
 
                 break
 
-        evaluee.total_max_utility += best_utility
+        self.score.total_max_utility += best_utility
 
-        log.info("%s had max utility %.2f with %.1fs remaining", evaluee.name, best_utility, remaining)
+        log.info("%s had max utility %.2f with %s remaining", strategy, best_utility, remaining)
 
-    def evaluate_once_on(self, evaluee, task, remaining):
+    def evaluate_once_on(self, strategy, task, remaining):
         """
         Evaluate once on a specific task.
         """
 
         # let the evaluee select an action
-        actions = [a for a in self.world.actions if a.cutoff <= remaining]
-        action_generator = evaluee.strategy.select(task, actions)
-        action = action_generator.send(None)
+        actions          = [a for a in self.world.actions if a.cutoff <= remaining]
+        action_generator = strategy.select(task, actions)
+        action           = action_generator.send(None)
 
         assert action in actions
 
         # take that action
-        outcome = self.world.sample_action(task, action)
+        outcome = self.world.act_once(task, action)
 
-        log.info("%.1fs: [%i] %s -> %s", remaining, task.n, action, outcome)
+        log.info("%s: [%i] %s -> %s", remaining, task.n, action, outcome)
 
         try:
             action_generator.send(outcome)
         except StopIteration:
             pass
 
-        evaluee.total_utility += outcome.utility
-        evaluee.spent += action.cutoff
-        evaluee.action_log[action.n] += 1
+        self.score.total_utility        += outcome.utility
+        self.score.spent                += action.cutoff
+        self.score.action_log[action.n] += 1
 
         return (outcome, action.cutoff)
 
@@ -138,13 +140,6 @@ class Evaluation(object):
 
         flag_set_title = "Strategy Testing"
 
-        evaluation_file_flag = \
-            Flag(
-                "--evaluation-file",
-                default = "evaluation.h5",
-                metavar = "PATH",
-                help = "write results to PATH [%default]",
-                )
         ntasks_test_flag = \
             Flag(
                 "--ntasks-test",
@@ -370,12 +365,4 @@ class Evaluation(object):
 
         with closing(evaluation_file):
             self.__evaluate(evaluation_file)
-
-# invocation!
-if __name__ == "__main__":
-    log.info("arguments: %s", sys.argv)
-
-    utexas.flags.parse_given()
-
-    Evaluation().evaluate()
 

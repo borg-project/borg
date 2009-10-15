@@ -14,8 +14,14 @@ from collections import (
     Sequence,
     defaultdict,
     )
-from sqlalchemy import and_
-from sqlalchemy.sql.functions import random as sql_random
+from sqlalchemy import (
+    and_,
+    select,
+    )
+from sqlalchemy.sql.functions import (
+    count,
+    random as sql_random,
+    )
 from cargo.log import get_logger
 from cargo.flags import (
     Flag,
@@ -121,9 +127,14 @@ class SAT_Outcome(Outcome):
             return SAT_Outcome.UNSAT
 
 # outcome constants
-SAT_Outcome.SAT     = SAT_Outcome(0, 1.0)
-SAT_Outcome.UNSAT   = SAT_Outcome(0, 1.0)
-SAT_Outcome.UNKNOWN = SAT_Outcome(1, 0.0)
+SAT_Outcome.SAT      = SAT_Outcome(0, 1.0)
+SAT_Outcome.UNSAT    = SAT_Outcome(0, 1.0)
+SAT_Outcome.UNKNOWN  = SAT_Outcome(1, 0.0)
+SAT_Outcome.BY_VALUE = {
+    True:  SAT_Outcome.SAT,
+    False: SAT_Outcome.UNSAT,
+    None:  SAT_Outcome.UNKNOWN
+    }
 
 class SAT_World(World):
     """
@@ -139,57 +150,56 @@ class SAT_World(World):
         self.tasks     = tasks
         self.outcomes  = (SAT_Outcome.SAT, SAT_Outcome.UNSAT)
         self.utilities = numpy.array([o.utility for o in self.outcomes])
+        self.matrix    = self.__get_outcome_matrix()
 
-    def act_all(self, tasks, actions, nrestarts = 1, random = numpy.random):
+    def __get_outcome_matrix(self):
         """
-        Return a history of C{nrestarts} outcomes sampled from each of C{tasks}.
-
-        @return: {task: (action, outcome)}
+        Build a matrix of outcome probabilities.
         """
-
-        # build a reverse task map
-        world_tasks = dict((t.task.uuid, t) for t in tasks)
 
         # hit the database
         session = AcrididSession()
 
-        # FIXME broken
-
         with closing(session):
             events = []
 
-            for action in actions:
-                filter  = \
-                    and_(
-                        SAT_SolverRun.task_uuid.in_([t.task.uuid for t in tasks]),
-                        SAT_SolverRun.solver        == action.solver,
-                        SAT_SolverRun.configuration == action.configuration,
-                        SAT_SolverRun.cutoff        >= action.cutoff,
-                        )
-                runs    = session.query(SAT_SolverRun).filter(filter).order_by(sql_random())[:nrestarts]
+            for action in self.actions:
+                statement =                                                           \
+                    select(
+                        [SAT_SolverRun.task_uuid, SAT_SolverRun.outcome, count()],
+                        and_(
+                            SAT_SolverRun.task_uuid.in_([t.task.uuid for t in self.tasks]),
+                            SAT_SolverRun.solver        == action.solver,
+                            SAT_SolverRun.configuration == action.configuration,
+                            SAT_SolverRun.cutoff        >= action.cutoff,
+                            ),
+                        )                                                             \
+                        .group_by(SAT_SolverRun.task_uuid, SAT_SolverRun.outcome)
+                result    = session.connection().execute(statement)
 
-                events.extend((world_tasks[r.task.uuid], action, SAT_Outcome.from_run(r)) for r in runs)
+                # build the matrix
+                world_tasks = dict((t.task.uuid, t) for t in self.tasks)
+                counts      = numpy.zeros((self.ntasks, self.nactions, self.noutcomes))
 
-            return events
+                for (task_uuid, outcome, nrows) in result:
+                    world_task    = world_tasks[task_uuid]
+                    world_outcome = SAT_Outcome.BY_VALUE[outcome]
 
-    def act(self, task, action, random = numpy.random):
+                    counts[world_task.n, action.n, world_outcome.n] = nrows
+
+                norms = numpy.sum(counts, 2, dtype = numpy.float)
+
+                return counts / norms[:, :, numpy.newaxis]
+
+    def act(self, task, action, nrestarts = 1, random = numpy.random):
         """
         Retrieve a random sample.
         """
 
-        # FIXME should set the postgres random seed using the passed PRNG
+        nnoutcome = random.multinomial(nrestarts, self.matrix[task.n, action.n, :])
 
-        session = AcrididSession()
+        return sum(([self.outcomes[i]] * n for (i, n) in enumerate(nnoutcome)), [])
 
-        with closing(session):
-            filter  = \
-                and_(
-                    SAT_SolverRun.task          == task.task,
-                    SAT_SolverRun.solver        == action.solver,
-                    SAT_SolverRun.configuration == action.configuration,
-                    SAT_SolverRun.cutoff        >= action.cutoff,
-                    )
-            query   = session.query(SAT_SolverRun).filter(filter).order_by(sql_random())
-
-            return SAT_Outcome.from_run(query[0])
+    # constants
+    success_utility = 1.0
 
