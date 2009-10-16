@@ -16,6 +16,7 @@ from collections import (
     )
 from sqlalchemy import (
     and_,
+    case,
     select,
     )
 from sqlalchemy.sql.functions import (
@@ -119,22 +120,20 @@ class SAT_Outcome(Outcome):
         Return an outcome from True, False, or None.
         """
 
-        if bool is None:
-            return SAT_Outcome.UNKNOWN
-        elif bool is True:
-            return SAT_Outcome.SAT
-        else:
-            return SAT_Outcome.UNSAT
+        return SAT_Outcome.BY_VALUE[bool]
 
 # outcome constants
-SAT_Outcome.SAT      = SAT_Outcome(0, 1.0)
-SAT_Outcome.UNSAT    = SAT_Outcome(0, 1.0)
+SAT_Outcome.SOLVED   = SAT_Outcome(0, 1.0)
 SAT_Outcome.UNKNOWN  = SAT_Outcome(1, 0.0)
 SAT_Outcome.BY_VALUE = {
-    True:  SAT_Outcome.SAT,
-    False: SAT_Outcome.UNSAT,
-    None:  SAT_Outcome.UNKNOWN
+    True:  SAT_Outcome.SOLVED,
+    False: SAT_Outcome.SOLVED,
+    None:  SAT_Outcome.UNKNOWN,
     }
+SAT_Outcome.BY_INDEX = (
+    SAT_Outcome.SOLVED,
+    SAT_Outcome.UNKNOWN,
+    )
 
 class SAT_World(World):
     """
@@ -148,7 +147,7 @@ class SAT_World(World):
 
         self.actions   = actions
         self.tasks     = tasks
-        self.outcomes  = (SAT_Outcome.SAT, SAT_Outcome.UNSAT)
+        self.outcomes  = SAT_Outcome.BY_INDEX
         self.utilities = numpy.array([o.utility for o in self.outcomes])
         self.matrix    = self.__get_outcome_matrix()
 
@@ -157,16 +156,23 @@ class SAT_World(World):
         Build a matrix of outcome probabilities.
         """
 
+        log.info("building task-action-outcome matrix")
+
         # hit the database
         session = AcrididSession()
 
         with closing(session):
-            events = []
+            counts = numpy.zeros((self.ntasks, self.nactions, self.noutcomes))
 
             for action in self.actions:
+                run_case  = case([(SAT_SolverRun.elapsed <= action.cutoff, SAT_SolverRun.outcome)])
                 statement =                                                           \
                     select(
-                        [SAT_SolverRun.task_uuid, SAT_SolverRun.outcome, count()],
+                        [
+                            SAT_SolverRun.task_uuid,
+                            run_case.label("result"),
+                            count(),
+                            ],
                         and_(
                             SAT_SolverRun.task_uuid.in_([t.task.uuid for t in self.tasks]),
                             SAT_SolverRun.solver        == action.solver,
@@ -174,22 +180,23 @@ class SAT_World(World):
                             SAT_SolverRun.cutoff        >= action.cutoff,
                             ),
                         )                                                             \
-                        .group_by(SAT_SolverRun.task_uuid, SAT_SolverRun.outcome)
-                result    = session.connection().execute(statement)
+                        .group_by(SAT_SolverRun.task_uuid, "result")
+                executed  = session.connection().execute(statement)
 
                 # build the matrix
                 world_tasks = dict((t.task.uuid, t) for t in self.tasks)
-                counts      = numpy.zeros((self.ntasks, self.nactions, self.noutcomes))
 
-                for (task_uuid, outcome, nrows) in result:
+                for (task_uuid, result, nrows) in executed:
+                    # map storage instances to world instances
                     world_task    = world_tasks[task_uuid]
-                    world_outcome = SAT_Outcome.BY_VALUE[outcome]
+                    world_outcome = SAT_Outcome.BY_VALUE[result]
 
+                    # record the outcome count
                     counts[world_task.n, action.n, world_outcome.n] = nrows
 
-                norms = numpy.sum(counts, 2, dtype = numpy.float)
+            norms = numpy.sum(counts, 2, dtype = numpy.float)
 
-                return counts / norms[:, :, numpy.newaxis]
+            return counts / norms[:, :, numpy.newaxis]
 
     def act(self, task, action, nrestarts = 1, random = numpy.random):
         """
@@ -197,9 +204,7 @@ class SAT_World(World):
         """
 
         nnoutcome = random.multinomial(nrestarts, self.matrix[task.n, action.n, :])
+        outcomes  = sum(([self.outcomes[i]] * n for (i, n) in enumerate(nnoutcome)), [])
 
-        return sum(([self.outcomes[i]] * n for (i, n) in enumerate(nnoutcome)), [])
-
-    # constants
-    success_utility = 1.0
+        return outcomes
 

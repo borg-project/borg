@@ -27,10 +27,13 @@ class MultinomialActionModel(ActionModel):
 
         counts       = world.counts_from_events(training)
         total_counts = numpy.sum(counts, 0)
+        log.debug("multinomial action counts: %s", total_counts)
         norm         = numpy.sum(total_counts, 1, numpy.double)[:, numpy.newaxis]
 
         self.prediction                 = total_counts / norm
         self.prediction.flags.writeable = False
+
+        log.debug("multinomial action model: %s", self.prediction)
 
     def predict(self, task, history, out = None):
         """

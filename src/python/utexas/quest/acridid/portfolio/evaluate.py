@@ -43,7 +43,7 @@ class PortfolioTest(object):
     Evaluate algorithm selection strategies.
     """
 
-    def __init__(self, world, test_tasks, task_time):
+    def __init__(self, world, test_tasks, task_time, success = 1.0):
         """
         Initialize.
         """
@@ -52,6 +52,7 @@ class PortfolioTest(object):
         self.test_tasks = test_tasks
         self.task_time  = task_time
         self.score      = PortfolioTestScore(world)
+        self.success    = success
 
     def evaluate(self, strategy):
         """
@@ -91,7 +92,7 @@ class PortfolioTest(object):
 
             if outcome.utility > best_utility:
                 best_utility = outcome.utility
-            if outcome.utility >= self.world.success_utility:
+            if outcome.utility >= self.success:
                 self.score.nsolved += 1
 
                 break
