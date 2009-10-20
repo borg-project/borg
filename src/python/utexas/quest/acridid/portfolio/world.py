@@ -62,6 +62,13 @@ class Outcome(object):
 
     pass
 
+def get_positive_counts(counts):
+    """
+    Return only rows with recorded outcomes.
+    """
+
+    return counts[numpy.sum(numpy.sum(counts, 1), 1) > 0]
+
 class World(ABC):
     """
     A description of the environment.

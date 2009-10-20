@@ -19,6 +19,7 @@ from cargo.flags import (
     )
 from cargo.log import get_logger
 from cargo.temporal import TimeDelta
+from cargo.iterators import random_subsets
 
 log = get_logger(__name__)
 
@@ -63,15 +64,15 @@ class PortfolioTest(object):
 
         for (ntest, task) in enumerate(self.test_tasks):
             log.info("evaluating on task %i (test %i of %i)", task.n, ntest + 1, len(self.test_tasks))
-            log.info("task has path %s", task.task.path)
+            log.debug("task has path %s", task.task.path)
 
             self.evaluate_on(strategy, task)
 
-            log.info(
-                "total max utility for %s: %.2f",
-                strategy,
-                self.score.total_max_utility,
-                )
+        log.info(
+            "total max utility for %s: %.2f",
+            strategy,
+            self.score.total_max_utility,
+            )
 
         return self.score
 
@@ -99,7 +100,7 @@ class PortfolioTest(object):
 
         self.score.total_max_utility += best_utility
 
-        log.info("%s had max utility %.2f with %s remaining", strategy, best_utility, remaining)
+        log.detail("%s had max utility %.2f with %s remaining", strategy, best_utility, remaining)
 
     def evaluate_once_on(self, strategy, task, remaining):
         """
@@ -116,7 +117,7 @@ class PortfolioTest(object):
         # take that action
         outcome = self.world.act_once(task, action)
 
-        log.info("%s: [%i] %s -> %s", remaining, task.n, action, outcome)
+        log.debug("%s: [%i] %s -> %s", remaining, task.n, action, outcome)
 
         try:
             action_generator.send(outcome)
@@ -128,6 +129,34 @@ class PortfolioTest(object):
         self.score.action_log[action.n] += 1
 
         return (outcome, action.cutoff)
+
+def build_train_test_split(world, ntasks_train, nrestarts_train, ntasks_test, random = numpy.random):
+    """
+    Evaluate the strategy set.
+    """
+
+    log.info(
+        "sampling (%i*%i)/%i train/test split",
+        ntasks_train,
+        nrestarts_train,
+        ntasks_test,
+        )
+
+    (train_tasks, test_tasks) = \
+        random_subsets(
+            world.tasks,
+            (ntasks_train, ntasks_test),
+            random = random,
+            )
+    training_history = \
+        world.act_all(
+            train_tasks,
+            world.actions,
+            nrestarts_train,
+            random = random,
+            )
+
+    return (test_tasks, training_history)
 
 class Evaluation(object):
     """

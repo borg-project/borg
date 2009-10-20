@@ -68,9 +68,9 @@ class Evaluee(object):
 
         return self.total_utility / self.spent
 
-class NamedEvalueeFactory(object):
+class NamedStrategyFactory(object):
     """
-    Construct standard evaluees.
+    Construct standard portfolio strategies.
     """
 
     class Flags(FlagSet):
@@ -94,21 +94,21 @@ class NamedEvalueeFactory(object):
         Initialize.
         """
 
-        self.world = world
+        self.world            = world
         self.training_history = training_history
-        self.ncomponents = ncomponents
-        self.discount_factor = discount_factor
-        self.flags = flags
+        self.ncomponents      = ncomponents
+        self.discount_factor  = discount_factor
+        self.flags            = flags
 
         # set up constructor names
         self.constructors = {
-            "oracle": self.make_oracle,
-            "random": self.make_random,
-            "multinomial": self.make_multinomial,
-            "multinomial_mixture": self.make_multinomial_mixture,
-            "multinomial_fixed_mixture": self.make_multinomial_fixed_mixture,
-            "dcm_mixture": self.make_dcm_mixture,
-            "dcm_fixed_mixture": self.make_dcm_fixed_mixture,
+            "oracle"                    : self.make_oracle,
+            "random"                    : self.make_random,
+            "multinomial"               : self.make_multinomial,
+            "multinomial_mixture"       : self.make_multinomial_mixture,
+            "multinomial_fixed_mixture" : self.make_multinomial_fixed_mixture,
+            "dcm_mixture"               : self.make_dcm_mixture,
+            "dcm_fixed_mixture"         : self.make_dcm_fixed_mixture,
             }
 
         for action in self.world.actions:

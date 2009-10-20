@@ -9,8 +9,9 @@ Various models of task/action outcomes.
 import numpy
 
 from cargo.log import get_logger
-# from cargo.statistics.dcm import DirichletCompoundMultinomial
-# from cargo.statistics.mixture import FiniteMixture
+from cargo.statistics.dcm import DirichletCompoundMultinomial
+from cargo.statistics.mixture import FiniteMixture
+from utexas.quest.acridid.portfolio.world import get_positive_counts
 from utexas.quest.acridid.portfolio.strategies import ActionModel
 
 log = get_logger(__name__)
@@ -47,7 +48,6 @@ class MultinomialActionModel(ActionModel):
 
         return out
 
-'''
 class MultinomialMixtureActionModel(ActionModel):
     """
     An arbitrary mixture model.
@@ -79,7 +79,8 @@ class MultinomialMixtureActionModel(ActionModel):
         K = self.__mixture.ncomponents
 
         # get the task-specific history
-        task_history = history.counts[task.n]
+        history_counts = self.__world.counts_from_events(history)
+        task_history   = history_counts[task.n]
 
         # evaluate the new responsibilities
         post_pi_K = numpy.copy(self.__mixture.pi)
@@ -127,11 +128,11 @@ class DCM_MixtureActionModel(ActionModel):
 
         # members
         self.__world = world
-        self.__training = training
+        self.__training = world.counts_from_events(training)
         self.__estimator = estimator
 
         # model
-        counts = training.get_positive_counts()
+        counts = get_positive_counts(self.__training)
         training_split = [counts[:, naction, :] for naction in xrange(world.nactions)]
         self.mixture = estimator.estimate(training_split)
 
@@ -145,7 +146,8 @@ class DCM_MixtureActionModel(ActionModel):
         K = self.mixture.ncomponents
 
         # get the task-specific history
-        task_history = history.counts[task.n]
+        history_counts = self.__world.counts_from_events(history)
+        task_history   = history_counts[task.n]
 
         # evaluate the new responsibilities
         post_pi_K = numpy.copy(self.mixture.pi)
@@ -299,5 +301,4 @@ class RankingActionModel(ActionModel):
             out[:] = FIXME
 
         return out
-'''
 
