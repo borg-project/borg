@@ -1,5 +1,5 @@
 """
-cargo/ai/sat/solvers.py
+cargo/sat/solvers.py
 
 Run satisfiability solvers.
 
@@ -14,7 +14,6 @@ from abc import abstractmethod
 from copy import copy
 from tempfile import NamedTemporaryFile
 from contextlib import closing
-from cargo.ai.sat.cnf import write_sanitized_cnf
 from cargo.io import openz
 from cargo.log import get_logger
 from cargo.unix.accounting import run_cpu_limited
@@ -23,6 +22,7 @@ from cargo.flags import (
     Flag,
     Flags,
     )
+from utexas.quest.acridid.sat.cnf import write_sanitized_cnf
 
 log = get_logger(__name__)
 
