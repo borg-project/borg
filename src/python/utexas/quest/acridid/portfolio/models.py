@@ -127,14 +127,14 @@ class DCM_MixtureActionModel(ActionModel):
         """
 
         # members
-        self.__world = world
-        self.__training = world.counts_from_events(training)
+        self.__world     = world
+        self.__training  = world.counts_from_events(training)
         self.__estimator = estimator
 
         # model
-        counts = get_positive_counts(self.__training)
+        counts         = get_positive_counts(self.__training)
         training_split = [counts[:, naction, :] for naction in xrange(world.nactions)]
-        self.mixture = estimator.estimate(training_split)
+        self.mixture   = estimator.estimate(training_split)
 
     def predict(self, task, history, out = None):
         """
@@ -183,7 +183,7 @@ class DCM_MixtureActionModel(ActionModel):
 
             for m in xrange(M):
                 for k in xrange(K):
-                    ll = post_components[m, k].log_likelihood(v)
+                    ll         = post_components[m, k].log_likelihood(v)
                     out[m, o] += post_pi_K[k] * numpy.exp(ll)
 
         # done
