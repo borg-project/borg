@@ -27,6 +27,7 @@ from itertools import (
     product,
     )
 from sqlalchemy import (
+    Float,
     Column,
     Binary,
     String,
@@ -330,6 +331,23 @@ class SAT_SolverRun(AcrididBase):
         run.fqdn    = getfqdn()
 
         return run
+
+class PerplexityDatum(AcrididBase):
+    """
+    Datum from a perplexity calculation.
+    """
+
+    __tablename__ = "perplexity_data"
+
+    uuid            = Column(SQL_UUID, primary_key = True, default = uuid4)
+    model_name      = Column(String)
+    set_name        = Column(String)
+    ntasks_train    = Column(Integer)
+    ntasks_test     = Column(Integer)
+    nrestarts_train = Column(Integer)
+    nrestarts_test  = Column(Integer)
+    perplexity      = Column(Float)
+    ncomponents     = Column(Integer)
 
 def acridid_connect(engines = SQL_Engines.default, flags = module_flags.given):
     """
