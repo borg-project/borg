@@ -28,7 +28,6 @@ class MultinomialActionModel(ActionModel):
 
         counts       = world.counts_from_events(training)
         total_counts = numpy.sum(counts, 0)
-        log.debug("multinomial action counts: %s", total_counts)
         norm         = numpy.sum(total_counts, 1, numpy.double)[:, numpy.newaxis]
 
         self.prediction                 = total_counts / norm
@@ -60,13 +59,12 @@ class MultinomialMixtureActionModel(ActionModel):
 
         # members
         self.__world = world
-        self.__training = training
+        self.__training  = world.counts_from_events(training)
         self.__estimator = estimator
 
         # model
-        counts = training.get_positive_counts()
+        counts         = get_positive_counts(self.__training)
         training_split = [counts[:, naction, :] for naction in xrange(world.nactions)]
-
         self.__mixture = estimator.estimate(training_split)
 
     def predict(self, task, history, out = None):
