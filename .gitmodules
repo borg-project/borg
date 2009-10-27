@@ -10,3 +10,6 @@
 [submodule "dep/third/satenstein"]
 	path = dep/third/satenstein
 	url = ssh://cargo-cult/home/bsilverthorn/git/third/satenstein
+[submodule "dep/third/psycopg2"]
+	path = dep/third/psycopg2
+	url = git://luna.dndg.it/public/psycopg2.git
