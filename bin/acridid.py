@@ -22,6 +22,7 @@ def main():
     git_cargo_root = join(git_root, "dep/cargo")
     python_paths   = (
         join(git_third_root, "sqlalchemy/lib"),
+        join(git_third_root, "psycopg2/build/built"),
         join(git_cargo_root, "kit/src/python"),
         join(git_cargo_root, "ai-sat/src/python"),
         join(git_cargo_root, "unix/src/python"),

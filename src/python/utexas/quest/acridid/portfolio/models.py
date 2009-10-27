@@ -136,6 +136,27 @@ class DCM_MixtureActionModel(ActionModel):
         training_split = [counts[:, naction, :] for naction in xrange(world.nactions)]
         self.mixture   = estimator.estimate(training_split)
 
+    def get_post_pi_K(self, counts):
+        """
+        Get the posterior responsibilities.
+        """
+
+        # mise en place
+        M = self.mixture.ndomains
+        K = self.mixture.ncomponents
+
+        # responsibilities
+        post_pi_K = numpy.copy(self.mixture.pi)
+
+        for k in xrange(K):
+            for m in xrange(M):
+                ll            = self.mixture.components[m, k].log_likelihood(counts[m])
+                post_pi_K[k] *= numpy.exp(ll)
+
+        post_pi_K /= numpy.sum(post_pi_K)
+
+        return post_pi_K
+
     def predict(self, task, history, out = None):
         """
         Return the predicted probability of each outcome given history.
@@ -148,25 +169,14 @@ class DCM_MixtureActionModel(ActionModel):
         # get the task-specific history
         history_counts = self.__world.counts_from_events(history)
         task_history   = history_counts[task.n]
-
-        # evaluate the new responsibilities
-        post_pi_K = numpy.copy(self.mixture.pi)
-
-        for k in xrange(K):
-            for m in xrange(M):
-                ll = self.mixture.components[m, k].log_likelihood(task_history[m])
-
-                post_pi_K[k] *= numpy.exp(ll)
-
-        post_pi_K /= numpy.sum(post_pi_K)
+        post_pi_K      = self.get_post_pi_K(task_history)
 
         # build the new mixture
         post_components = numpy.empty_like(self.mixture.components)
 
         for k in xrange(K):
             for m in xrange(M):
-                prior = self.mixture.components[m, k]
-
+                prior                 = self.mixture.components[m, k]
                 post_components[m, k] = DirichletCompoundMultinomial(prior.alpha + task_history[m])
 
         # calculate the expected utility of each action
