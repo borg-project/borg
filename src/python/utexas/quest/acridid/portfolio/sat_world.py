@@ -140,7 +140,7 @@ class SAT_World(World):
     Components of the SAT world.
     """
 
-    def __init__(self, actions, tasks):
+    def __init__(self, actions, tasks, matrix = None):
         """
         Initialize.
         """
@@ -149,7 +149,11 @@ class SAT_World(World):
         self.tasks     = tasks
         self.outcomes  = SAT_Outcome.BY_INDEX
         self.utilities = numpy.array([o.utility for o in self.outcomes])
-        self.matrix    = self.__get_outcome_matrix()
+
+        if matrix is None:
+            matrix = self.__get_outcome_matrix()
+
+        self.matrix = matrix
 
     def __get_outcome_matrix(self):
         """

@@ -44,7 +44,7 @@ class PortfolioTest(object):
     Evaluate algorithm selection strategies.
     """
 
-    def __init__(self, world, test_tasks, task_time, success = 1.0):
+    def __init__(self, world, test_tasks, task_time, actions = None, success = 1.0):
         """
         Initialize.
         """
@@ -53,14 +53,19 @@ class PortfolioTest(object):
         self.test_tasks = test_tasks
         self.task_time  = task_time
         self.score      = PortfolioTestScore(world)
-        self.success    = success
+
+        if actions is None:
+            actions = world.actions
+
+        self.actions = actions
+        self.success = success
 
     def evaluate(self, strategy):
         """
         Evaluate the specified evaluee.
         """
 
-        log.info("evaluating %s", strategy)
+        log.note("running a portfolio evaluation")
 
         for (ntest, task) in enumerate(self.test_tasks):
             log.info("evaluating on task %i (test %i of %i)", task.n, ntest + 1, len(self.test_tasks))
@@ -108,7 +113,7 @@ class PortfolioTest(object):
         """
 
         # let the evaluee select an action
-        actions          = [a for a in self.world.actions if a.cutoff <= remaining]
+        actions          = [a for a in self.actions if a.cutoff <= remaining]
         action_generator = strategy.select(task, actions)
         action           = action_generator.send(None)
 
