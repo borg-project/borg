@@ -349,6 +349,19 @@ class PerplexityDatum(AcrididBase):
     perplexity      = Column(Float)
     ncomponents     = Column(Integer)
 
+class SynthesisDatum(AcrididBase):
+    """
+    Datum from a portfolio synthesis experiment.
+    """
+
+    __tablename__ = "synthesis_data"
+
+    uuid          = Column(SQL_UUID, primary_key = True, default = uuid4)
+    solver_select = Column(String)
+    sub_select    = Column(String)
+    gap_solved    = Column(Integer)
+    gap_spent     = Column(SQL_TimeDelta)
+
 def acridid_connect(engines = SQL_Engines.default, flags = module_flags.given):
     """
     Connect to acridid storage.
