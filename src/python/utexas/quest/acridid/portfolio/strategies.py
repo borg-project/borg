@@ -85,8 +85,8 @@ class ModelingSelectionStrategy(SelectionStrategy):
 
         # predict, then make a selection
         predicted = self.model.predict(task, self.history)
-        action = self.planner.select(predicted, actions)
-        outcome = yield action
+        action    = self.planner.select(predicted, actions)
+        outcome   = yield action
 
         # remember its result
         self.history.append((task, action, outcome))
