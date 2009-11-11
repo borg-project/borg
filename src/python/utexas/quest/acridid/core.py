@@ -366,6 +366,60 @@ class SynthesisDatum(AcrididBase):
     o_solved      = Column(Integer)
     o_spent       = Column(SQL_TimeDelta)
 
+class PortfolioScoreWorld(AcrididBase):
+    """
+    World from a (set of) portfolio tests.
+    """
+
+    __tablename__ = "portfolio_score_worlds"
+
+    uuid     = Column(SQL_UUID, primary_key = True, default = uuid4)
+    ntrain   = Column(Integer)
+    ntest    = Column(Integer)
+    limit    = Column(SQL_TimeDelta)
+    prefix   = Column(String)
+    discount = Column(Float)
+
+class PortfolioScore(AcrididBase):
+    """
+    Result of a portfolio test.
+    """
+
+    __tablename__ = "portfolio_scores"
+
+    # columns
+    uuid         = Column(SQL_UUID, primary_key = True, default = uuid4)
+    world_uuid   = Column(SQL_UUID, ForeignKey("portfolio_score_worlds.uuid"))
+    model_name   = Column(String)
+    planner_name = Column(String)
+    components   = Column(Integer)
+    solved       = Column(Integer)
+    spent        = Column(SQL_TimeDelta)
+    utility      = Column(Float)
+
+    # relations
+    world = relation(PortfolioScoreWorld)
+
+class PortfolioActionCount(AcrididBase):
+    """
+    Action invocation count in a portfolio experiment.
+    """
+
+    __tablename__ = "portfolio_action_counts"
+
+    # columns
+    uuid                      = Column(SQL_UUID, primary_key = True, default = uuid4)
+    score_uuid                = Column(SQL_UUID, ForeignKey("portfolio_scores.uuid"))
+    solver_name               = Column(String, ForeignKey("sat_solvers.name"))
+    solver_configuration_uuid = Column(SQL_UUID, ForeignKey("sat_solver_configurations.uuid"))
+    duration                  = Column(SQL_TimeDelta)
+    invocations               = Column(Integer)
+
+    # relations
+    score                = relation(PortfolioScore)
+    solver               = relation(SAT_SolverDescription)
+    solver_configuration = relation(SAT_SolverConfiguration)
+
 def acridid_connect(engines = SQL_Engines.default, flags = module_flags.given):
     """
     Connect to acridid storage.

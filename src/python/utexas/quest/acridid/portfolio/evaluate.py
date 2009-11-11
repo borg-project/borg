@@ -35,6 +35,7 @@ class PortfolioTestScore(object):
 
         self.total_utility     = 0.0
         self.total_max_utility = 0.0
+        self.total_discounted  = 0.0
         self.spent             = TimeDelta()
         self.nsolved           = 0
         self.action_log        = numpy.zeros(world.nactions, dtype = numpy.uint32)
@@ -44,7 +45,7 @@ class PortfolioTest(object):
     Evaluate algorithm selection strategies.
     """
 
-    def __init__(self, world, test_tasks, task_time, actions = None, success = 1.0):
+    def __init__(self, world, test_tasks, task_time, discount, actions = None, success = 1.0):
         """
         Initialize.
         """
@@ -53,6 +54,7 @@ class PortfolioTest(object):
         self.test_tasks = test_tasks
         self.task_time  = task_time
         self.score      = PortfolioTestScore(world)
+        self.discount   = discount
 
         if actions is None:
             actions = world.actions
@@ -132,6 +134,7 @@ class PortfolioTest(object):
         self.score.total_utility        += outcome.utility
         self.score.spent                += action.cutoff
         self.score.action_log[action.n] += 1
+        self.score.total_discounted     += outcome.utility * self.discount**action.cutoff.as_s # FIXME broken if nonzero non-success actions exist
 
         return (outcome, action.cutoff)
 
