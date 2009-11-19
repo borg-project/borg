@@ -78,7 +78,7 @@ class SoftMyopicActionPlanner(ActionPlanner):
 
         # convert to expectation
         expected = numpy.sum(predicted * self.world.utilities, 1)
-        probabilities = numpy.fromiter((expected[a.n]*(self.discount**a.cutoff) for a in actions), numpy.double)
+        probabilities = numpy.fromiter((expected[a.n]*(self.discount**a.cutoff.as_s) for a in actions), numpy.double)
         probabilities /= numpy.sum(probabilities)
         ((naction,),) = numpy.nonzero(numpy.random.multinomial(1, probabilities))
 
