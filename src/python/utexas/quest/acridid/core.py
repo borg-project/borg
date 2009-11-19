@@ -356,15 +356,14 @@ class SynthesisDatum(AcrididBase):
 
     __tablename__ = "synthesis_data"
 
-    uuid          = Column(SQL_UUID, primary_key = True, default = uuid4)
-    solver_select = Column(String)
-    sub_select    = Column(String)
-    seed_solved   = Column(Integer)
-    seed_spent    = Column(SQL_TimeDelta)
-    plus_solved   = Column(Integer)
-    plus_spent    = Column(SQL_TimeDelta)
-    o_solved      = Column(Integer)
-    o_spent       = Column(SQL_TimeDelta)
+    uuid              = Column(SQL_UUID, primary_key = True, default = uuid4)
+    tag               = Column(String)
+    optimal           = Column(Integer)
+    none_random       = Column(Integer)
+    uniform_naive     = Column(Integer)
+    biased_naive      = Column(Integer)
+    uniform_estimated = Column(Integer)
+    biased_estimated  = Column(Integer)
 
 def acridid_connect(engines = SQL_Engines.default, flags = module_flags.given):
     """
