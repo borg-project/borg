@@ -46,6 +46,10 @@ from cargo.io import (
     )
 from sqlalchemy.ext.declarative import declarative_base
 from cargo.log import get_logger
+from cargo.sat.solvers import (
+    SAT_Competition2007_Solver,
+    SAT_Competition2009_Solver,
+    )
 from cargo.sql.alchemy import (
     SQL_UUID,
     SQL_JSON,
@@ -132,6 +136,31 @@ class SAT_2007_SolverDescription(SAT_SolverDescription):
     name          = Column(String, ForeignKey(SAT_SolverDescription.name), primary_key = True)
     relative_path = Column(String)
     seeded        = Column(Boolean)
+
+    def to_solver(self):
+        """
+        Return an interface to the solver itself.
+        """
+
+        return SAT_Competition2007_Solver(self.relative_path, self.seeded)
+
+class SAT_2009_SolverDescription(SAT_SolverDescription):
+    """
+    Configuration of a solver from the 2009 SAT competition.
+    """
+
+    __tablename__   = "sat_2009_solvers"
+    __mapper_args__ = {"polymorphic_identity": "sat2009"}
+
+    name    = Column(String, ForeignKey(SAT_SolverDescription.name), primary_key = True)
+    command = Column(SQL_List(String))
+
+    def to_solver(self):
+        """
+        Return an interface to the solver itself.
+        """
+
+        return SAT_Competition2009_Solver(self.relative_path, self.command)
 
 class SAT_ConfigurationSet(AcrididBase):
     """

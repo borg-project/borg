@@ -12,6 +12,9 @@ import numpy
 
 from abc import abstractmethod
 from copy import copy
+from os.path import (
+    splitext,
+    )
 from tempfile import NamedTemporaryFile
 from contextlib import closing
 from cargo.io import openz
@@ -61,7 +64,7 @@ class SAT_Solver(ABC):
 
 class SAT_Competition2007_Solver(SAT_Solver):
     """
-    A solver for SAT that uses the >= 2007 competition interface.
+    A solver for SAT that uses the circa-2007 competition interface.
     """
 
     class_flags = \
@@ -126,6 +129,126 @@ class SAT_Competition2007_Solver(SAT_Solver):
             outcome = None
 
         return (outcome, elapsed, exit_status is None)
+
+class SAT_Competition2009_Solver(SAT_Solver):
+    """
+    A solver for SAT that uses the circa-2009 competition interface.
+    """
+
+    __sat_line_re   = re.compile(r"Model: \d+")
+    __unsat_line_re = re.compile(r"Formula found unsatisfiable")
+
+    class_flags = \
+        Flags(
+            "SAT 2009 Solvers Configuration",
+            Flag(
+                "--solvers-2009-path",
+                default = ".",
+                metavar = "PATH",
+                help    = "find 2009 solvers under PATH [%default]",
+                ),
+            )
+
+    def __init__(
+        self,
+        relative_path,
+        command,
+        flags = class_flags.given,
+        ):
+        """
+        Initialize this solver.
+        """
+
+        # base
+        SAT_Solver.__init__(self)
+
+        # members
+        self.relative_path = relative_path
+        self.command       = copy(command)
+        self.flags         = self.class_flags.merged(flags)
+
+    def _solve(self, cutoff, input_path, seed = None):
+        """
+        Execute the solver and return its outcome, given a concrete input path.
+        """
+
+        def expand(strings, variable, value):
+            """
+            Expand occurences of variable in string with value.
+            """
+
+            return [s.replace(variable, value) for s in strings]
+
+        # expand variables in an element of a SAT 2009 command string
+        expanded = command
+
+        # - BENCHNAME will be replaced by the name of the file (with both path
+        #   and extension) containing the instance to solve. Obviously, the
+        #   solver must use this parameter or one of the following variants:
+        expanded = expand(expanded, "BENCHNAME", input_path)
+
+        # - BENCHNAMENOEXT  (name of the file with path but without extension),
+        (without, _) = splitext(input_path)
+        expanded     = expand(expanded, "BENCHNAMENOEXT", without)
+
+        # - BENCHNAMENOPATH  (name of the file without path but with extension)
+        base     = basename(input_path)
+        expanded = expand(expanded, "BENCHNAMENOPATH", base)
+
+        # - BENCHNAMENOPATHNOEXT (name of the file without path nor extension)
+        base_without = basename(without)
+        expanded     = expand(expanded, "BENCHNAMENOPATHNOEXT", base_without)
+
+        # - RANDOMSEED will be replaced by a random seed which is a number
+        #   between 0 and 4294967295. This parameter MUST be used to initialize
+        #   the random number generator when the solver uses random numbers. It
+        #   is recorded by the evaluation environment and will allow to run the
+        #   program on a given instance under the same conditions if necessary.
+        if seed is not None:
+            expanded = expand(expanded, "RANDOMSEED", seed)
+        elif any("RANDOMSEED" in s for s in command):
+            raise ValueError("no seed provided for seeded solver")
+
+        # - TIMELIMIT (or TIMEOUT) represents the total CPU time (in seconds)
+        #   that the solver may use before being killed. May be used to adapt the
+        #   solver strategy.
+        cutoff_s = TimeDelta(cutoff).as_s
+        expanded = expand(expanded, "TIMELIMIT", cutoff_s)
+        expanded = expand(expanded, "TIMEOUT", cutoff_s)
+
+        # - MEMLIMIT represents the total amount of memory (in MiB) that the
+        #   solver may use before being killed. May be used to adapt the solver
+        #   strategy.   
+        expanded = expand(expanded, "MEMLIMIT", 1024)
+
+        # - TMPDIR is the name of the only directory where the solver is allowed
+        #   to read/write temporary files
+        expanded = expand(expanded, "TMPDIR", getenv("TMPDIR", "/tmp"))
+
+        # - DIR is the name of the directory where the solver files will be
+        #   stored
+        expanded = expand(expanded, "DIR", self.flags.solvers_2009_path)
+
+        # run the solver
+        log.debug("running %s on input", command)
+
+        (chunks, elapsed, exit_status) = \
+            run_cpu_limited(
+                (command, input_path) + tuple(self.argv) + seed_argv,
+                cutoff,
+                )
+
+        # analyze its output
+        if exit_status is None:
+            return (None, elapsed, True)
+        else:
+            for line in "".join(ct for (_, ct) in chunks).split("\n"):
+                if ArgoSAT_Solver.__sat_line_re.match(line):
+                    return (True, elapsed, False)
+                elif ArgoSAT_Solver.__unsat_line_re.match(line):
+                    return (False, elapsed, False)
+
+            return (None, elapsed, False)
 
 class SATensteinSolver(SAT_Competition2007_Solver):
     """
