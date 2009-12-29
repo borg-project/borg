@@ -7,13 +7,18 @@ Run satisfiability solvers.
 """
 
 import re
-import os.path
 import numpy
 
+from os import (
+    fsync,
+    getenv,
+    )
 from abc import abstractmethod
 from copy import copy
 from os.path import (
+    join,
     splitext,
+    basename,
     )
 from tempfile import NamedTemporaryFile
 from contextlib import closing
@@ -25,6 +30,7 @@ from cargo.flags import (
     Flag,
     Flags,
     )
+from cargo.temporal import TimeDelta
 from utexas.quest.acridid.sat.cnf import write_sanitized_cnf
 
 log = get_logger(__name__)
@@ -51,6 +57,8 @@ class SAT_Solver(ABC):
                 write_sanitized_cnf(temporary, source)
 
                 temporary.flush()
+
+                fsync(temporary.fileno())
 
                 return self._solve(cutoff, temporary.name, seed)
 
@@ -108,7 +116,7 @@ class SAT_Competition2007_Solver(SAT_Solver):
         """
 
         # run the solver
-        command   = os.path.join(self.flags.solvers_2007_path, self.relative_path)
+        command   = join(self.flags.solvers_2007_path, self.relative_path)
         seed_argv = [] if seed is None else self.seed_args + [str(seed)]
         input_argv = self.input_args + [input_path]
 
@@ -128,15 +136,15 @@ class SAT_Competition2007_Solver(SAT_Solver):
         else:
             outcome = None
 
-        return (outcome, elapsed, exit_status is None)
+        return (outcome, elapsed)
 
 class SAT_Competition2009_Solver(SAT_Solver):
     """
     A solver for SAT that uses the circa-2009 competition interface.
     """
 
-    __sat_line_re   = re.compile(r"Model: \d+")
-    __unsat_line_re = re.compile(r"Formula found unsatisfiable")
+    __sat_line_re   = re.compile("s SATISFIABLE")
+    __unsat_line_re = re.compile("s UNSATISFIABLE")
 
     class_flags = \
         Flags(
@@ -151,7 +159,6 @@ class SAT_Competition2009_Solver(SAT_Solver):
 
     def __init__(
         self,
-        relative_path,
         command,
         flags = class_flags.given,
         ):
@@ -163,9 +170,8 @@ class SAT_Competition2009_Solver(SAT_Solver):
         SAT_Solver.__init__(self)
 
         # members
-        self.relative_path = relative_path
-        self.command       = copy(command)
-        self.flags         = self.class_flags.merged(flags)
+        self.command = copy(command)
+        self.flags   = self.class_flags.merged(flags)
 
     def _solve(self, cutoff, input_path, seed = None):
         """
@@ -177,10 +183,11 @@ class SAT_Competition2009_Solver(SAT_Solver):
             Expand occurences of variable in string with value.
             """
 
-            return [s.replace(variable, value) for s in strings]
+            return [s.replace(variable, str(value)) for s in strings]
 
         # expand variables in an element of a SAT 2009 command string
-        expanded = command
+        expanded    = self.command
+        environment = {}
 
         # - BENCHNAME will be replaced by the name of the file (with both path
         #   and extension) containing the instance to solve. Obviously, the
@@ -206,49 +213,62 @@ class SAT_Competition2009_Solver(SAT_Solver):
         #   program on a given instance under the same conditions if necessary.
         if seed is not None:
             expanded = expand(expanded, "RANDOMSEED", seed)
-        elif any("RANDOMSEED" in s for s in command):
+        elif any("RANDOMSEED" in s for s in self.command):
             raise ValueError("no seed provided for seeded solver")
 
         # - TIMELIMIT (or TIMEOUT) represents the total CPU time (in seconds)
         #   that the solver may use before being killed. May be used to adapt the
         #   solver strategy.
-        cutoff_s = TimeDelta(cutoff).as_s
-        expanded = expand(expanded, "TIMELIMIT", cutoff_s)
-        expanded = expand(expanded, "TIMEOUT", cutoff_s)
+        cutoff_s                 = TimeDelta.from_timedelta(cutoff).as_s
+        expanded                 = expand(expanded, "TIMELIMIT", cutoff_s)
+        expanded                 = expand(expanded, "TIMEOUT", cutoff_s)
+        environment["TIMELIMIT"] = "%.1f" % cutoff_s
+        environment["TIMEOUT"]   = environment["TIMELIMIT"]
 
         # - MEMLIMIT represents the total amount of memory (in MiB) that the
         #   solver may use before being killed. May be used to adapt the solver
         #   strategy.   
-        expanded = expand(expanded, "MEMLIMIT", 1024)
+        memlimit                = 1024
+        expanded                = expand(expanded, "MEMLIMIT", memlimit)
+        environment["MEMLIMIT"] = memlimit
 
         # - TMPDIR is the name of the only directory where the solver is allowed
         #   to read/write temporary files
-        expanded = expand(expanded, "TMPDIR", getenv("TMPDIR", "/tmp"))
+        tmpdir                = getenv("TMPDIR", "/tmp")
+        expanded              = expand(expanded, "TMPDIR", tmpdir)
+        environment["TMPDIR"] = tmpdir
 
         # - DIR is the name of the directory where the solver files will be
         #   stored
-        expanded = expand(expanded, "DIR", self.flags.solvers_2009_path)
+        home                       = self.flags.solvers_2009_path
+        expanded                   = expand(expanded, "DIR", home)
+        expanded                   = expand(expanded, "HOME", home)
+        environment["SOLVERSHOME"] = home
 
         # run the solver
-        log.debug("running %s on input", command)
+        log.debug("running %s", expanded)
 
-        (chunks, elapsed, exit_status) = \
-            run_cpu_limited(
-                (command, input_path) + tuple(self.argv) + seed_argv,
-                cutoff,
-                )
+        (chunks, elapsed, exit_status) = run_cpu_limited(expanded, cutoff, environment)
 
         # analyze its output
         if exit_status is None:
-            return (None, elapsed, True)
+            return (None, elapsed)
         else:
             for line in "".join(ct for (_, ct) in chunks).split("\n"):
-                if ArgoSAT_Solver.__sat_line_re.match(line):
-                    return (True, elapsed, False)
-                elif ArgoSAT_Solver.__unsat_line_re.match(line):
-                    return (False, elapsed, False)
+                if SAT_Competition2009_Solver.__sat_line_re.match(line):
+                    return (True, elapsed)
+                elif SAT_Competition2009_Solver.__unsat_line_re.match(line):
+                    return (False, elapsed)
 
-            return (None, elapsed, False)
+            return (None, elapsed)
+
+    @property
+    def seeded(self):
+        """
+        Is the solver seeded?
+        """
+
+        return any("RANDOMSEED" in s for s in self.command)
 
 class SATensteinSolver(SAT_Competition2007_Solver):
     """
@@ -344,13 +364,13 @@ class ArgoSAT_Solver(SAT_Solver):
 
         # analyze its output
         if exit_status is None:
-            return (None, elapsed, True)
+            return (None, elapsed)
         else:
             for line in "".join(ct for (_, ct) in chunks).split("\n"):
                 if ArgoSAT_Solver.__sat_line_re.match(line):
-                    return (True, elapsed, False)
+                    return (True, elapsed)
                 elif ArgoSAT_Solver.__unsat_line_re.match(line):
-                    return (False, elapsed, False)
+                    return (False, elapsed)
 
-            return (None, elapsed, False)
+            return (None, elapsed)
 

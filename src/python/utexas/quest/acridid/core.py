@@ -46,10 +46,6 @@ from cargo.io import (
     )
 from sqlalchemy.ext.declarative import declarative_base
 from cargo.log import get_logger
-from cargo.sat.solvers import (
-    SAT_Competition2007_Solver,
-    SAT_Competition2009_Solver,
-    )
 from cargo.sql.alchemy import (
     SQL_UUID,
     SQL_JSON,
@@ -64,6 +60,10 @@ from cargo.flags import (
     with_flags_parsed,
     )
 from cargo.temporal import utc_now
+from utexas.quest.acridid.sat.solvers import (
+    SAT_Competition2007_Solver,
+    SAT_Competition2009_Solver,
+    )
 
 log            = get_logger(__name__, level = None)
 AcrididBase    = declarative_base()
@@ -160,7 +160,7 @@ class SAT_2009_SolverDescription(SAT_SolverDescription):
         Return an interface to the solver itself.
         """
 
-        return SAT_Competition2009_Solver(self.relative_path, self.command)
+        return SAT_Competition2009_Solver(self.command)
 
 class SAT_ConfigurationSet(AcrididBase):
     """
@@ -337,7 +337,6 @@ class SAT_SolverRun(AcrididBase):
     started            = Column(UTC_DateTime)
     elapsed            = Column(SQL_TimeDelta)
     cutoff             = Column(SQL_TimeDelta)
-    censored           = Column(Boolean)
     fqdn               = Column(String)
     seed               = Column(Integer)
 
