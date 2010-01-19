@@ -207,6 +207,8 @@ class SAT_World(World):
         Retrieve a random sample.
         """
 
+        log.debug("taking %i action(s) %s on task %s", nrestarts, action, task)
+
         nnoutcome = random.multinomial(nrestarts, self.matrix[task.n, action.n, :])
         outcomes  = sum(([self.outcomes[i]] * n for (i, n) in enumerate(nnoutcome)), [])
 

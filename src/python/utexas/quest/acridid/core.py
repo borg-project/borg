@@ -406,6 +406,7 @@ class PortfolioScoreWorld(AcrididBase):
     limit    = Column(SQL_TimeDelta)
     prefix   = Column(String)
     discount = Column(Float)
+    tags     = Column(SQL_List(String))
 
 class PortfolioScore(AcrididBase):
     """
@@ -423,6 +424,7 @@ class PortfolioScore(AcrididBase):
     solved       = Column(Integer)
     spent        = Column(SQL_TimeDelta)
     utility      = Column(Float)
+    tags         = Column(SQL_List(String))
 
     # relations
     world = relation(PortfolioScoreWorld)

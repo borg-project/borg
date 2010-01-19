@@ -95,6 +95,9 @@ class PortfolioTest(object):
             # let the evaluee take an action
             (outcome, spent) = self.evaluate_once_on(strategy, task, remaining)
 
+            if spent is None:
+                break
+
             # deal with that action's outcome
             remaining -= spent
 
@@ -115,9 +118,16 @@ class PortfolioTest(object):
         """
 
         # let the evaluee select an action
-        actions          = [a for a in self.actions if a.cutoff <= remaining]
+        actions = [a for a in self.actions if a.cutoff <= remaining]
+
+        if not actions:
+            return (None, None)
+
         action_generator = strategy.select(task, actions)
         action           = action_generator.send(None)
+
+        if action is None:
+            return (None, None)
 
         assert action in actions
 

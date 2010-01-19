@@ -59,9 +59,10 @@ class FixedSelectionStrategy(SelectionStrategy):
         Select an action, yield it, and receive its outcome.
         """
 
-        assert self.action in actions
-
-        yield self.action
+        if self.action in actions:
+            yield self.action
+        else:
+            yield None
 
 class ModelingSelectionStrategy(SelectionStrategy):
     """
@@ -73,8 +74,8 @@ class ModelingSelectionStrategy(SelectionStrategy):
         Initialize.
         """
 
-        self.world = world
-        self.model = model
+        self.world   = world
+        self.model   = model
         self.planner = planner
         self.history = []
 
