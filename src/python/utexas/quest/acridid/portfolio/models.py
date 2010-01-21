@@ -13,6 +13,11 @@ from cargo.statistics.dcm import DirichletCompoundMultinomial
 from cargo.statistics.mixture import FiniteMixture
 from utexas.quest.acridid.portfolio.world import get_positive_counts
 from utexas.quest.acridid.portfolio.strategies import ActionModel
+from cargo.statistics._statistics import (
+    dcm_post_pi_K,
+    dcm_model_predict,
+    multinomial_model_predict,
+    )
 
 log = get_logger(__name__)
 
@@ -67,48 +72,42 @@ class MultinomialMixtureActionModel(ActionModel):
         training_split = [counts[:, naction, :] for naction in xrange(world.nactions)]
         self.__mixture = estimator.estimate(training_split)
 
+        # store mixture components in a matrix
+        M = self.mixture.ndomains
+        K = self.mixture.ncomponents
+        D = self.__world.noutcomes
+
+        self.mix_MKD = numpy.empty((M, K, D))
+
+        for m in xrange(M):
+            for k in xrange(K):
+                self.mix_MKD[m, k] = self.mixture.components[m, k].log_beta
+
     def predict(self, task, history, out = None):
         """
         Return the predicted probability of each outcome given history.
         """
 
         # mise en place
-        M = self.__mixture.ndomains
-        K = self.__mixture.ncomponents
+        M = self.mixture.ndomains
+        K = self.mixture.ncomponents
+        D = self.__world.noutcomes
 
         # get the task-specific history
         history_counts = self.__world.counts_from_events(history)
-        task_history   = history_counts[task.n]
+        counts_MD      = history_counts[task.n]
 
-        # evaluate the new responsibilities
-        post_pi_K = numpy.copy(self.__mixture.pi)
-
-        for k in xrange(K):
-            for m in xrange(M):
-                ll = self.__mixture.components[m, k].log_likelihood(task_history[m])
-
-                post_pi_K[k] *= numpy.exp(ll)
-
-        post_pi_K /= numpy.sum(post_pi_K)
-
-        # calculate the expected utility of each action
+        # get the outcome probabilities
         if out is None:
-            out = numpy.zeros((self.__world.nactions, self.__world.noutcomes))
-        else:
-            out[:] = 0.0
+            out = numpy.empty((M, D))
 
-        v = numpy.empty(self.__world.noutcomes, numpy.uint)
+        multinomial_model_predict(
+            numpy.copy(self.__mixture.pi),
+            self.mix_MKD,
+            counts_MD,
+            out,
+            )
 
-        for o in xrange(self.__world.noutcomes):
-            v[:] = 0
-            v[o] = 1
-
-            for m in xrange(M):
-                for k in xrange(K):
-                    ll = self.__mixture.components[m, k].log_likelihood(v)
-                    out[m, o] += post_pi_K[k] * numpy.exp(ll)
-
-        # done
         return out
 
     # properties
@@ -116,7 +115,7 @@ class MultinomialMixtureActionModel(ActionModel):
 
 class DCM_MixtureActionModel(ActionModel):
     """
-    An arbitrary mixture model.
+    A DCM mixture model.
     """
 
     def __init__(self, world, training, estimator):
@@ -134,67 +133,57 @@ class DCM_MixtureActionModel(ActionModel):
         training_split = [counts[:, naction, :] for naction in xrange(world.nactions)]
         self.mixture   = estimator.estimate(training_split)
 
-    def get_post_pi_K(self, counts):
-        """
-        Get the posterior responsibilities.
-        """
-
-        # mise en place
+        # cache mixture components as matrices
         M = self.mixture.ndomains
         K = self.mixture.ncomponents
+        D = self.__world.noutcomes
 
-        # responsibilities
+        self.sum_MK  = numpy.empty((M, K))
+        self.mix_MKD = numpy.empty((M, K, D))
+
+        for m in xrange(M):
+            for k in xrange(K):
+                component          = self.mixture.components[m, k]
+                self.sum_MK[m, k]  = component.sum_alpha
+                self.mix_MKD[m, k] = component.alpha
+
+    def get_post_pi_K(self, counts_MD):
+
         post_pi_K = numpy.copy(self.mixture.pi)
 
-        for k in xrange(K):
-            for m in xrange(M):
-                ll            = self.mixture.components[m, k].log_likelihood(counts[m])
-                post_pi_K[k] *= numpy.exp(ll)
-
-        post_pi_K /= numpy.sum(post_pi_K)
+        dcm_post_pi_K(
+            post_pi_K,
+            self.sum_MK,
+            self.mix_MKD,
+            counts_MD,
+            )
 
         return post_pi_K
 
     def predict(self, task, history, out = None):
-        """
-        Return the predicted probability of each outcome given history.
-        """
 
         # mise en place
         M = self.mixture.ndomains
         K = self.mixture.ncomponents
+        D = self.__world.noutcomes
 
         # get the task-specific history
         history_counts = self.__world.counts_from_events(history)
-        task_history   = history_counts[task.n]
-        post_pi_K      = self.get_post_pi_K(task_history)
+        counts_MD      = history_counts[task.n]
+        post_pi_K      = self.get_post_pi_K(counts_MD)
 
-        # build the new mixture
-        post_components = numpy.empty_like(self.mixture.components)
-
-        for k in xrange(K):
-            for m in xrange(M):
-                prior                 = self.mixture.components[m, k]
-                post_components[m, k] = DirichletCompoundMultinomial(prior.alpha + task_history[m])
-
-        # calculate the expected utility of each action
+        # get the outcome probabilities
         if out is None:
-            out = numpy.zeros((self.__world.nactions, self.__world.noutcomes))
-        else:
-            out[:] = 0.0
+            out = numpy.empty((M, D))
 
-        v = numpy.empty(self.__world.noutcomes, numpy.uint)
+        dcm_model_predict(
+            post_pi_K,
+            numpy.copy(self.sum_MK),
+            numpy.copy(self.mix_MKD),
+            counts_MD,
+            out,
+            )
 
-        for o in xrange(self.__world.noutcomes):
-            v[:] = 0
-            v[o] = 1
-
-            for m in xrange(M):
-                for k in xrange(K):
-                    ll         = post_components[m, k].log_likelihood(v)
-                    out[m, o] += post_pi_K[k] * numpy.exp(ll)
-
-        # done
         return out
 
 class OracleActionModel(ActionModel):

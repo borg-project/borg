@@ -49,14 +49,13 @@ class HardMyopicActionPlanner(ActionPlanner):
         """
 
         # convert to expectation
-#         outcomes = numpy.minimum(numpy.sum(task_history, 0), 1)
-#         center = numpy.max(outcomes * self.world.utilities)
-#         recentered = numpy.maximum(self.world.utilities - center, 0.0)
-#         expected = numpy.sum(predicted * recentered, 1)
-        expected = numpy.sum(predicted * self.world.utilities, 1)
-        selected = max(actions, key = lambda a: expected[a.n]*(self.discount**a.cutoff.as_s))
+        expected   = numpy.sum(predicted * self.world.utilities, 1)
+        cutoffs    = numpy.fromiter((a.cutoff.as_s for a in actions), numpy.double)
+        indices    = numpy.fromiter((a.n for a in actions), numpy.int)
+        discounted = expected[indices] * numpy.power(self.discount, cutoffs)
+        selected   = numpy.argmax(discounted)
 
-        return selected
+        return actions[selected]
 
 class SoftMyopicActionPlanner(ActionPlanner):
     """

@@ -75,7 +75,7 @@ class PortfolioTest(object):
 
             self.evaluate_on(strategy, task)
 
-        log.info(
+        log.detail(
             "total max utility for %s: %.2f",
             strategy,
             self.score.total_max_utility,
@@ -90,13 +90,17 @@ class PortfolioTest(object):
 
         best_utility = 0.0
         remaining    = self.task_time
+        ntaken       = 0
 
-        while remaining > TimeDelta():
+        # FIXME remove the arbitrary action limit
+        while remaining > TimeDelta() and ntaken < 50:
             # let the evaluee take an action
             (outcome, spent) = self.evaluate_once_on(strategy, task, remaining)
 
             if spent is None:
                 break
+
+            ntaken += 1
 
             # deal with that action's outcome
             remaining -= spent
@@ -134,7 +138,7 @@ class PortfolioTest(object):
         # take that action
         outcome = self.world.act_once(task, action)
 
-        log.debug("%s: [%i] %s -> %s", remaining, task.n, action, outcome)
+        log.detail("%s: [%i] %s -> %s", remaining, task.n, action, outcome)
 
         try:
             action_generator.send(outcome)
@@ -273,10 +277,10 @@ class Evaluation(object):
         self.flags = flags or Evaluation.Flags.given
 
         # desribe the world
-        log.info("the world has the following %i actions:", len(self.world.actions))
+        log.debug("the world has the following %i actions:", len(self.world.actions))
 
         for action in self.world.actions:
-            log.info("%s", action)
+            log.debug("%s", action)
 
     def __build_train_test_split(self, ntasks_train, nrestarts_train):
         """
