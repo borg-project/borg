@@ -1,5 +1,5 @@
 """
-utexas/acridid/portfolio/world.py
+utexas/portfolio/world.py
 
 Actions, tasks, outcomes, and other pieces of the world.
 

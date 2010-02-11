@@ -1,5 +1,5 @@
 """
-cargo/ai/sat/wcnf.py
+utexas/sat/wcnf.py
 
 Read and write the weighted CNF format.
 

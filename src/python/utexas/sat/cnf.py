@@ -1,5 +1,5 @@
 """
-cargo/ai/sat/cnf.py
+utexas/sat/cnf.py
 
 Support the DIMACS suggested satisfiability problem format.
 
@@ -22,6 +22,15 @@ def write_sanitized_cnf(destination, source):
     for line in source:
         destination.write(__condense_spaces_re.sub(" ", line.strip()))
         destination.write("\n")
+
+def yield_sanitized_cnf(source):
+    """
+    Filter a CNF file to make picky solvers happy.
+    """
+
+    for line in source:
+        yield __condense_spaces_re.sub(" ", line.strip())
+        yield "\n"
 
 class DIMACS_ParseError(RuntimeError):
     """

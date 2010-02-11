@@ -1,5 +1,5 @@
 """
-cargo/ai/max_sat/solvers.py
+max_sat/solvers.py
 
 Run max-satisfiability solvers.
 

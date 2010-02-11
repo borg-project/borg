@@ -1,5 +1,5 @@
 """
-utexas/acridid/portfolio/sat_world.py
+utexas/portfolio/sat_world.py
 
 The world of SAT.
 
@@ -29,11 +29,11 @@ from cargo.flags import (
     FlagSet,
     IntRanges,
     )
-from utexas.quest.acridid.core import (
+from utexas.data import (
     SAT_SolverRun,
     AcrididSession,
     )
-from utexas.quest.acridid.portfolio.world import (
+from utexas.portfolio.world import (
     Task,
     World,
     Action,

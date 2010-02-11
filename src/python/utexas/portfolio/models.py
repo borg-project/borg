@@ -11,8 +11,8 @@ import numpy
 from cargo.log import get_logger
 from cargo.statistics.dcm import DirichletCompoundMultinomial
 from cargo.statistics.mixture import FiniteMixture
-from utexas.quest.acridid.portfolio.world import get_positive_counts
-from utexas.quest.acridid.portfolio.strategies import ActionModel
+from utexas.portfolio.world import get_positive_counts
+from utexas.portfolio.strategies import ActionModel
 from cargo.statistics._statistics import (
     dcm_post_pi_K,
     dcm_model_predict,
