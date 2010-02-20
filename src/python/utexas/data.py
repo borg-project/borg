@@ -34,6 +34,7 @@ from sqlalchemy import (
     Integer,
     Boolean,
     ForeignKey,
+    UnicodeText,
     )
 from sqlalchemy.orm import (
     relation,
@@ -61,10 +62,6 @@ from cargo.flags import (
     with_flags_parsed,
     )
 from cargo.temporal import utc_now
-from utexas.sat.solvers import (
-    SAT_Competition2007_Solver,
-    SAT_Competition2009_Solver,
-    )
 
 log             = get_logger(__name__)
 DatumBase       = declarative_base()
@@ -122,10 +119,10 @@ class Solver(DatumBase):
     Some solver for some domain.
     """
 
-    __tablename__ = "solvers"
+    __tablename__ = "sat_solvers"
 
-    uuid = Column(SQL_UUID, primary_key = True, default = uuid4)
-    name = Column(String)
+#     uuid = Column(SQL_UUID, primary_key = True, default = uuid4)
+    name = Column(String, primary_key = True)
     type = Column(String)
 
 class SAT_SolverRun(DatumBase):
@@ -137,13 +134,15 @@ class SAT_SolverRun(DatumBase):
 
     uuid        = Column(SQL_UUID, primary_key = True, default = uuid4)
     task_uuid   = Column(SQL_UUID, ForeignKey("sat_tasks.uuid"), nullable = False)
-    solver_uuid = Column(SQL_UUID, ForeignKey("solvers.uuid"), nullable = False)
+    solver_name = Column(String, ForeignKey("sat_solvers.name"), nullable = False)
     outcome     = Column(Boolean)
     started     = Column(UTC_DateTime)
     elapsed     = Column(SQL_TimeDelta)
     cutoff      = Column(SQL_TimeDelta)
     fqdn        = Column(String)
     seed        = Column(Integer)
+    exit_code   = Column(Integer)
+    output      = Column(UnicodeText)
 
     task          = relation(SAT_Task)
     solver        = relation(Solver)
@@ -227,7 +226,7 @@ class PortfolioActionCount(DatumBase):
     # columns
     uuid        = Column(SQL_UUID, primary_key = True, default = uuid4)
     score_uuid  = Column(SQL_UUID, ForeignKey("portfolio_scores.uuid"))
-    solver_name = Column(String, ForeignKey("solvers.name"))
+    solver_name = Column(String, ForeignKey("sat_solvers.name"))
     duration    = Column(SQL_TimeDelta)
     invocations = Column(Integer)
 

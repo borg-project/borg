@@ -70,7 +70,156 @@ class SAT_Solver(ABC):
 
         pass
 
-class SATensteinSolver(SAT_Competition2007_Solver):
+class SAT_CompetitionSolver(SAT_Solver):
+    """
+    A solver for SAT that uses the circa-2009 competition interface.
+    """
+
+    __sat_line_re   = re.compile("s SATISFIABLE")
+    __unsat_line_re = re.compile("s UNSATISFIABLE")
+
+    class_flags = \
+        Flags(
+            "SAT Competition Solvers Configuration",
+            Flag(
+                "--competition-solvers-path",
+                default = ".",
+                metavar = "PATH",
+                help    = "find SAT competition solvers under PATH [%default]",
+                ),
+            )
+
+    def __init__(
+        self,
+        command,
+        memlimit = None,
+        flags    = class_flags.given,
+        ):
+        """
+        Initialize this solver.
+
+        @param memlimit: The memory limit reported to the solver.
+        """
+
+        # base
+        SAT_Solver.__init__(self)
+
+        # members
+        self.command  = copy(command)
+        self.memlimit = memlimit
+        self.flags    = self.class_flags.merged(flags)
+
+    def _solve(self, cutoff, input_path, seed = None):
+        """
+        Execute the solver and return its outcome, given a concrete input path.
+
+        Comments quote the competition specification.
+        """
+
+        def expand(strings, variable, value):
+            """
+            Expand occurences of variable in string with value.
+            """
+
+            return [s.replace(variable, str(value)) for s in strings]
+
+        # expand variables in an element of a solver command string
+        expanded    = self.command
+        environment = {}
+
+        # BENCHNAME: the name of the file (with both path and extension)
+        # containing the instance to solve
+        expanded = expand(expanded, "BENCHNAME", input_path)
+
+        # BENCHNAMENOEXT: name of the file with path but without extension),
+        (without, _) = splitext(input_path)
+        expanded     = expand(expanded, "BENCHNAMENOEXT", without)
+
+        # BENCHNAMENOPATH: name of the file without path but with extension
+        base     = basename(input_path)
+        expanded = expand(expanded, "BENCHNAMENOPATH", base)
+
+        # BENCHNAMENOPATHNOEXT: name of the file without path nor extension
+        base_without = basename(without)
+        expanded     = expand(expanded, "BENCHNAMENOPATHNOEXT", base_without)
+
+        # RANDOMSEED: a random seed which is a number between 0 and 4294967295
+        if seed is not None:
+            expanded = expand(expanded, "RANDOMSEED", seed)
+        elif any("RANDOMSEED" in s for s in self.command):
+            raise ValueError("no seed provided for seeded solver")
+
+        # TIMELIMIT (or TIMEOUT): the total CPU time (in seconds) that the
+        # solver may use before being killed
+        cutoff_s                  = TimeDelta.from_timedelta(cutoff).as_s
+        expanded                  = expand(expanded, "TIMELIMIT", cutoff_s)
+        expanded                  = expand(expanded, "TIMEOUT", cutoff_s)
+        environment["TIMELIMIT"]  = "%.1f" % cutoff_s
+        environment["TIMEOUT"]    = environment["TIMELIMIT"]
+
+        # SATTIMEOUT is a synonym for TIMELIMIT used by pre-2009 solvers
+        environment["SATTIMEOUT"] = environment["TIMELIMIT"]
+
+        # only report memlimit if requested to do so
+        if self.memlimit is not None:
+            # MEMLIMIT: the total amount of memory (in MiB) that the solver may use
+            memlimit                = 1024
+            expanded                = expand(expanded, "MEMLIMIT", memlimit)
+            environment["MEMLIMIT"] = memlimit
+
+            # SATRAM is a synonym for MEMLIMIT potentially used by pre-2009 solvers
+            environment["SATRAM"]   = environment["MEMLIMIT"]
+
+        # TMPDIR: the only directory where the solver is allowed to read/write
+        # temporary files
+        tmpdir                = getenv("TMPDIR", "/tmp")
+        expanded              = expand(expanded, "TMPDIR", tmpdir)
+        environment["TMPDIR"] = tmpdir
+
+        # DIR: the directory where the solver files will be stored
+        home                       = self.flags.competition_solvers_path
+        expanded                   = expand(expanded, "DIR", home)
+        expanded                   = expand(expanded, "HOME", home)
+        environment["SOLVERSHOME"] = home
+
+        # run the solver
+        log.debug("running %s", expanded)
+
+        (chunks, elapsed, exit_status) = run_cpu_limited(expanded, cutoff, environment)
+        supplementary                  = {
+            "output"   : "".join(c for (_, c) in chunks),
+            "exit_code": exit_status,
+            }
+
+        # analyze its output
+        for line in "".join(c for (t, c) in chunks if t <= cutoff).split("\n"):
+            if SAT_CompetitionSolver.__sat_line_re.match(line):
+                return (True, elapsed, supplementary)
+            elif SAT_CompetitionSolver.__unsat_line_re.match(line):
+                return (False, elapsed, supplementary)
+
+        return (None, elapsed, supplementary)
+
+    @property
+    def seeded(self):
+        """
+        Is the solver seeded?
+        """
+
+        return any("RANDOMSEED" in s for s in self.command)
+
+    @staticmethod
+    def by_name(
+        name,
+        flags = class_flags.given,
+        ):
+        """
+        Build a solver by name.
+        """
+
+        return SAT_CompetitionSolver(COMMANDS_BY_NAME[name], flags)
+
+class SATensteinSolver(SAT_CompetitionSolver):
     """
     Some configuration of the SATenstein highly-parameterized solver.
     """
