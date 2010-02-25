@@ -114,6 +114,8 @@ class TaskDescription(DatumBase):
     name       = Column(String)
     collection = Column(String)
 
+    task = relation(Task)
+
 class Solver(DatumBase):
     """
     Some solver for some domain.
@@ -132,17 +134,19 @@ class SAT_SolverRun(DatumBase):
 
     __tablename__ = "sat_solver_runs"
 
-    uuid        = Column(SQL_UUID, primary_key = True, default = uuid4)
-    task_uuid   = Column(SQL_UUID, ForeignKey("sat_tasks.uuid"), nullable = False)
-    solver_name = Column(String, ForeignKey("sat_solvers.name"), nullable = False)
-    outcome     = Column(Boolean)
-    started     = Column(UTC_DateTime)
-    elapsed     = Column(SQL_TimeDelta)
-    cutoff      = Column(SQL_TimeDelta)
-    fqdn        = Column(String)
-    seed        = Column(Integer)
-    exit_code   = Column(Integer)
-    output      = Column(UnicodeText)
+    uuid          = Column(SQL_UUID, primary_key = True, default = uuid4)
+    task_uuid     = Column(SQL_UUID, ForeignKey("sat_tasks.uuid"), nullable = False)
+    solver_name   = Column(String, ForeignKey("sat_solvers.name"), nullable = False)
+    started       = Column(UTC_DateTime)
+    usage_elapsed = Column(SQL_TimeDelta)
+    proc_elapsed  = Column(SQL_TimeDelta)
+    cutoff        = Column(SQL_TimeDelta)
+    fqdn          = Column(String)
+    seed          = Column(Integer)
+    stdout        = Column(UnicodeText)
+    stderr        = Column(UnicodeText)
+    exit_status   = Column(Integer)
+    satisfiable   = Column(Boolean)
 
     task          = relation(SAT_Task)
     solver        = relation(Solver)
