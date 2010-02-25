@@ -13,15 +13,16 @@ from os import (
     fsync,
     getenv,
     )
-from abc import abstractmethod
-from copy import copy
 from os.path import (
     join,
     splitext,
     basename,
     )
+from abc import abstractmethod
+from copy import copy
 from tempfile import NamedTemporaryFile
 from contextlib import closing
+from collections import namedtuple
 from cargo.io import openz
 from cargo.log import get_logger
 from cargo.unix.accounting import run_cpu_limited
@@ -34,6 +35,18 @@ from cargo.temporal import TimeDelta
 from utexas.sat.cnf import write_sanitized_cnf
 
 log = get_logger(__name__)
+
+SAT_SolverOutcome = \
+    namedtuple(
+        "SAT_SolverOutcome",
+        [
+            "satisfiable",
+            "stdout",
+            "stderr",
+            "usage_elapsed",
+            "proc_elapsed",
+            "exit_status",
+            ])
 
 class SAT_Solver(ABC):
     """
@@ -48,7 +61,6 @@ class SAT_Solver(ABC):
         """
 
         # FIXME shouldn't necessarily assume CNF input
-        # FIXME handle seed sanity ("does solver accept seed?" checking)
 
         with closing(openz(input_path)) as source:
             with NamedTemporaryFile(suffix = ".cnf") as temporary:
@@ -57,6 +69,8 @@ class SAT_Solver(ABC):
                 write_sanitized_cnf(temporary, source)
 
                 temporary.flush()
+
+                log.info("sanitized CNF written and flushed")
 
                 fsync(temporary.fileno())
 
@@ -123,25 +137,27 @@ class SAT_CompetitionSolver(SAT_Solver):
 
             return [s.replace(variable, str(value)) for s in strings]
 
-        # expand variables in an element of a solver command string
+        # expand variables in an element of a solver command string. note that
+        # the order of variable expansion matters: longer variables must be
+        # expanded first, to avoid expanding matching shorter substrings.
         expanded    = self.command
         environment = {}
 
-        # BENCHNAME: the name of the file (with both path and extension)
-        # containing the instance to solve
-        expanded = expand(expanded, "BENCHNAME", input_path)
-
-        # BENCHNAMENOEXT: name of the file with path but without extension),
-        (without, _) = splitext(input_path)
-        expanded     = expand(expanded, "BENCHNAMENOEXT", without)
+        # BENCHNAMENOPATHNOEXT: name of the file without path nor extension
+        base_without = basename(without)
+        expanded     = expand(expanded, "BENCHNAMENOPATHNOEXT", base_without)
 
         # BENCHNAMENOPATH: name of the file without path but with extension
         base     = basename(input_path)
         expanded = expand(expanded, "BENCHNAMENOPATH", base)
 
-        # BENCHNAMENOPATHNOEXT: name of the file without path nor extension
-        base_without = basename(without)
-        expanded     = expand(expanded, "BENCHNAMENOPATHNOEXT", base_without)
+        # BENCHNAMENOEXT: name of the file with path but without extension),
+        (without, _) = splitext(input_path)
+        expanded     = expand(expanded, "BENCHNAMENOEXT", without)
+
+        # BENCHNAME: the name of the file (with both path and extension)
+        # containing the instance to solve
+        expanded = expand(expanded, "BENCHNAME", input_path)
 
         # RANDOMSEED: a random seed which is a number between 0 and 4294967295
         if seed is not None:
@@ -185,20 +201,37 @@ class SAT_CompetitionSolver(SAT_Solver):
         # run the solver
         log.debug("running %s", expanded)
 
-        (chunks, elapsed, exit_status) = run_cpu_limited(expanded, cutoff, environment)
-        supplementary                  = {
-            "output"   : "".join(c for (_, c) in chunks),
-            "exit_code": exit_status,
-            }
+        (out_chunks, err_chunks, usage_elapsed, proc_elapsed, exit_status) = \
+            run_cpu_limited(
+                expanded,
+                cutoff,
+                pty         = False,
+                environment = environment,
+                )
 
         # analyze its output
-        for line in "".join(c for (t, c) in chunks if t <= cutoff).split("\n"):
-            if SAT_CompetitionSolver.__sat_line_re.match(line):
-                return (True, elapsed, supplementary)
-            elif SAT_CompetitionSolver.__unsat_line_re.match(line):
-                return (False, elapsed, supplementary)
+        satisfiable = None
 
-        return (None, elapsed, supplementary)
+        if exit_status is not None:
+            for line in "".join(c for (t, c) in out_chunks).split("\n"):
+                if SAT_CompetitionSolver.__sat_line_re.match(line):
+                    satisfiable = True
+
+                    break
+                elif SAT_CompetitionSolver.__unsat_line_re.match(line):
+                    satisfiable = False
+
+                    break
+
+        return \
+            SAT_SolverOutcome(
+                satisfiable,
+                "".join(c for (_, c) in out_chunks),
+                "".join(c for (_, c) in err_chunks),
+                usage_elapsed,
+                proc_elapsed,
+                exit_status,
+                )
 
     @property
     def seeded(self):
