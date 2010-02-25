@@ -143,21 +143,18 @@ class SAT_CompetitionSolver(SAT_Solver):
         expanded    = self.command
         environment = {}
 
+        # BENCHNAME: the name of the file (with both path and extension)
+        #            containing the instance to solve
+        # BENCHNAMENOEXT: name of the file with path but without extension),
+        # BENCHNAMENOPATH: name of the file without path but with extension
         # BENCHNAMENOPATHNOEXT: name of the file without path nor extension
+        (without, _) = splitext(input_path)
+        base         = basename(input_path)
         base_without = basename(without)
         expanded     = expand(expanded, "BENCHNAMENOPATHNOEXT", base_without)
-
-        # BENCHNAMENOPATH: name of the file without path but with extension
-        base     = basename(input_path)
-        expanded = expand(expanded, "BENCHNAMENOPATH", base)
-
-        # BENCHNAMENOEXT: name of the file with path but without extension),
-        (without, _) = splitext(input_path)
+        expanded     = expand(expanded, "BENCHNAMENOPATH", base)
         expanded     = expand(expanded, "BENCHNAMENOEXT", without)
-
-        # BENCHNAME: the name of the file (with both path and extension)
-        # containing the instance to solve
-        expanded = expand(expanded, "BENCHNAME", input_path)
+        expanded     = expand(expanded, "BENCHNAME", input_path)
 
         # RANDOMSEED: a random seed which is a number between 0 and 4294967295
         if seed is not None:
