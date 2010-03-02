@@ -41,11 +41,7 @@ SAT_SolverOutcome = \
         "SAT_SolverOutcome",
         [
             "satisfiable",
-            "stdout",
-            "stderr",
-            "usage_elapsed",
-            "proc_elapsed",
-            "exit_status",
+            "run",
             ])
 
 class SAT_Solver(ABC):
@@ -198,7 +194,7 @@ class SAT_CompetitionSolver(SAT_Solver):
         # run the solver
         log.debug("running %s", expanded)
 
-        (out_chunks, err_chunks, usage_elapsed, proc_elapsed, exit_status) = \
+        run = \
             run_cpu_limited(
                 expanded,
                 cutoff,
@@ -209,8 +205,8 @@ class SAT_CompetitionSolver(SAT_Solver):
         # analyze its output
         satisfiable = None
 
-        if exit_status is not None:
-            for line in "".join(c for (t, c) in out_chunks).split("\n"):
+        if run.exit_status is not None:
+            for line in "".join(c for (t, c) in run.out_chunks).split("\n"):
                 if SAT_CompetitionSolver.__sat_line_re.match(line):
                     satisfiable = True
 
@@ -220,15 +216,7 @@ class SAT_CompetitionSolver(SAT_Solver):
 
                     break
 
-        return \
-            SAT_SolverOutcome(
-                satisfiable,
-                "".join(c for (_, c) in out_chunks),
-                "".join(c for (_, c) in err_chunks),
-                usage_elapsed,
-                proc_elapsed,
-                exit_status,
-                )
+        return SAT_SolverOutcome(satisfiable, run)
 
     @property
     def seeded(self):

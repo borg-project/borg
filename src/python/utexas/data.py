@@ -146,10 +146,11 @@ class SAT_SolverRun(DatumBase):
     stdout        = Column(UnicodeText)
     stderr        = Column(UnicodeText)
     exit_status   = Column(Integer)
+    exit_signal   = Column(Integer)
     satisfiable   = Column(Boolean)
 
-    task          = relation(SAT_Task)
-    solver        = relation(Solver)
+    task   = relation(SAT_Task)
+    solver = relation(Solver)
 
     @staticmethod
     def starting_now(*args, **kwargs):
