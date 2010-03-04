@@ -84,7 +84,7 @@ class Task(DatumBase):
 
     __tablename__ = "tasks"
 
-    uuid = Column(SQL_UUID, primary_key = True, default = uuid4)
+    uuid = Column(SQL_UUID, primary_key = True)
     type = Column(String)
 
     __mapper_args__ = {"polymorphic_on": type}
@@ -97,7 +97,7 @@ class SAT_Task(Task):
     __tablename__   = "sat_tasks"
     __mapper_args__ = {"polymorphic_identity": "cnf_sat"}
 
-    uuid = Column(SQL_UUID, ForeignKey(Task.uuid), primary_key = True, default = uuid4)
+    uuid = Column(SQL_UUID, ForeignKey(Task.uuid), primary_key = True)
     hash = Column(Binary(length = 64))
 
     TASK_NAMESPACE = UUID("8e67a81a-717c-4206-8831-6007bc8f111f")
