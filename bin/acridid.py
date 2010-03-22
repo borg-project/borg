@@ -12,21 +12,15 @@ from subprocess import Popen
 
 def main():
     """
-    Exit a subprocess in an acridid environment.
+    Execute a subprocess in an acridid environment.
     """
 
     # collect the relevant paths
     our_path       = sys.path[0]
     git_root       = join(our_path, "..")
-    git_third_root = join(git_root, "dep/third")
-    git_cargo_root = join(git_root, "dep/cargo")
     python_paths   = (
-        join(git_third_root, "sqlalchemy/lib"),
-        join(git_third_root, "psycopg2/build/built"),
-        join(git_cargo_root, "kit/src/python"),
-        join(git_cargo_root, "ai-sat/src/python"),
-        join(git_cargo_root, "unix/src/python"),
         join(git_root, "src/python"),
+        join(git_root, "dep/cargo/kit"),
         )
 
     # build the environment variable

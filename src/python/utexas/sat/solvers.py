@@ -7,34 +7,89 @@ Run satisfiability solvers.
 """
 
 import re
-import numpy
+import json
 
-from os import (
+from os                    import (
     fsync,
     getenv,
-    )
-from os.path import (
+)
+from os.path               import (
     join,
+    dirname,
     splitext,
     basename,
+)
+from abc                   import abstractmethod
+from copy                  import copy
+from shutil                import rmtree
+from tempfile              import (
+    NamedTemporaryFile,
+    mkdtemp,
+)
+from itertools             import chain
+from contextlib            import closing
+from collections           import namedtuple
+from cargo.io              import (
+    openz,
+    expandpath,
     )
-from abc import abstractmethod
-from copy import copy
-from tempfile import NamedTemporaryFile
-from contextlib import closing
-from collections import namedtuple
-from cargo.io import openz
-from cargo.log import get_logger
+from cargo.log             import get_logger
+from cargo.json            import follows
 from cargo.unix.accounting import run_cpu_limited
-from cargo.sugar import ABC
-from cargo.flags import (
+from cargo.sugar           import ABC
+from cargo.flags           import (
     Flag,
     Flags,
-    )
-from cargo.temporal import TimeDelta
-from utexas.sat.cnf import write_sanitized_cnf
+)
+from cargo.temporal        import TimeDelta
+from utexas.sat.cnf        import write_sanitized_cnf
 
-log = get_logger(__name__)
+log          = get_logger(__name__)
+module_flags = \
+    Flags(
+        "SAT Solver Configuration",
+        Flag(
+            "--solvers-file",
+            default = [],
+            action  = "append",
+            metavar = "FILE",
+            help    = "read solver descriptions from FILE [%default]",
+            ),
+        )
+
+def get_named_solvers(paths = [], flags = {}):
+    """
+    Retrieve a list of named solvers.
+    """
+
+    flags = module_flags.merged(flags)
+
+    def yield_solvers_from(raw_path):
+        """
+        (Recursively) yield solvers from a solvers file.
+        """
+
+        path     = expandpath(raw_path)
+        relative = dirname(path)
+
+        with open(path) as file:
+            loaded = json.load(file)
+
+        for (name, attributes) in loaded.get("solvers", {}).items():
+            yield (
+                name,
+                SAT_CompetitionSolver(
+                    attributes["command"],
+                    solvers_home = relative,
+                    name         = name,
+                    ),
+                )
+
+        for included in loaded.get("includes", []):
+            for solver in yield_solvers_from(expandpath(included, relative)):
+                yield solver
+
+    return dict(chain(*(yield_solvers_from(p) for p in chain(paths, flags.solvers_file))))
 
 SAT_SolverOutcome = \
     namedtuple(
@@ -56,10 +111,8 @@ class SAT_Solver(ABC):
         @return (outcome, seconds_elapsed, seed)
         """
 
-        # FIXME shouldn't necessarily assume CNF input
-
         with closing(openz(input_path)) as source:
-            with NamedTemporaryFile(suffix = ".cnf") as temporary:
+            with NamedTemporaryFile(prefix = "task.", suffix = ".cnf") as temporary:
                 log.info("writing %s from %s", temporary.name, input_path)
 
                 write_sanitized_cnf(temporary, source)
@@ -88,22 +141,12 @@ class SAT_CompetitionSolver(SAT_Solver):
     __sat_line_re   = re.compile("s SATISFIABLE")
     __unsat_line_re = re.compile("s UNSATISFIABLE")
 
-    class_flags = \
-        Flags(
-            "SAT Competition Solvers Configuration",
-            Flag(
-                "--competition-solvers-path",
-                default = ".",
-                metavar = "PATH",
-                help    = "find SAT competition solvers under PATH [%default]",
-                ),
-            )
-
     def __init__(
         self,
         command,
-        memlimit = None,
-        flags    = class_flags.given,
+        memlimit     = None,
+        solvers_home = ".",
+        name         = None,
         ):
         """
         Initialize this solver.
@@ -115,9 +158,10 @@ class SAT_CompetitionSolver(SAT_Solver):
         SAT_Solver.__init__(self)
 
         # members
-        self.command  = copy(command)
-        self.memlimit = memlimit
-        self.flags    = self.class_flags.merged(flags)
+        self.command      = copy(command)
+        self.memlimit     = memlimit
+        self.solvers_home = solvers_home
+        self.name         = name
 
     def _solve(self, cutoff, input_path, seed = None):
         """
@@ -172,37 +216,42 @@ class SAT_CompetitionSolver(SAT_Solver):
         # only report memlimit if requested to do so
         if self.memlimit is not None:
             # MEMLIMIT: the total amount of memory (in MiB) that the solver may use
-            memlimit                = 1024
+            memlimit                = 2048
             expanded                = expand(expanded, "MEMLIMIT", memlimit)
             environment["MEMLIMIT"] = memlimit
 
             # SATRAM is a synonym for MEMLIMIT potentially used by pre-2009 solvers
             environment["SATRAM"]   = environment["MEMLIMIT"]
 
+        # DIR: the directory where the solver files will be stored
+        expanded                   = expand(expanded, "HERE", self.solvers_home)
+        environment["SOLVERSHOME"] = self.solvers_home
+
         # TMPDIR: the only directory where the solver is allowed to read/write
         # temporary files
-        tmpdir                = getenv("TMPDIR", "/tmp")
-        expanded              = expand(expanded, "TMPDIR", tmpdir)
-        environment["TMPDIR"] = tmpdir
+        tmpdir = None
 
-        # DIR: the directory where the solver files will be stored
-        home                       = self.flags.competition_solvers_path
-        expanded                   = expand(expanded, "DIR", home)
-        expanded                   = expand(expanded, "HOME", home)
-        environment["SOLVERSHOME"] = home
+        try:
+            tmpdir                = mkdtemp(prefix = "solver.")
+            expanded              = expand(expanded, "TMPDIR", tmpdir)
+            environment["TMPDIR"] = tmpdir
 
-        # run the solver
-        log.debug("running %s", expanded)
+            # run the solver
+            log.debug("running %s", expanded)
 
-        run = \
-            run_cpu_limited(
-                expanded,
-                cutoff,
-                pty         = False,
-                environment = environment,
-                )
+            run = \
+                run_cpu_limited(
+                    expanded,
+                    cutoff,
+                    pty         = True,
+                    environment = environment,
+                    )
+        finally:
+            # clean up its mess
+            if tmpdir is not None:
+                rmtree(tmpdir)
 
-        # analyze its output
+        # and analyze its output
         satisfiable = None
 
         if run.exit_status is not None:
@@ -225,17 +274,6 @@ class SAT_CompetitionSolver(SAT_Solver):
         """
 
         return any("RANDOMSEED" in s for s in self.command)
-
-    @staticmethod
-    def by_name(
-        name,
-        flags = class_flags.given,
-        ):
-        """
-        Build a solver by name.
-        """
-
-        return SAT_CompetitionSolver(COMMANDS_BY_NAME[name], flags)
 
 class SATensteinSolver(SAT_CompetitionSolver):
     """

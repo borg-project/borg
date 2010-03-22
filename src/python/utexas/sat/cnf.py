@@ -19,9 +19,8 @@ def write_sanitized_cnf(destination, source):
     Filter a CNF file to make picky solvers happy.
     """
 
-    for line in source:
-        destination.write(__condense_spaces_re.sub(" ", line.strip()))
-        destination.write("\n")
+    for line in yield_sanitized_cnf(source):
+        destination.write(line)
 
 def yield_sanitized_cnf(source):
     """
@@ -29,8 +28,13 @@ def yield_sanitized_cnf(source):
     """
 
     for line in source:
-        yield __condense_spaces_re.sub(" ", line.strip())
-        yield "\n"
+        stripped = line.strip()
+
+        if stripped == "%":
+            break
+        else:
+            yield __condense_spaces_re.sub(" ", stripped)
+            yield "\n"
 
 class DIMACS_ParseError(RuntimeError):
     """

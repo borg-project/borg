@@ -29,12 +29,12 @@ from itertools import (
 from sqlalchemy import (
     Float,
     Column,
-    Binary,
     String,
     Integer,
     Boolean,
     ForeignKey,
     UnicodeText,
+    LargeBinary,
     )
 from sqlalchemy.orm import (
     relation,
@@ -98,7 +98,7 @@ class SAT_Task(Task):
     __mapper_args__ = {"polymorphic_identity": "cnf_sat"}
 
     uuid = Column(SQL_UUID, ForeignKey(Task.uuid), primary_key = True)
-    hash = Column(Binary(length = 64))
+    hash = Column(LargeBinary(length = 64))
 
     TASK_NAMESPACE = UUID("8e67a81a-717c-4206-8831-6007bc8f111f")
 
