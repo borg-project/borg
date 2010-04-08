@@ -1,5 +1,5 @@
 """
-utexas/papers/nips2009/strategies.py
+utexas/portfolio/strategies.py
 
 General selection strategies.
 
@@ -86,6 +86,28 @@ class ModelingSelectionStrategy(SelectionStrategy):
 
         # predict, then make a selection
         predicted = self.model.predict(task, self.history)
+
+        # FIXME don't do this debugging work always
+#         from collections import defaultdict
+#         from utexas.portfolio.sat_world import SAT_Outcome
+#         map = defaultdict(list)
+
+#         for (n, p) in enumerate(predicted):
+#             a = self.world.actions[n]
+
+#             map[a.solver.name].append((a.cutoff, p[SAT_Outcome.SOLVED.n]))
+
+#         rows = []
+
+#         for (s, m) in map.items():
+#             rows.append((s, [p for (c, p) in sorted(m, key = lambda (c, p): c)]))
+
+#         rows  = sorted(rows, key = lambda (s, r): s)
+#         lines = "\n".join("% 32s: %s" % (s, " ".join("%.2f" % p for p in r)) for (s, r) in rows)
+
+#         log.debug("predicted probabilities of success:\n%s", lines)
+
+        # ...
         action    = self.planner.select(predicted, actions)
         outcome   = yield action
 

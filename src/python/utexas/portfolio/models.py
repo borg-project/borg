@@ -1,5 +1,5 @@
 """
-utexas/papers/nips2009/models.py
+utexas/portfolio/models.py
 
 Various models of task/action outcomes.
 
@@ -63,13 +63,29 @@ class MultinomialMixtureActionModel(ActionModel):
         """
 
         # members
-        self.__world = world
+        self.__world     = world
         self.__training  = world.counts_from_events(training)
         self.__estimator = estimator
 
         # model
         counts         = get_positive_counts(self.__training)
         training_split = [counts[:, naction, :] for naction in xrange(world.nactions)]
+
+        # FIXME drop debugging code
+        from utexas.portfolio.sat_world import SAT_Outcome
+        rows = []
+        for (n, s) in enumerate(training_split):
+            action = world.actions[n]
+
+            rows.append(
+                "% 32s: %s" % (
+                    action.solver.name,
+                    " ".join("% 2s" % c for c in s[:, SAT_Outcome.SOLVED.n]),
+                    )
+                )
+
+        log.debug("training counts:\n%s", "\n".join(rows))
+
         self.__mixture = estimator.estimate(training_split)
 
         # store mixture components in a matrix
@@ -101,12 +117,18 @@ class MultinomialMixtureActionModel(ActionModel):
         if out is None:
             out = numpy.empty((M, D))
 
+        pi = numpy.copy(self.__mixture.pi)
+
+#         log.debug("pre pi: %s", pi)
+
         multinomial_model_predict(
-            numpy.copy(self.__mixture.pi),
+            pi,
             self.mix_MKD,
             counts_MD,
             out,
             )
+
+#         log.debug("post pi: %s", pi)
 
         return out
 
@@ -198,47 +220,18 @@ class OracleActionModel(ActionModel):
 
         # members
         self.world = world
-        self.__last_prediction = (None, None)
-
-    def predict_action(self, task, action):
-        """
-        Return the predicted probability of C{action} on C{task}.
-        """
-
-        counts = numpy.zeros(self.world.noutcomes, dtype = numpy.uint)
-
-        for outcome in self.world.samples.get_outcomes(task, action):
-            counts[outcome.n] += 1
-
-        return counts / numpy.sum(counts, dtype = numpy.float)
 
     def predict(self, task, history, out = None):
         """
         Return the predicted probability of each outcome given history.
         """
 
-        (last_n, last_prediction) = self.__last_prediction
-
-        if last_n == task.n:
-            # we already did this
-            return last_prediction
+        if out is None:
+            return self.world.matrix[task.n, :, :] 
         else:
-            # calculate the expected utility of each action
-            prediction = numpy.empty((self.world.nactions, self.world.noutcomes))
+            out[:] = self.world.matrix[task.n, :, :]
 
-            for action in self.world.actions:
-                prediction[action.n] = self.predict_action(task, action)
-
-            # cache
-            self.__last_prediction = (task.n, prediction)
-
-            # done
-            if out is None:
-                return prediction
-            else:
-                out[:] = prediction
-
-                return out
+            return out
 
 class RandomActionModel(ActionModel):
     """
@@ -264,38 +257,6 @@ class RandomActionModel(ActionModel):
             out[:] = numpy.random.random((self.world.nactions, self.world.noutcomes))
 
         out /= numpy.sum(out, 1)[:, numpy.newaxis]
-
-        return out
-
-class RankingActionModel(ActionModel):
-    """
-    Rank actions according to true utility.
-    """
-
-    def __init__(self, world, submodel):
-        """
-        Initialize.
-        """
-
-        # members
-        self.world = world
-        self.submodel = submodel
-
-    def predict(self, task, history, out = None):
-        """
-        Return the predicted probability of each outcome given history.
-        """
-
-        # FIXME use a task_history parameter instead
-        # get the task-specific history
-        task_history = history.counts[task.n]
-
-#        numpy.uniq?
-
-        if out is None:
-            out = FIXME
-        else:
-            out[:] = FIXME
 
         return out
 

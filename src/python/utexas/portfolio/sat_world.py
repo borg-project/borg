@@ -8,13 +8,13 @@ The world of SAT.
 
 import numpy
 
-from itertools import izip
-from contextlib import closing
-from collections import (
+from itertools                import izip
+from contextlib               import closing
+from collections              import (
     Sequence,
     defaultdict,
     )
-from sqlalchemy import (
+from sqlalchemy               import (
     and_,
     case,
     select,
@@ -23,17 +23,17 @@ from sqlalchemy.sql.functions import (
     count,
     random as sql_random,
     )
-from cargo.log import get_logger
-from cargo.flags import (
+from cargo.log                import get_logger
+from cargo.flags              import (
     Flag,
     FlagSet,
     IntRanges,
     )
-from utexas.data import (
+from utexas.data              import (
     SAT_SolverRun,
-    AcrididSession,
+    ResearchSession,
     )
-from utexas.portfolio.world import (
+from utexas.portfolio.world   import (
     Task,
     World,
     Action,
@@ -47,14 +47,13 @@ class SAT_WorldAction(Action):
     An action in the world.
     """
 
-    def __init__(self, n, solver, configuration, cutoff):
+    def __init__(self, n, solver, cutoff):
         """
         Initialize.
         """
 
         self.n = n
         self.solver        = solver
-        self.configuration = configuration
         self.cutoff        = cutoff
 
     def __str__(self):
@@ -140,7 +139,7 @@ class SAT_World(World):
     Components of the SAT world.
     """
 
-    def __init__(self, actions, tasks, matrix = None):
+    def __init__(self, actions, tasks):
         """
         Initialize.
         """
@@ -149,11 +148,7 @@ class SAT_World(World):
         self.tasks     = tasks
         self.outcomes  = SAT_Outcome.BY_INDEX
         self.utilities = numpy.array([o.utility for o in self.outcomes])
-
-        if matrix is None:
-            matrix = self.__get_outcome_matrix()
-
-        self.matrix = matrix
+        self.matrix    = self.__get_outcome_matrix()
 
     def __get_outcome_matrix(self):
         """
@@ -163,13 +158,11 @@ class SAT_World(World):
         log.info("building task-action-outcome matrix")
 
         # hit the database
-        session = AcrididSession()
-
-        with closing(session):
-            counts = numpy.zeros((self.ntasks, self.nactions, self.noutcomes))
+        with closing(ResearchSession()) as session:
+            counts  = numpy.zeros((self.ntasks, self.nactions, self.noutcomes))
 
             for action in self.actions:
-                run_case  = case([(SAT_SolverRun.elapsed <= action.cutoff, SAT_SolverRun.outcome)])
+                run_case  = case([(SAT_SolverRun.proc_elapsed <= action.cutoff, SAT_SolverRun.satisfiable)])
                 statement =                                                           \
                     select(
                         [
@@ -180,7 +173,6 @@ class SAT_World(World):
                         and_(
                             SAT_SolverRun.task_uuid.in_([t.task.uuid for t in self.tasks]),
                             SAT_SolverRun.solver        == action.solver,
-                            SAT_SolverRun.configuration == action.configuration,
                             SAT_SolverRun.cutoff        >= action.cutoff,
                             ),
                         )                                                             \
@@ -189,6 +181,7 @@ class SAT_World(World):
 
                 # build the matrix
                 world_tasks = dict((t.task.uuid, t) for t in self.tasks)
+                total_count = 0
 
                 for (task_uuid, result, nrows) in executed:
                     # map storage instances to world instances
@@ -196,7 +189,11 @@ class SAT_World(World):
                     world_outcome = SAT_Outcome.BY_VALUE[result]
 
                     # record the outcome count
-                    counts[world_task.n, action.n, world_outcome.n] = nrows
+                    counts[world_task.n, action.n, world_outcome.n] += nrows
+                    total_count                                     += nrows
+
+                if total_count == 0:
+                    log.warning("no rows found for action %s", action, t.task.uuid)
 
             norms = numpy.sum(counts, 2, dtype = numpy.float)
 
@@ -213,4 +210,12 @@ class SAT_World(World):
         outcomes  = sum(([self.outcomes[i]] * n for (i, n) in enumerate(nnoutcome)), [])
 
         return outcomes
+
+    def act_once_extra(self, task, action):
+        """
+        Act, and provide a "true" value for time spent.
+        """
+
+        # FIXME we want to provide the true action
+        return (self.act_once(task, action), action.cutoff)
 

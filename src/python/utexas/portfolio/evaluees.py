@@ -1,5 +1,5 @@
 """
-utexas/papers/nips2009/evaluees.py
+utexas/portfolio/evaluees.py
 
 Evaluate selection strategies.
 
