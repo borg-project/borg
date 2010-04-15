@@ -18,7 +18,9 @@ from sqlalchemy               import (
     and_,
     case,
     select,
+    create_engine,
     )
+from sqlalchemy.orm           import sessionmaker
 from sqlalchemy.sql.functions import (
     count,
     random as sql_random,
@@ -26,10 +28,11 @@ from sqlalchemy.sql.functions import (
 from cargo.log                import get_logger
 from cargo.flags              import (
     Flag,
-    FlagSet,
-    IntRanges,
+    Flags,
     )
+from cargo.iterators          import grab
 from utexas.data              import (
+    DatumBase,
     SAT_SolverRun,
     ResearchSession,
     )
@@ -40,7 +43,17 @@ from utexas.portfolio.world   import (
     Outcome,
     )
 
-log = get_logger(__name__)
+log          = get_logger(__name__)
+module_flags = \
+    Flags(
+        "SAT Data Storage",
+        Flag(
+            "--sat-world-cache",
+            default = "sqlite:///:memory:",
+            metavar = "DATABASE",
+            help    = "use research DATABASE by default [%default]",
+            ),
+        )
 
 class SAT_WorldAction(Action):
     """
@@ -83,7 +96,7 @@ class SAT_WorldTask(Task):
         Return a human-readable description of this task.
         """
 
-        return "%s" % (self.task.path,)
+        return "%s" % (self.task.uuid,)
 
 class SAT_Outcome(Outcome):
     """
@@ -139,65 +152,22 @@ class SAT_World(World):
     Components of the SAT world.
     """
 
-    def __init__(self, actions, tasks):
+    def __init__(self, actions, tasks, flags = module_flags.given):
         """
         Initialize.
         """
 
+        these_flags = module_flags.merged(flags)
+
+        # world properties
         self.actions   = actions
         self.tasks     = tasks
         self.outcomes  = SAT_Outcome.BY_INDEX
         self.utilities = numpy.array([o.utility for o in self.outcomes])
-        self.matrix    = self.__get_outcome_matrix()
 
-    def __get_outcome_matrix(self):
-        """
-        Build a matrix of outcome probabilities.
-        """
-
-        log.info("building task-action-outcome matrix")
-
-        # hit the database
-        with closing(ResearchSession()) as session:
-            counts  = numpy.zeros((self.ntasks, self.nactions, self.noutcomes))
-
-            for action in self.actions:
-                run_case  = case([(SAT_SolverRun.proc_elapsed <= action.cutoff, SAT_SolverRun.satisfiable)])
-                statement =                                                           \
-                    select(
-                        [
-                            SAT_SolverRun.task_uuid,
-                            run_case.label("result"),
-                            count(),
-                            ],
-                        and_(
-                            SAT_SolverRun.task_uuid.in_([t.task.uuid for t in self.tasks]),
-                            SAT_SolverRun.solver        == action.solver,
-                            SAT_SolverRun.cutoff        >= action.cutoff,
-                            ),
-                        )                                                             \
-                        .group_by(SAT_SolverRun.task_uuid, "result")
-                executed  = session.connection().execute(statement)
-
-                # build the matrix
-                world_tasks = dict((t.task.uuid, t) for t in self.tasks)
-                total_count = 0
-
-                for (task_uuid, result, nrows) in executed:
-                    # map storage instances to world instances
-                    world_task    = world_tasks[task_uuid]
-                    world_outcome = SAT_Outcome.BY_VALUE[result]
-
-                    # record the outcome count
-                    counts[world_task.n, action.n, world_outcome.n] += nrows
-                    total_count                                     += nrows
-
-                if total_count == 0:
-                    log.warning("no rows found for action %s", action, t.task.uuid)
-
-            norms = numpy.sum(counts, 2, dtype = numpy.float)
-
-            return counts / norms[:, :, numpy.newaxis]
+        # establish a local sqlite cache
+        # FIXME engine disposal?
+        self.LocalResearchSession = sessionmaker(bind = create_engine(these_flags.sat_world_cache))
 
     def act(self, task, action, nrestarts = 1, random = numpy.random):
         """
@@ -206,16 +176,81 @@ class SAT_World(World):
 
         log.debug("taking %i action(s) %s on task %s", nrestarts, action, task)
 
-        nnoutcome = random.multinomial(nrestarts, self.matrix[task.n, action.n, :])
-        outcomes  = sum(([self.outcomes[i]] * n for (i, n) in enumerate(nnoutcome)), [])
+        return [o for (o, _) in self.act_extra(task, action, nrestarts, random)]
 
-        return outcomes
+    def act_extra(self, task, action, nrestarts = 1, random = numpy.random):
+        """
+        Act, and provide a "true" value for time spent.
+        """
+
+        sat_case  = [(SAT_SolverRun.proc_elapsed <= action.cutoff, SAT_SolverRun.satisfiable)]
+        statement = \
+            select(
+                [
+                    case(sat_case),
+                    SAT_SolverRun.proc_elapsed,
+                    ],
+                and_(
+                    SAT_SolverRun.task_uuid   == task.task.uuid,
+                    SAT_SolverRun.solver_name == action.solver.name,
+                    SAT_SolverRun.cutoff      >= action.cutoff,
+                    ),
+                )
+
+        with closing(self.LocalResearchSession()) as lsession:
+            rows  = lsession.connection().execute(statement)
+            pairs = [(SAT_Outcome.BY_VALUE[s], min(e, action.cutoff)) for (s, e) in rows]
+
+            return [grab(pairs, random) for i in xrange(nrestarts)]
 
     def act_once_extra(self, task, action):
         """
         Act, and provide a "true" value for time spent.
         """
 
-        # FIXME we want to provide the true action
-        return (self.act_once(task, action), action.cutoff)
+        sat_case  = [(SAT_SolverRun.proc_elapsed <= action.cutoff, SAT_SolverRun.satisfiable)]
+        statement = \
+            select(
+                [
+                    case(sat_case),
+                    SAT_SolverRun.proc_elapsed,
+                    ],
+                and_(
+                    SAT_SolverRun.task_uuid   == task.task.uuid,
+                    SAT_SolverRun.solver_name == action.solver.name,
+                    SAT_SolverRun.cutoff      >= action.cutoff,
+                    ),
+                order_by = sql_random(),
+                limit    = 1,
+                )
+
+        with closing(self.LocalResearchSession()) as lsession:
+            ((sat, elapsed),) = lsession.connection().execute(statement)
+
+            return (SAT_Outcome.BY_VALUE[sat], min(elapsed, action.cutoff))
+
+    def get_true_probabilities(self, task, action):
+        """
+        Get the true outcome probabilities for an action.
+        """
+
+        sat_case  = [(SAT_SolverRun.proc_elapsed <= action.cutoff, SAT_SolverRun.satisfiable)]
+        statement = \
+            select(
+                [case(sat_case)],
+                and_(
+                    SAT_SolverRun.task_uuid   == task.task.uuid,
+                    SAT_SolverRun.solver_name == action.solver.name,
+                    SAT_SolverRun.cutoff      >= action.cutoff,
+                    ),
+                )
+
+        with closing(self.LocalResearchSession()) as lsession:
+            rows   = lsession.connection().execute(statement)
+            counts = numpy.zeros(len(self.outcomes))
+
+            for (sat,) in rows:
+                counts[SAT_Outcome.BY_VALUE[sat].n] += 1
+
+        return counts / numpy.sum(counts)
 

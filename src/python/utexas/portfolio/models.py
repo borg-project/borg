@@ -221,17 +221,29 @@ class OracleActionModel(ActionModel):
         # members
         self.world = world
 
+        # FIXME hack
+        self.last_task_n = None
+
     def predict(self, task, history, out = None):
         """
         Return the predicted probability of each outcome given history.
         """
 
-        if out is None:
-            return self.world.matrix[task.n, :, :] 
+        # FIXME obviously a hack
+        if self.last_task_n == task.n:
+            ps = self.last_ps
         else:
-            out[:] = self.world.matrix[task.n, :, :]
+            # FIXME obviously inefficient
+            ps               = numpy.array([self.world.get_true_probabilities(task, a) for a in self.world.actions])
+            self.last_ps     = ps
+            self.last_task_n = task.n
 
-            return out
+        if out is None:
+            return ps
+        else:
+            out[:] = ps
+
+        return out
 
 class RandomActionModel(ActionModel):
     """

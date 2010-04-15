@@ -14,19 +14,19 @@ if __name__ == "__main__":
 import os.path
 import logging
 
-from uuid import (
+from uuid                       import (
     UUID,
     uuid4,
     uuid5,
     )
-from socket import getfqdn
-from datetime import timedelta
-from itertools import (
+from socket                     import getfqdn
+from datetime                   import timedelta
+from itertools                  import (
     izip,
     chain,
     product,
     )
-from sqlalchemy import (
+from sqlalchemy                 import (
     Float,
     Column,
     String,
@@ -36,19 +36,19 @@ from sqlalchemy import (
     UnicodeText,
     LargeBinary,
     )
-from sqlalchemy.orm import (
+from sqlalchemy.orm             import (
     relation,
     sessionmaker,
     )
-from sqlalchemy.orm.exc import NoResultFound
-from cargo.io import (
+from sqlalchemy.orm.exc         import NoResultFound
+from cargo.io                   import (
     openz,
     files_under,
     hash_yielded_bytes,
     )
 from sqlalchemy.ext.declarative import declarative_base
-from cargo.log import get_logger
-from cargo.sql.alchemy import (
+from cargo.log                  import get_logger
+from cargo.sql.alchemy          import (
     SQL_UUID,
     SQL_JSON,
     SQL_List,
@@ -56,12 +56,12 @@ from cargo.sql.alchemy import (
     UTC_DateTime,
     SQL_TimeDelta,
     )
-from cargo.flags import (
+from cargo.flags                import (
     Flag,
     Flags,
     with_flags_parsed,
     )
-from cargo.temporal import utc_now
+from cargo.temporal             import utc_now
 
 log             = get_logger(__name__)
 DatumBase       = declarative_base()

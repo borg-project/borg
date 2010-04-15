@@ -91,6 +91,7 @@ class PortfolioTest(object):
         best_utility = 0.0
         remaining    = self.task_time
         ntaken       = 0
+        total_spent  = TimeDelta()
 
         # FIXME remove the arbitrary action limit
         while remaining > TimeDelta() and ntaken < 50:
@@ -100,7 +101,8 @@ class PortfolioTest(object):
             if spent is None:
                 break
 
-            ntaken += 1
+            ntaken      += 1
+            total_spent += spent
 
             # deal with that action's outcome
             remaining -= spent
@@ -109,13 +111,13 @@ class PortfolioTest(object):
                 best_utility = outcome.utility
             if outcome.utility >= self.success:
                 self.score.nsolved += 1
-                self.score.spent   += spent
+                self.score.spent   += total_spent
 
                 break
 
         self.score.total_max_utility += best_utility
 
-        log.detail("%s had max utility %.2f with %s remaining", strategy, best_utility, remaining)
+        log.info("strategy had max utility %.2f with %s remaining", best_utility, remaining)
 
     def evaluate_once_on(self, strategy, task, remaining):
         """
@@ -139,7 +141,7 @@ class PortfolioTest(object):
         # take that action
         (outcome, spent) = self.world.act_once_extra(task, action)
 
-        log.detail("%s: [%i] %s -> %s", remaining, task.n, action, outcome)
+        log.detail("%s: [%i] %s -> %s (%s)", remaining, task.n, action, outcome, spent)
 
         try:
             action_generator.send(outcome)
