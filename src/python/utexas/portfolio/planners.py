@@ -40,13 +40,33 @@ class HardMyopicActionPlanner(ActionPlanner):
         Initialize.
         """
 
-        self.world = world
+        self.world    = world
         self.discount = discount
 
     def select(self, predicted, actions):
         """
         Select an action given the probabilities of outcomes.
         """
+
+        # FIXME don't do this debugging work always
+#         from collections import defaultdict
+#         from utexas.portfolio.sat_world import SAT_Outcome
+#         map = defaultdict(list)
+
+#         for (n, p) in enumerate(predicted):
+#             a = self.world.actions[n]
+
+#             map[a.solver.name].append((a.cutoff, p[SAT_Outcome.SOLVED.n]))
+
+#         rows = []
+
+#         for (s, m) in map.items():
+#             rows.append((s, [p for (c, p) in sorted(m, key = lambda (c, p): c)]))
+
+#         rows  = sorted(rows, key = lambda (s, r): s)
+#         lines = "\n".join("% 32s: %s" % (s, " ".join("%.2f" % p for p in r)) for (s, r) in rows)
+
+#         log.detail("predicted probabilities of success:\n%s", lines)
 
         # convert to expectation
         expected   = numpy.sum(predicted * self.world.utilities, 1)
@@ -62,13 +82,14 @@ class SoftMyopicActionPlanner(ActionPlanner):
     Probabilistic greedy action selection.
     """
 
-    def __init__(self, world, discount):
+    def __init__(self, world, discount, temperature = 1.0):
         """
         Initialize.
         """
 
-        self.world = world
-        self.discount = discount
+        self.world       = world
+        self.discount    = discount
+        self.temperature = temperature
 
     def select(self, predicted, actions):
         """
@@ -76,10 +97,15 @@ class SoftMyopicActionPlanner(ActionPlanner):
         """
 
         # convert to expectation
-        expected = numpy.sum(predicted * self.world.utilities, 1)
-        probabilities = numpy.fromiter((expected[a.n]*(self.discount**a.cutoff.as_s) for a in actions), numpy.double)
+        expected       = numpy.sum(predicted * self.world.utilities, 1)
+        discounted     = numpy.fromiter((expected[a.n]*(self.discount**a.cutoff.as_s) for a in actions), numpy.double)
+        probabilities  = numpy.exp(discounted / self.temperature)
         probabilities /= numpy.sum(probabilities)
-        ((naction,),) = numpy.nonzero(numpy.random.multinomial(1, probabilities))
+        ((naction,),)  = numpy.nonzero(numpy.random.multinomial(1, probabilities))
+        action         = actions[naction]
 
-        return actions[naction]
+        log.detail("probabilities: %s", probabilities)
+        log.detail("selected action %i (p = %.4f): %s", naction, probabilities[naction], action)
+
+        return action
 

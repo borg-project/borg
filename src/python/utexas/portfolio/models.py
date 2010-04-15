@@ -65,12 +65,18 @@ class MultinomialMixtureActionModel(ActionModel):
         if out is None:
             out = [numpy.empty(len(a.outcomes)) for a in FIXME]
 
+        pi = numpy.copy(self.__mixture.pi)
+
+#         log.debug("pre pi: %s", pi)
+
         multinomial_model_predict(
             numpy.copy(self.__mixture.pi),
             self.mix_KD_per,
             history,
             out,
             )
+
+#         log.debug("post pi: %s", pi)
 
         return out
 
@@ -162,47 +168,30 @@ class OracleActionModel(ActionModel):
 
         # members
         self.world = world
-        self.__last_prediction = (None, None)
 
-    def predict_action(self, task, action):
-        """
-        Return the predicted probability of C{action} on C{task}.
-        """
-
-        counts = numpy.zeros(self.world.noutcomes, dtype = numpy.uint)
-
-        for outcome in self.world.samples.get_outcomes(task, action):
-            counts[outcome.n] += 1
-
-        return counts / numpy.sum(counts, dtype = numpy.float)
+        # FIXME hack
+        self.last_task_n = None
 
     def predict(self, task, history, out = None):
         """
         Return the predicted probability of each outcome given history.
         """
 
-        (last_n, last_prediction) = self.__last_prediction
-
-        if last_n == task.n:
-            # we already did this
-            return last_prediction
+        # FIXME obviously a hack
+        if self.last_task_n == task.n:
+            ps = self.last_ps
         else:
-            # calculate the expected utility of each action
-            prediction = numpy.empty((self.world.nactions, self.world.noutcomes))
+            # FIXME obviously inefficient
+            ps               = numpy.array([self.world.get_true_probabilities(task, a) for a in self.world.actions])
+            self.last_ps     = ps
+            self.last_task_n = task.n
 
-            for action in self.world.actions:
-                prediction[action.n] = self.predict_action(task, action)
+        if out is None:
+            return ps
+        else:
+            out[:] = ps
 
-            # cache
-            self.__last_prediction = (task.n, prediction)
-
-            # done
-            if out is None:
-                return prediction
-            else:
-                out[:] = prediction
-
-                return out
+        return out
 
 class RandomActionModel(ActionModel):
     """
