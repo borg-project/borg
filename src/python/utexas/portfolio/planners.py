@@ -1,5 +1,5 @@
 """
-utexas/papers/nips2009/planners.py
+utexas/portfolio/planners.py
 
 Model-based action planning.
 

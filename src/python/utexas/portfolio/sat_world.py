@@ -8,30 +8,22 @@ The world of SAT.
 
 import numpy
 
-from itertools import izip
-from contextlib import closing
-from collections import (
+from itertools              import izip
+from contextlib             import closing
+from collections            import (
     Sequence,
     defaultdict,
     )
-from sqlalchemy import (
+from sqlalchemy             import (
     and_,
     case,
     select,
     )
-from sqlalchemy.sql.functions import (
-    count,
-    random as sql_random,
-    )
-from cargo.log import get_logger
-from cargo.flags import (
-    Flag,
-    FlagSet,
-    IntRanges,
-    )
-from utexas.data import (
-    SAT_SolverRun,
-    AcrididSession,
+from cargo.log              import get_logger
+from utexas.sat.solvers     import get_random_seed
+from utexas.data            import (
+    ResearchSession,
+    SAT_SolverRunRecord,
     )
 from utexas.portfolio.world import (
     Task,
@@ -42,20 +34,52 @@ from utexas.portfolio.world import (
 
 log = get_logger(__name__)
 
+class SAT_WorldTask(Task):
+    """
+    A task in the world.
+    """
+
+    def __init__(self, path, name = None):
+        """
+        Initialize.
+
+        @param task: SAT task description.
+        """
+
+        self.path = path
+        self.name = name
+
+    def __str__(self):
+        """
+        Return a human-readable description of this task.
+        """
+
+        if self.name is None:
+            return self.path
+        else:
+            return self.name
+
+    def __json__(self):
+        """
+        Make JSONable.
+        """
+
+        return (self.path, self.name)
+
 class SAT_WorldAction(Action):
     """
     An action in the world.
     """
 
-    def __init__(self, n, solver, configuration, cutoff):
+    def __init__(self, solver, cutoff):
         """
         Initialize.
         """
 
-        self.n = n
-        self.solver        = solver
-        self.configuration = configuration
-        self.cutoff        = cutoff
+        self.solver   = solver
+        self.cutoff   = cutoff
+        self.cost     = cutoff
+        self.outcomes = SAT_WorldOutcome.BY_INDEX
 
     def __str__(self):
         """
@@ -64,29 +88,29 @@ class SAT_WorldAction(Action):
 
         return "%s_%ims" % (self.solver.name, int(self.cutoff.as_s * 1000))
 
-class SAT_WorldTask(Task):
-    """
-    A task in the world.
-    """
-
-    def __init__(self, n, task):
+    def __json__(self):
         """
-        Initialize.
-
-        @param task: SAT task description.
+        Make JSONable.
         """
 
-        self.n = n
-        self.task = task
+        return (self.solver.name, self.cutoff.as_s)
 
-    def __str__(self):
+    def take(self, task, random = numpy.random):
         """
-        Return a human-readable description of this task.
+        Take the action.
         """
 
-        return "%s" % (self.task.path,)
+        if self.solver.seeded:
+            seed = get_random_seed(random)
+        else:
+            seed = None
 
-class SAT_Outcome(Outcome):
+        result  = self.solver.solve(task.path, self.cutoff, seed = None)
+        outcome = SAT_WorldOutcome.from_result(result)
+
+        return (outcome, result)
+
+class SAT_WorldOutcome(Outcome):
     """
     An outcome of an action in the world.
     """
@@ -106,13 +130,20 @@ class SAT_Outcome(Outcome):
 
         return str(self.utility)
 
-    @staticmethod
-    def from_run(run):
+    def __json__(self):
         """
-        Return an outcome from a solver run.
+        Make JSONable.
         """
 
-        return SAT_Outcome.from_bool(run.outcome)
+        return self.n
+
+    @staticmethod
+    def from_result(result):
+        """
+        Return an outcome from a solver result.
+        """
+
+        return SAT_WorldOutcome.from_bool(result.satisfiable)
 
     @staticmethod
     def from_bool(bool):
@@ -120,97 +151,18 @@ class SAT_Outcome(Outcome):
         Return an outcome from True, False, or None.
         """
 
-        return SAT_Outcome.BY_VALUE[bool]
+        return SAT_WorldOutcome.BY_VALUE[bool]
 
 # outcome constants
-SAT_Outcome.SOLVED   = SAT_Outcome(0, 1.0)
-SAT_Outcome.UNKNOWN  = SAT_Outcome(1, 0.0)
-SAT_Outcome.BY_VALUE = {
-    True:  SAT_Outcome.SOLVED,
-    False: SAT_Outcome.SOLVED,
-    None:  SAT_Outcome.UNKNOWN,
+SAT_WorldOutcome.SOLVED   = SAT_WorldOutcome(0, 1.0)
+SAT_WorldOutcome.UNSOLVED = SAT_WorldOutcome(1, 0.0)
+SAT_WorldOutcome.BY_VALUE = {
+    True:  SAT_WorldOutcome.SOLVED,
+    False: SAT_WorldOutcome.SOLVED,
+    None:  SAT_WorldOutcome.UNSOLVED,
     }
-SAT_Outcome.BY_INDEX = (
-    SAT_Outcome.SOLVED,
-    SAT_Outcome.UNKNOWN,
-    )
-
-class SAT_World(World):
-    """
-    Components of the SAT world.
-    """
-
-    def __init__(self, actions, tasks, matrix = None):
-        """
-        Initialize.
-        """
-
-        self.actions   = actions
-        self.tasks     = tasks
-        self.outcomes  = SAT_Outcome.BY_INDEX
-        self.utilities = numpy.array([o.utility for o in self.outcomes])
-
-        if matrix is None:
-            matrix = self.__get_outcome_matrix()
-
-        self.matrix = matrix
-
-    def __get_outcome_matrix(self):
-        """
-        Build a matrix of outcome probabilities.
-        """
-
-        log.info("building task-action-outcome matrix")
-
-        # hit the database
-        session = AcrididSession()
-
-        with closing(session):
-            counts = numpy.zeros((self.ntasks, self.nactions, self.noutcomes))
-
-            for action in self.actions:
-                run_case  = case([(SAT_SolverRun.elapsed <= action.cutoff, SAT_SolverRun.outcome)])
-                statement =                                                           \
-                    select(
-                        [
-                            SAT_SolverRun.task_uuid,
-                            run_case.label("result"),
-                            count(),
-                            ],
-                        and_(
-                            SAT_SolverRun.task_uuid.in_([t.task.uuid for t in self.tasks]),
-                            SAT_SolverRun.solver        == action.solver,
-                            SAT_SolverRun.configuration == action.configuration,
-                            SAT_SolverRun.cutoff        >= action.cutoff,
-                            ),
-                        )                                                             \
-                        .group_by(SAT_SolverRun.task_uuid, "result")
-                executed  = session.connection().execute(statement)
-
-                # build the matrix
-                world_tasks = dict((t.task.uuid, t) for t in self.tasks)
-
-                for (task_uuid, result, nrows) in executed:
-                    # map storage instances to world instances
-                    world_task    = world_tasks[task_uuid]
-                    world_outcome = SAT_Outcome.BY_VALUE[result]
-
-                    # record the outcome count
-                    counts[world_task.n, action.n, world_outcome.n] = nrows
-
-            norms = numpy.sum(counts, 2, dtype = numpy.float)
-
-            return counts / norms[:, :, numpy.newaxis]
-
-    def act(self, task, action, nrestarts = 1, random = numpy.random):
-        """
-        Retrieve a random sample.
-        """
-
-        log.debug("taking %i action(s) %s on task %s", nrestarts, action, task)
-
-        nnoutcome = random.multinomial(nrestarts, self.matrix[task.n, action.n, :])
-        outcomes  = sum(([self.outcomes[i]] * n for (i, n) in enumerate(nnoutcome)), [])
-
-        return outcomes
+SAT_WorldOutcome.BY_INDEX = [
+    SAT_WorldOutcome.SOLVED,
+    SAT_WorldOutcome.UNSOLVED,
+    ]
 

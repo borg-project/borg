@@ -8,41 +8,46 @@ Run satisfiability solvers.
 
 import re
 import json
+import numpy
 
-from os                    import (
+from os                       import (
     fsync,
     getenv,
-)
-from os.path               import (
+    )
+from os.path                  import (
     join,
     dirname,
     splitext,
     basename,
-)
-from abc                   import abstractmethod
-from copy                  import copy
-from shutil                import rmtree
-from tempfile              import (
+    )
+from abc                      import abstractmethod
+from copy                     import copy
+from shutil                   import rmtree
+from tempfile                 import (
     NamedTemporaryFile,
     mkdtemp,
-)
-from itertools             import chain
-from contextlib            import closing
-from collections           import namedtuple
-from cargo.io              import (
+    )
+from itertools                import chain
+from contextlib               import closing
+from collections              import namedtuple
+from sqlalchemy.sql.functions import (
+    count,
+    random as sql_random,
+    )
+from cargo.io                 import (
     openz,
     expandpath,
     )
-from cargo.log             import get_logger
-from cargo.json            import follows
-from cargo.unix.accounting import run_cpu_limited
-from cargo.sugar           import ABC
-from cargo.flags           import (
+from cargo.log                import get_logger
+from cargo.json               import follows
+from cargo.unix.accounting    import run_cpu_limited
+from cargo.sugar              import ABC
+from cargo.flags              import (
     Flag,
     Flags,
-)
-from cargo.temporal        import TimeDelta
-from utexas.sat.cnf        import write_sanitized_cnf
+    )
+from cargo.temporal           import TimeDelta
+from utexas.sat.cnf           import write_sanitized_cnf
 
 log          = get_logger(__name__)
 module_flags = \
@@ -56,6 +61,13 @@ module_flags = \
             help    = "read solver descriptions from FILE [%default]",
             ),
         )
+
+def get_random_seed(random = numpy.random):
+    """
+    Return a random solver seed.
+    """
+
+    return random.randint(2**31 - 1)
 
 def get_named_solvers(paths = [], flags = {}):
     """
@@ -91,20 +103,40 @@ def get_named_solvers(paths = [], flags = {}):
 
     return dict(chain(*(yield_solvers_from(p) for p in chain(paths, flags.solvers_file))))
 
-SAT_SolverOutcome = \
-    namedtuple(
-        "SAT_SolverOutcome",
-        [
-            "satisfiable",
-            "run",
-            ])
+class SAT_Result(object):
+    """
+    Minimal outcome of a SAT solver.
+    """
+
+    def __init__(self, satisfiable):
+        """
+        Initialize.
+        """
+
+        self.satisfiable = satisfiable
+
+class SAT_RunResult(SAT_Result):
+    """
+    Outcome of an external SAT solver binary.
+    """
+
+    def __init__(self, satisfiable, run):
+        """
+        Initialize.
+        """
+
+        # base
+        SAT_Result.__init__(self, satisfiable)
+
+        # members
+        self.run = run
 
 class SAT_Solver(ABC):
     """
     A solver for SAT.
     """
 
-    def solve(self, cutoff, input_path, seed = None):
+    def solve(self, input_path, cutoff, seed = None):
         """
         Execute the solver and return its outcome.
 
@@ -123,7 +155,7 @@ class SAT_Solver(ABC):
 
                 fsync(temporary.fileno())
 
-                return self._solve(cutoff, temporary.name, seed)
+                return self._solve(temporary.name, cutoff, seed)
 
     @abstractmethod
     def _solve(self, cutoff, input_path, seed = None):
@@ -163,7 +195,7 @@ class SAT_CompetitionSolver(SAT_Solver):
         self.solvers_home = solvers_home
         self.name         = name
 
-    def _solve(self, cutoff, input_path, seed = None):
+    def _solve(self, input_path, cutoff, seed = None):
         """
         Execute the solver and return its outcome, given a concrete input path.
 
@@ -223,7 +255,7 @@ class SAT_CompetitionSolver(SAT_Solver):
             # SATRAM is a synonym for MEMLIMIT potentially used by pre-2009 solvers
             environment["SATRAM"]   = environment["MEMLIMIT"]
 
-        # DIR: the directory where the solver files will be stored
+        # HOME: where the solver files are stored
         expanded                   = expand(expanded, "HERE", self.solvers_home)
         environment["SOLVERSHOME"] = self.solvers_home
 
@@ -265,7 +297,7 @@ class SAT_CompetitionSolver(SAT_Solver):
 
                     break
 
-        return SAT_SolverOutcome(satisfiable, run)
+        return SAT_RunResult(satisfiable, run)
 
     @property
     def seeded(self):
@@ -274,6 +306,79 @@ class SAT_CompetitionSolver(SAT_Solver):
         """
 
         return any("RANDOMSEED" in s for s in self.command)
+
+class SAT_FakeSolver(SAT_Solver):
+    """
+    Fake solver behavior from data.
+    """
+
+    def __init__(self):
+        """
+        Initialize.
+        """
+
+        pass
+
+    def _solve(self, input_path, cutoff, seed = None):
+        """
+        Execute the solver and return its outcome, given a concrete input path.
+        """
+
+        # FIXME should instead override solve()?
+        # FIXME provide a SAT_ConcreteSolver base for the _solve() solvers?
+
+        pass
+
+    def __get_outcome_matrix(self):
+        """
+        Build a matrix of outcome probabilities.
+        """
+
+        log.info("building task-action-outcome matrix")
+
+        # hit the database
+        session = ResearchSession()
+
+        with closing(session):
+            counts = numpy.zeros((self.ntasks, self.nactions, self.noutcomes))
+
+            for action in self.actions:
+                run_case  = case([(SAT_SolverRun.proc_elapsed <= action.cutoff, SAT_SolverRun.satisfiable)])
+                statement =                                                           \
+                    select(
+                        [
+                            SAT_SolverRun.task_uuid,
+                            run_case.label("result"),
+                            count(),
+                            ],
+                        and_(
+                            SAT_SolverRun.task_uuid.in_([t.task.uuid for t in self.tasks]),
+                            SAT_SolverRun.solver        == action.solver,
+                            SAT_SolverRun.cutoff        >= action.cutoff,
+                            ),
+                        )                                                             \
+                        .group_by(SAT_SolverRun.task_uuid, "result")
+                executed  = session.connection().execute(statement)
+
+                # build the matrix
+                world_tasks = dict((t.task.uuid, t) for t in self.tasks)
+                total_count = 0
+
+                for (task_uuid, result, nrows) in executed:
+                    # map storage instances to world instances
+                    world_task    = world_tasks[task_uuid]
+                    world_outcome = SAT_Outcome.BY_VALUE[result]
+
+                    # record the outcome count
+                    counts[world_task.n, action.n, world_outcome.n]  = nrows
+                    total_count                                     += nrows
+
+                if total_count == 0:
+                    log.warning("no rows found for action %s", action, t.task.uuid)
+
+            norms = numpy.sum(counts, 2, dtype = numpy.float)
+
+            return counts / norms[:, :, numpy.newaxis]
 
 class SATensteinSolver(SAT_CompetitionSolver):
     """

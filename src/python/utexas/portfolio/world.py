@@ -8,16 +8,14 @@ Actions, tasks, outcomes, and other pieces of the world.
 
 import numpy
 
-from abc import abstractmethod
-from itertools import product
-from collections import (
-    Sequence,
-    defaultdict,
-    )
-from cargo.log import get_logger
+from abc         import abstractmethod
+from itertools   import product
+from cargo.log   import get_logger
 from cargo.sugar import ABC
 
 log = get_logger(__name__)
+
+# FIXME these are all out of date
 
 class Task(ABC):
     """
@@ -42,15 +40,15 @@ class Action(object):
     An action in the world.
     """
 
-    def __init__(self, n, nsolver, solver_name, cutoff):
+    def __init__(self, n, nsolver, solver_name, cost):
         """
         Initialize.
         """
 
-        self.n = n
-        self.nsolver = nsolver
+        self.n           = n
+        self.nsolver     = nsolver
         self.solver_name = solver_name
-        self.cutoff = cutoff
+        self.cost      = cost
 
     def __str__(self):
         return "%s_%ims" % (self.solver_name, int(self.cutoff * 1000))

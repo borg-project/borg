@@ -1,5 +1,5 @@
 """
-utexas/papers/nips2009/evaluate.py
+utexas/portfolio/evaluate.py
 
 Evaluate selection strategies.
 
@@ -9,16 +9,16 @@ Evaluate selection strategies.
 import sys
 import numpy
 
-from itertools import product
-from contextlib import closing
-from cargo.flags import (
+from itertools       import product
+from contextlib      import closing
+from cargo.flags     import (
     Flag,
     FlagSet,
     IntRanges,
     FloatRanges,
     )
-from cargo.log import get_logger
-from cargo.temporal import TimeDelta
+from cargo.log       import get_logger
+from cargo.temporal  import TimeDelta
 from cargo.iterators import random_subsets
 
 log = get_logger(__name__)
@@ -71,7 +71,7 @@ class PortfolioTest(object):
 
         for (ntest, task) in enumerate(self.test_tasks):
             log.info("evaluating on task %i (test %i of %i)", task.n, ntest + 1, len(self.test_tasks))
-            log.debug("task has path %s", task.task.path)
+            log.debug("task has uuid %s", task.task.uuid)
 
             self.evaluate_on(strategy, task)
 

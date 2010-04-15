@@ -11,22 +11,12 @@ if __name__ == "__main__":
 
     raise SystemExit(main())
 
-import os.path
-import logging
-
-from uuid import (
+from uuid                       import (
     UUID,
     uuid4,
-    uuid5,
     )
-from socket import getfqdn
-from datetime import timedelta
-from itertools import (
-    izip,
-    chain,
-    product,
-    )
-from sqlalchemy import (
+from socket                     import getfqdn
+from sqlalchemy                 import (
     Float,
     Column,
     String,
@@ -36,19 +26,13 @@ from sqlalchemy import (
     UnicodeText,
     LargeBinary,
     )
-from sqlalchemy.orm import (
+from sqlalchemy.orm             import (
     relation,
     sessionmaker,
     )
-from sqlalchemy.orm.exc import NoResultFound
-from cargo.io import (
-    openz,
-    files_under,
-    hash_yielded_bytes,
-    )
 from sqlalchemy.ext.declarative import declarative_base
-from cargo.log import get_logger
-from cargo.sql.alchemy import (
+from cargo.log                  import get_logger
+from cargo.sql.alchemy          import (
     SQL_UUID,
     SQL_JSON,
     SQL_List,
@@ -56,12 +40,12 @@ from cargo.sql.alchemy import (
     UTC_DateTime,
     SQL_TimeDelta,
     )
-from cargo.flags import (
+from cargo.flags                import (
     Flag,
     Flags,
     with_flags_parsed,
     )
-from cargo.temporal import utc_now
+from cargo.temporal             import utc_now
 
 log             = get_logger(__name__)
 DatumBase       = declarative_base()
@@ -77,7 +61,7 @@ module_flags    = \
             ),
         )
 
-class Task(DatumBase):
+class TaskRecord(DatumBase):
     """
     One task.
     """
@@ -89,7 +73,7 @@ class Task(DatumBase):
 
     __mapper_args__ = {"polymorphic_on": type}
 
-class SAT_Task(Task):
+class SAT_TaskRecord(TaskRecord):
     """
     One satisfiability task in DIMACS CNF format.
     """
@@ -97,12 +81,12 @@ class SAT_Task(Task):
     __tablename__   = "sat_tasks"
     __mapper_args__ = {"polymorphic_identity": "cnf_sat"}
 
-    uuid = Column(SQL_UUID, ForeignKey(Task.uuid), primary_key = True)
+    uuid = Column(SQL_UUID, ForeignKey(TaskRecord.uuid), primary_key = True)
     hash = Column(LargeBinary(length = 64))
 
     TASK_NAMESPACE = UUID("8e67a81a-717c-4206-8831-6007bc8f111f")
 
-class TaskDescription(DatumBase):
+class TaskNameRecord(DatumBase):
     """
     Place a task in the context of a collection.
     """
@@ -114,20 +98,19 @@ class TaskDescription(DatumBase):
     name       = Column(String)
     collection = Column(String)
 
-    task = relation(Task)
+    task = relation(TaskRecord)
 
-class Solver(DatumBase):
+class SolverRecord(DatumBase):
     """
     Some solver for some domain.
     """
 
     __tablename__ = "sat_solvers"
 
-#     uuid = Column(SQL_UUID, primary_key = True, default = uuid4)
     name = Column(String, primary_key = True)
     type = Column(String)
 
-class SAT_SolverRun(DatumBase):
+class SAT_SolverRunRecord(DatumBase):
     """
     Information about one run of a solver on a SAT task.
     """
@@ -149,8 +132,8 @@ class SAT_SolverRun(DatumBase):
     exit_signal   = Column(Integer)
     satisfiable   = Column(Boolean)
 
-    task   = relation(SAT_Task)
-    solver = relation(Solver)
+    task   = relation(SAT_TaskRecord)
+    solver = relation(SolverRecord)
 
     @staticmethod
     def starting_now(*args, **kwargs):
@@ -168,24 +151,7 @@ class SAT_SolverRun(DatumBase):
 
         return run
 
-class PerplexityDatum(DatumBase):
-    """
-    Datum from a perplexity calculation.
-    """
-
-    __tablename__ = "perplexity_data"
-
-    uuid            = Column(SQL_UUID, primary_key = True, default = uuid4)
-    model_name      = Column(String)
-    set_name        = Column(String)
-    ntasks_train    = Column(Integer)
-    ntasks_test     = Column(Integer)
-    nrestarts_train = Column(Integer)
-    nrestarts_test  = Column(Integer)
-    perplexity      = Column(Float)
-    ncomponents     = Column(Integer)
-
-class PortfolioScoreWorld(DatumBase):
+class PortfolioScoreWorldRecord(DatumBase):
     """
     World from a (set of) portfolio tests.
     """
@@ -200,7 +166,7 @@ class PortfolioScoreWorld(DatumBase):
     discount = Column(Float)
     tags     = Column(SQL_List(String))
 
-class PortfolioScore(DatumBase):
+class PortfolioScoreRecord(DatumBase):
     """
     Result of a portfolio test.
     """
@@ -219,25 +185,7 @@ class PortfolioScore(DatumBase):
     tags         = Column(SQL_List(String))
 
     # relations
-    world = relation(PortfolioScoreWorld)
-
-class PortfolioActionCount(DatumBase):
-    """
-    Action invocation count in a portfolio experiment.
-    """
-
-    __tablename__ = "portfolio_action_counts"
-
-    # columns
-    uuid        = Column(SQL_UUID, primary_key = True, default = uuid4)
-    score_uuid  = Column(SQL_UUID, ForeignKey("portfolio_scores.uuid"))
-    solver_name = Column(String, ForeignKey("sat_solvers.name"))
-    duration    = Column(SQL_TimeDelta)
-    invocations = Column(Integer)
-
-    # relations
-    score  = relation(PortfolioScore)
-    solver = relation(Solver)
+    world = relation(PortfolioScoreWorldRecord)
 
 def research_connect(engines = SQL_Engines.default, flags = module_flags.given):
     """

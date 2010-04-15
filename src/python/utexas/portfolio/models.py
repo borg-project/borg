@@ -1,5 +1,5 @@
 """
-utexas/papers/nips2009/models.py
+utexas/portfolio/models.py
 
 Various models of task/action outcomes.
 
@@ -21,90 +21,54 @@ from cargo.statistics._statistics import (
 
 log = get_logger(__name__)
 
-class MultinomialActionModel(ActionModel):
-    """
-    A simple non-mixture multinomial model.
-    """
-
-    def __init__(self, world, training):
-        """
-        Initialize.
-        """
-
-        counts       = world.counts_from_events(training)
-        total_counts = numpy.sum(counts, 0)
-        norm         = numpy.sum(total_counts, 1, numpy.double)[:, numpy.newaxis]
-
-        self.prediction                 = total_counts / norm
-        self.prediction.flags.writeable = False
-
-        log.debug("multinomial action model: %s", self.prediction)
-
-    def predict(self, task, history, out = None):
-        """
-        Return the predicted probability of each outcome of each action given history.
-        """
-
-        if out is None:
-            out = self.prediction
-        else:
-            out[:] = self.prediction
-
-        return out
-
 class MultinomialMixtureActionModel(ActionModel):
     """
     An arbitrary mixture model.
     """
 
-    def __init__(self, world, training, estimator):
+    # FIXME why do we *accept* an estimator as a parameter? build it here.
+    # FIXME (or make a general distribution action model...)
+
+    def __init__(self, training, estimator):
         """
         Initialize.
+
+        @param training: [tasks-by-outcomes counts array for each action]
         """
 
-        # members
-        self.__world = world
-        self.__training  = world.counts_from_events(training)
-        self.__estimator = estimator
-
         # model
-        counts         = get_positive_counts(self.__training)
-        training_split = [counts[:, naction, :] for naction in xrange(world.nactions)]
-        self.__mixture = estimator.estimate(training_split)
+        self.__mixture = estimator.estimate(training)
 
         # store mixture components in a matrix
         M = self.mixture.ndomains
         K = self.mixture.ncomponents
-        D = self.__world.noutcomes
 
-        self.mix_MKD = numpy.empty((M, K, D))
+        self.mix_KD_per = [numpy.empty((M, K), numpy.object)
 
         for m in xrange(M):
             for k in xrange(K):
-                self.mix_MKD[m, k] = self.mixture.components[m, k].log_beta
+                self.mix_KD_per[m][k] = self.mixture.components[m, k].log_beta
 
     def predict(self, task, history, out = None):
         """
-        Return the predicted probability of each outcome given history.
+        Given history, return the probability of each outcome of each action.
+
+        @param history: [outcome counts array for each action]
+        @return: [outcome probabilities array for each action]
         """
 
         # mise en place
         M = self.mixture.ndomains
         K = self.mixture.ncomponents
-        D = self.__world.noutcomes
-
-        # get the task-specific history
-        history_counts = self.__world.counts_from_events(history)
-        counts_MD      = history_counts[task.n]
 
         # get the outcome probabilities
         if out is None:
-            out = numpy.empty((M, D))
+            out = [numpy.empty(len(a.outcomes)) for a in FIXME]
 
         multinomial_model_predict(
             numpy.copy(self.__mixture.pi),
-            self.mix_MKD,
-            counts_MD,
+            self.mix_KD_per,
+            history,
             out,
             )
 
@@ -264,38 +228,6 @@ class RandomActionModel(ActionModel):
             out[:] = numpy.random.random((self.world.nactions, self.world.noutcomes))
 
         out /= numpy.sum(out, 1)[:, numpy.newaxis]
-
-        return out
-
-class RankingActionModel(ActionModel):
-    """
-    Rank actions according to true utility.
-    """
-
-    def __init__(self, world, submodel):
-        """
-        Initialize.
-        """
-
-        # members
-        self.world = world
-        self.submodel = submodel
-
-    def predict(self, task, history, out = None):
-        """
-        Return the predicted probability of each outcome given history.
-        """
-
-        # FIXME use a task_history parameter instead
-        # get the task-specific history
-        task_history = history.counts[task.n]
-
-#        numpy.uniq?
-
-        if out is None:
-            out = FIXME
-        else:
-            out[:] = FIXME
 
         return out
 

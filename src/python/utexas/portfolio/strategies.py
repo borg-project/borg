@@ -1,5 +1,5 @@
 """
-utexas/papers/nips2009/strategies.py
+utexas/portfolio/strategies.py
 
 General selection strategies.
 
