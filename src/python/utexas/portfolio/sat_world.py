@@ -31,8 +31,8 @@ from cargo.iterators          import grab
 from utexas.sat.solvers       import get_random_seed
 from utexas.data              import (
     DatumBase,
-    SAT_SolverRun,
     ResearchSession,
+    SAT_SolverRunRecord,
     )
 from utexas.portfolio.world   import (
     Task,
@@ -52,27 +52,6 @@ module_flags = \
             help    = "use research DATABASE by default [%default]",
             ),
         )
-
-class SAT_WorldAction(Action):
-    """
-    An action in the world.
-    """
-
-    def __init__(self, n, solver, cutoff):
-        """
-        Initialize.
-        """
-
-        self.n = n
-        self.solver        = solver
-        self.cutoff        = cutoff
-
-    def __str__(self):
-        """
-        Return a human-readable description of this action.
-        """
-
-        return "%s_%ims" % (self.solver.name, int(self.cutoff.as_s * 1000))
 
 class SAT_WorldTask(Task):
     """
@@ -145,7 +124,7 @@ class SAT_WorldAction(Action):
         else:
             seed = None
 
-        result  = self.solver.solve(task.path, self.cutoff, seed = None)
+        result  = self.solver.solve(task.path, self.cutoff, seed = seed)
         outcome = SAT_WorldOutcome.from_result(result)
 
         return (outcome, result)
@@ -205,7 +184,6 @@ SAT_WorldOutcome.BY_INDEX = [
     SAT_WorldOutcome.SOLVED,
     SAT_WorldOutcome.UNSOLVED,
     ]
-
 
 class SAT_World(object):
     # FIXME

@@ -9,15 +9,15 @@ Various models of task/action outcomes.
 import numpy
 
 from cargo.log import get_logger
-from cargo.statistics.dcm import DirichletCompoundMultinomial
-from cargo.statistics.mixture import FiniteMixture
-from utexas.portfolio.world import get_positive_counts
+# from cargo.statistics.dcm import DirichletCompoundMultinomial
+# from cargo.statistics.mixture import FiniteMixture
+# from utexas.portfolio.world import get_positive_counts
 from utexas.portfolio.strategies import ActionModel
-from cargo.statistics._statistics import (
-    dcm_post_pi_K,
-    dcm_model_predict,
-    multinomial_model_predict,
-    )
+# from cargo.statistics._statistics import (
+#     dcm_post_pi_K,
+#     dcm_model_predict,
+#     multinomial_model_predict,
+#     )
 
 log = get_logger(__name__)
 
@@ -43,7 +43,7 @@ class MultinomialMixtureActionModel(ActionModel):
         M = self.mixture.ndomains
         K = self.mixture.ncomponents
 
-        self.mix_KD_per = [numpy.empty((M, K), numpy.object)
+        self.mix_KD_per = numpy.empty((M, K), numpy.object)
 
         for m in xrange(M):
             for k in xrange(K):
@@ -198,25 +198,26 @@ class RandomActionModel(ActionModel):
     Know nothing.
     """
 
-    def __init__(self, world):
+    def __init__(self, random):
         """
         Initialize.
         """
 
-        # members
-        self.world = world
+        self.random = random
 
-    def predict(self, task, history, out = None):
+    def predict(self, task, history, actions):
         """
         Return the predicted probability of each outcome given history.
         """
 
-        if out is None:
-            out = numpy.random.random((self.world.nactions, self.world.noutcomes))
-        else:
-            out[:] = numpy.random.random((self.world.nactions, self.world.noutcomes))
+#         if out is None:
+#             out = self.random((self.world.nactions, self.world.noutcomes))
+#         else:
+#             out[:] = self.random((self.world.nactions, self.world.noutcomes))
 
-        out /= numpy.sum(out, 1)[:, numpy.newaxis]
+#         out /= numpy.sum(out, 1)[:, numpy.newaxis]
 
-        return out
+#         return out
+
+        return dict((a, self.random.rand(2)) for a in actions) # FIXME
 

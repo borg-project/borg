@@ -131,6 +131,7 @@ class SAT_SolverRunRecord(DatumBase):
     exit_status   = Column(Integer)
     exit_signal   = Column(Integer)
     satisfiable   = Column(Boolean)
+    certificate   = Column(SQL_List(Integer))
 
     task   = relation(SAT_TaskRecord)
     solver = relation(SolverRecord)

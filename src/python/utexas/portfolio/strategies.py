@@ -8,8 +8,8 @@ General selection strategies.
 
 import numpy
 
-from abc import abstractmethod
-from cargo.log import get_logger
+from abc         import abstractmethod
+from cargo.log   import get_logger
 from cargo.sugar import ABC
 
 log = get_logger(__name__)
@@ -47,6 +47,8 @@ class FixedSelectionStrategy(SelectionStrategy):
     A strategy that repeats a fixed action.
     """
 
+    name = "fixed"
+
     def __init__(self, action):
         """
         Initialize.
@@ -69,48 +71,42 @@ class ModelingSelectionStrategy(SelectionStrategy):
     A strategy that employs a model of its actions.
     """
 
-    def __init__(self, world, model, planner):
+    name = "modeling"
+
+    def __init__(self, model, planner, actions):
         """
         Initialize.
         """
 
-        self.world   = world
         self.model   = model
         self.planner = planner
+        self.actions = actions
         self.history = []
 
-    def select(self, task, actions):
+        from utexas.portfolio.sat_world import SAT_WorldOutcome
+        self.utilities = numpy.array([o.utility for o in SAT_WorldOutcome.BY_INDEX])
+
+    def select(self, task, budget):
         """
         Select an action, yield it, and receive its outcome.
         """
 
         # predict, then make a selection
-        predicted = self.model.predict(task, self.history)
+        if budget is None:
+            feasible = self.actions
+        else:
+            feasible  = [a for a in self.actions if a.cutoff <= budget]
 
-        # FIXME don't do this debugging work always
-#         from collections import defaultdict
-#         from utexas.portfolio.sat_world import SAT_Outcome
-#         map = defaultdict(list)
-
-#         for (n, p) in enumerate(predicted):
-#             a = self.world.actions[n]
-
-#             map[a.solver.name].append((a.cutoff, p[SAT_Outcome.SOLVED.n]))
-
-#         rows = []
-
-#         for (s, m) in map.items():
-#             rows.append((s, [p for (c, p) in sorted(m, key = lambda (c, p): c)]))
-
-#         rows  = sorted(rows, key = lambda (s, r): s)
-#         lines = "\n".join("% 32s: %s" % (s, " ".join("%.2f" % p for p in r)) for (s, r) in rows)
-
-#         log.debug("predicted probabilities of success:\n%s", lines)
-
-        # ...
-        action    = self.planner.select(predicted, actions)
-        outcome   = yield action
+        predicted = self.model.predict(task, self.history, feasible)
+        selected  = self.planner.select(predicted, self.utilities) # FIXME
+        outcome   = yield selected
 
         # remember its result
-        self.history.append((task, action, outcome))
+        self.history.append((task, selected, outcome))
+
+# assign strategy names
+names = {
+    FixedSelectionStrategy.name    : FixedSelectionStrategy,
+    ModelingSelectionStrategy.name : ModelingSelectionStrategy,
+    }
 

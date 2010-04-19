@@ -22,13 +22,12 @@ class Task(ABC):
     A task in the world.
     """
 
-    def __init__(self, world, n, ntask, path):
+    def __init__(self, ntask, path):
         """
         Initialize.
         """
 
         self.world = world
-        self.n = n
         self.ntask = ntask
         self.path = path
 

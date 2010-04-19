@@ -14,7 +14,7 @@ log = get_logger(__name__)
 
 __condense_spaces_re = re.compile(" +")
 
-def write_sanitized_cnf(destination, source):
+def write_sanitized_cnf(source, destination):
     """
     Filter a CNF file to make picky solvers happy.
     """

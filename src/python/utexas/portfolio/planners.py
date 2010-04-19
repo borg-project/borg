@@ -35,15 +35,14 @@ class HardMyopicActionPlanner(ActionPlanner):
     Deterministic greedy action selection.
     """
 
-    def __init__(self, world, discount):
+    def __init__(self, discount):
         """
         Initialize.
         """
 
-        self.world    = world
         self.discount = discount
 
-    def select(self, predicted, actions):
+    def select(self, predicted, utilities):
         """
         Select an action given the probabilities of outcomes.
         """
@@ -68,14 +67,13 @@ class HardMyopicActionPlanner(ActionPlanner):
 
 #         log.detail("predicted probabilities of success:\n%s", lines)
 
-        # convert to expectation
-        expected   = numpy.sum(predicted * self.world.utilities, 1)
-        cutoffs    = numpy.fromiter((a.cutoff.as_s for a in actions), numpy.double)
-        indices    = numpy.fromiter((a.n for a in actions), numpy.int)
-        discounted = expected[indices] * numpy.power(self.discount, cutoffs)
-        selected   = numpy.argmax(discounted)
+        (selected, _) = \
+            max(
+                predicted.iteritems(),
+                key = lambda (a, ps): sum(p*u*self.discount**a.cutoff.as_s for (p, u) in zip(ps, utilities)),
+                )
 
-        return actions[selected]
+        return selected
 
 class SoftMyopicActionPlanner(ActionPlanner):
     """

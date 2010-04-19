@@ -23,10 +23,7 @@ from os.path                  import (
 from abc                      import abstractmethod
 from copy                     import copy
 from shutil                   import rmtree
-from tempfile                 import (
-    NamedTemporaryFile,
-    mkdtemp,
-    )
+from tempfile                 import mkdtemp
 from itertools                import chain
 from contextlib               import closing
 from collections              import namedtuple
@@ -37,9 +34,11 @@ from sqlalchemy.sql.functions import (
 from cargo.io                 import (
     openz,
     expandpath,
+    decompress_if,
+    guess_encoding,
+    mkdtemp_scoped,
     )
 from cargo.log                import get_logger
-from cargo.json               import follows
 from cargo.unix.accounting    import run_cpu_limited
 from cargo.sugar              import ABC
 from cargo.flags              import (
@@ -62,7 +61,7 @@ module_flags = \
             ),
         )
 
-def get_random_seed(random = numpy.random):
+def get_random_seed(random):
     """
     Return a random solver seed.
     """
@@ -103,75 +102,161 @@ def get_named_solvers(paths = [], flags = {}):
 
     return dict(chain(*(yield_solvers_from(p) for p in chain(paths, flags.solvers_file))))
 
+class SolverError(RuntimeError):
+    """
+    The solver failed in an unexpected way.
+    """
+
+    pass
+
 class SAT_Result(object):
     """
     Minimal outcome of a SAT solver.
     """
 
-    def __init__(self, satisfiable):
+    def __init__(self, satisfiable, certificate):
         """
         Initialize.
         """
 
         self.satisfiable = satisfiable
-
-class SAT_RunResult(SAT_Result):
-    """
-    Outcome of an external SAT solver binary.
-    """
-
-    def __init__(self, satisfiable, run):
-        """
-        Initialize.
-        """
-
-        # base
-        SAT_Result.__init__(self, satisfiable)
-
-        # members
-        self.run = run
+        self.certificate = certificate
 
 class SAT_Solver(ABC):
     """
     A solver for SAT.
     """
 
-    def solve(self, input_path, cutoff, seed = None):
-        """
-        Execute the solver and return its outcome.
-
-        @return (outcome, seconds_elapsed, seed)
-        """
-
-        with closing(openz(input_path)) as source:
-            with NamedTemporaryFile(prefix = "task.", suffix = ".cnf") as temporary:
-                log.info("writing %s from %s", temporary.name, input_path)
-
-                write_sanitized_cnf(temporary, source)
-
-                temporary.flush()
-
-                log.info("sanitized CNF written and flushed")
-
-                fsync(temporary.fileno())
-
-                return self._solve(temporary.name, cutoff, seed)
-
     @abstractmethod
-    def _solve(self, cutoff, input_path, seed = None):
+    def solve(self, input_path, cutoff = None, seed = None):
+        """
+        Attempt to solve the specified instance; return the outcome.
+        """
+
+        pass
+
+class SAT_UncompressingSolver(SAT_Solver):
+    """
+    Execute another solver using an uncompressed instance.
+    """
+
+    def __init__(self, solver):
+        """
+        Initialize.
+        """
+
+        SAT_Solver.__init__(self)
+
+        self.solver = solver
+
+    def solve(self, input_path, cutoff = None, seed = None):
+        """
+        Attempt to solve the specified instance; return the outcome.
+        """
+
+        # FIXME only create the temporary directory if necessary
+
+        with mkdtemp_scoped(prefix = "solver_input.") as sandbox_path:
+            # decompress the instance, if necessary
+            uncompressed_path = \
+                decompress_if(
+                    input_path,
+                    join(sandbox_path, "uncompressed.cnf"),
+                    )
+
+            log.info("uncompressed task is %s", uncompressed_path)
+
+            # execute the next solver in the chain
+            return self.solver.solve(uncompressed_path, cutoff, seed)
+
+class SAT_SanitizingSolver(SAT_Solver):
+    """
+    Execute another solver using a sanitized instance.
+    """
+
+    def __init__(self, solver):
+        """
+        Initialize.
+        """
+
+        SAT_Solver.__init__(self)
+
+        self.solver = solver
+
+    def solve(self, input_path, cutoff = None, seed = None):
+        """
+        Attempt to solve the specified instance; return the outcome.
+        """
+
+        log.info("starting to solve %s", input_path)
+
+        # FIXME use a temporary file, not directory
+
+        with mkdtemp_scoped(prefix = "solver_input.") as sandbox_path:
+            # unconditionally sanitize the instance
+            sanitized_path = join(sandbox_path, "sanitized.cnf")
+
+            with open(uncompressed_path) as uncompressed_file:
+                with open(sanitized_path, "w") as sanitized_file:
+                    write_sanitized_cnf(uncompressed_file, sanitized_file)
+                    sanitized_file.flush()
+                    fsync(sanitized_file.fileno())
+
+            log.info("sanitized task is %s", sanitized_path)
+
+            # execute the next solver in the chain
+            return self.solver.solve(sanitized_path, cutoff, seed)
+
+class SAT_PreprocessingSolver(SAT_Solver):
+    """
+    Execute a solver after a preprocessor pass.
+    """
+
+    def __init__(self, preprocessor, solver):
+        """
+        Initialize.
+        """
+
+        SAT_Solver.__init__(self)
+
+        self.preprocessor = preprocessor
+        self.solver       = solver
+
+    def solve(self, input_path, cutoff = None, seed = None):
         """
         Execute the solver and return its outcome, given a concrete input path.
         """
 
-        pass
+        with mkdtemp_scoped(prefix = "sat_preprocessing.") as sandbox_path:
+            # FIXME share cutoff between preprocessor and solver
+            preprocessed = self.preprocessor.preprocess(input_path, sandbox_path, cutoff)
+            result       = self.solver.solve(preprocessed.cnf_path, cutoff, seed)
+
+            if result.certificate is not None:
+                result.certificate = preprocessed.extend(result.certificate)
+
+            return result
+
+class SAT_RunResult(SAT_Result):
+    """
+    Outcome of an external SAT solver binary.
+    """
+
+    def __init__(self, satisfiable, certificate, run):
+        """
+        Initialize.
+        """
+
+        # base
+        SAT_Result.__init__(self, satisfiable, certificate)
+
+        # members
+        self.run = run
 
 class SAT_CompetitionSolver(SAT_Solver):
     """
     A solver for SAT that uses the circa-2009 competition interface.
     """
-
-    __sat_line_re   = re.compile("s SATISFIABLE")
-    __unsat_line_re = re.compile("s UNSATISFIABLE")
 
     def __init__(
         self,
@@ -195,12 +280,14 @@ class SAT_CompetitionSolver(SAT_Solver):
         self.solvers_home = solvers_home
         self.name         = name
 
-    def _solve(self, input_path, cutoff, seed = None):
+    def solve(self, input_path, cutoff = None, seed = None):
         """
         Execute the solver and return its outcome, given a concrete input path.
 
         Comments quote the competition specification.
         """
+
+        # FIXME support no-cutoff operation
 
         def expand(strings, variable, value):
             """
@@ -261,10 +348,7 @@ class SAT_CompetitionSolver(SAT_Solver):
 
         # TMPDIR: the only directory where the solver is allowed to read/write
         # temporary files
-        tmpdir = None
-
-        try:
-            tmpdir                = mkdtemp(prefix = "solver.")
+        with mkdtemp_scoped(prefix = "solver_scratch.") as tmpdir:
             expanded              = expand(expanded, "TMPDIR", tmpdir)
             environment["TMPDIR"] = tmpdir
 
@@ -278,26 +362,44 @@ class SAT_CompetitionSolver(SAT_Solver):
                     pty         = True,
                     environment = environment,
                     )
-        finally:
-            # clean up its mess
-            if tmpdir is not None:
-                rmtree(tmpdir)
 
         # and analyze its output
         satisfiable = None
+        certificate = None
 
         if run.exit_status is not None:
+            from itertools import imap
+
             for line in "".join(c for (t, c) in run.out_chunks).split("\n"):
-                if SAT_CompetitionSolver.__sat_line_re.match(line):
-                    satisfiable = True
+                # reported sat
+                if line.startswith("s SATISFIABLE"):
+                    if satisfiable is not None:
+                        raise SolverError("multiple solution lines in solver output")
+                    else:
+                        satisfiable = True
+                # reported unsat
+                elif line.startswith("s UNSATISFIABLE"):
+                    if satisfiable is not None:
+                        raise SolverError("multiple solution lines in solver output")
+                    else:
+                        satisfiable = False
+                # provided (part of) a sat certificate
+                elif line.startswith("v "):
+                    literals = imap(int, line[2:].split())
 
-                    break
-                elif SAT_CompetitionSolver.__unsat_line_re.match(line):
-                    satisfiable = False
+                    if certificate is None:
+                        certificate = list(literals)
+                    else:
+                        certificate.extend(literals)
 
-                    break
+        # crazy solver?
+        if satisfiable is True:
+            if certificate is None:
+                raise SolverError("solver reported sat but did not provide certificate")
+        elif certificate is not None:
+            raise SolverError("solver did not report sat but provided certificate")
 
-        return SAT_RunResult(satisfiable, run)
+        return SAT_RunResult(satisfiable, certificate, run)
 
     @property
     def seeded(self):
@@ -319,13 +421,13 @@ class SAT_FakeSolver(SAT_Solver):
 
         pass
 
-    def _solve(self, input_path, cutoff, seed = None):
+    def solve(self, input_path, cutoff = None, seed = None):
         """
         Execute the solver and return its outcome, given a concrete input path.
         """
 
-        # FIXME should instead override solve()?
         # FIXME provide a SAT_ConcreteSolver base for the _solve() solvers?
+        # FIXME support no-cutoff operation
 
         pass
 
@@ -455,7 +557,7 @@ class ArgoSAT_Solver(SAT_Solver):
         self.argv  = tuple(argv)
         self.flags = self.class_flags.merged(flags)
 
-    def _solve(self, cutoff, input_path, seed = None):
+    def solve(self, input_path, cutoff, seed = None):
         """
         Execute the solver and return its outcome, given a concrete input path.
         """

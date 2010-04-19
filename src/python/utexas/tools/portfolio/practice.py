@@ -35,6 +35,8 @@ from utexas.portfolio.sat_world import (
 
 log = get_logger(__name__, level = logging.NOTSET)
 
+# FIXME use sqlite for run storage instead?
+
 module_flags = \
     Flags(
         "Script Options",
