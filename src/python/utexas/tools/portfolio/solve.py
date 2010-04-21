@@ -12,9 +12,9 @@ if __name__ == "__main__":
 
     raise SystemExit(main())
 
-import logging
 import numpy
 
+from logging                    import Formatter
 from numpy.random               import RandomState
 from cargo.log                  import get_logger
 from cargo.flags                import (
@@ -39,7 +39,7 @@ from utexas.portfolio.sat_world import (
     )
 from utexas.portfolio.strategies import ModelingSelectionStrategy
 
-log = get_logger(__name__, level = logging.NOTE)
+log = get_logger(__name__, level = "NOTE")
 
 module_flags = \
     Flags(
@@ -152,7 +152,39 @@ class SAT_PortfolioSolver(SAT_Solver):
 
         return (action, (outcome, result))
 
-# FIXME add a competition-compliant logging sink (ie, prepends "c ")
+class CompetitionFormatter(Formatter):
+    """
+    A concise log formatter for output during competition.
+    """
+
+    def __init__(self):
+        """
+        Initialize.
+        """
+
+        Formatter.__init__(self, "%(levelname)s: %(message)s", "%y%m%d%H%M%S")
+
+    def format(self, record):
+        """
+        Format the log record.
+        """
+
+        raw = Formatter.format(self, record)
+
+        def yield_lines():
+            """
+            Yield comment-prefixed lines.
+            """
+
+            lines  = raw.splitlines()
+            indent = "c " + " " * (len(record.levelname) + 2)
+
+            yield "c " + lines[0]
+
+            for line in lines[1:]:
+                yield indent + line
+
+        return "\n".join(yield_lines())
 
 @with_flags_parsed(
     usage = "usage: %prog [options] <task>",
@@ -162,13 +194,30 @@ def main((input_path,)):
     Main.
     """
 
+    # set up competition logging
+    import sys
+    import logging
+
+    from logging   import StreamHandler
+    from cargo.log import enable_default_logging
+
+    enable_default_logging(add_handlers = False)
+
+    handler = StreamHandler(sys.stdout)
+
+    handler.setFormatter(CompetitionFormatter())
+    handler.setLevel(logging.NOTSET)
+
+    logging.root.addHandler(handler)
+
     # basic flag handling
     flags = module_flags.given
 
     if flags.verbose:
         get_logger("utexas.tools.sat.run_solvers").setLevel(logging.NOTSET)
-        get_logger("cargo.unix.accounting").setLevel(logging.DEBUG)
+        get_logger("cargo.unix.accounting").setLevel(logging.NOTE)
         get_logger("utexas.sat.solvers").setLevel(logging.DEBUG)
+        get_logger("utexas.sat.preprocessors").setLevel(logging.DEBUG)
 
     # load configuration
     # FIXME actually load configuration

@@ -6,36 +6,21 @@ Run satisfiability preprocessors.
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-import subprocess
 import numpy
 
-from os                    import (
-    fsync,
-    putenv,
-    )
-from os.path               import join
-from abc                   import (
+from os.path          import join
+from abc              import (
     abstractmethod,
     abstractproperty,
     )
-from tempfile              import NamedTemporaryFile
-from subprocess            import (
-    Popen,
-    check_call,
-    )
-from cargo.io              import (
-    decompress_if,
-    mkdtemp_scoped,
-    )
-from cargo.log             import get_logger
-from cargo.unix.accounting import run_cpu_limited
-from cargo.sugar           import ABC
-from cargo.flags           import (
+from cargo.io         import mkdtemp_scoped
+from cargo.log        import get_logger
+from cargo.sugar      import ABC
+from cargo.flags      import (
     Flag,
     Flags,
     )
-from cargo.errors          import Raised
-from cargo.temporal        import TimeDelta
+from cargo.errors     import Raised
 
 log = get_logger(__name__)
 
@@ -43,8 +28,6 @@ class SAT_PreprocessorError(RuntimeError):
     """
     The preprocessor failed in an unexpected way.
     """
-
-    pass
 
 class SAT_PreprocessorOutput(ABC):
     """
@@ -60,15 +43,17 @@ class SAT_PreprocessorOutput(ABC):
         solution to the unprocessed CNF expression.
         """
 
-        pass
-
     @abstractproperty
     def cnf_path(self):
         """
         The path to the preprocessed CNF.
         """
 
-        pass
+    @abstractproperty
+    def elapsed(self):
+        """
+        Time elapsed in preprocessor execution.
+        """
 
 class SAT_Preprocessor(ABC):
     """
@@ -80,8 +65,6 @@ class SAT_Preprocessor(ABC):
         """
         Preprocess an instance.
         """
-
-        pass
 
 class SAT_UncompressingPreprocessor(ABC):
     """
@@ -108,6 +91,8 @@ class SAT_UncompressingPreprocessor(ABC):
 
         with mkdtemp_scoped(prefix = "sat_preprocessor.") as sandbox_path:
             # decompress the instance, if necessary
+            from cargo.io import decompress_if
+
             uncompressed_path = \
                 decompress_if(
                     input_path,
@@ -138,6 +123,10 @@ class SatELiteOutput(SAT_PreprocessorOutput):
         Extend the specified certificate.
         """
 
+        # write the certificate to a file
+        from os       import fsync
+        from tempfile import NamedTemporaryFile
+
         with NamedTemporaryFile("w", prefix = "sat_certificate.") as certificate_file:
             certificate_file.write("SAT\n")
             certificate_file.write(" ".join(str(l) for l in certificate))
@@ -154,6 +143,11 @@ class SatELiteOutput(SAT_PreprocessorOutput):
 
                 try:
                     # launch SatELite
+                    import subprocess
+
+                    from os         import putenv
+                    from subprocess import Popen
+
                     popened = \
                         Popen(
                             [
@@ -211,6 +205,14 @@ class SatELiteOutput(SAT_PreprocessorOutput):
 
         return join(self.output_dir, "preprocessed.cnf")
 
+    @property
+    def elapsed(self):
+        """
+        Time elapsed in preprocessor execution.
+        """
+
+        return self.run.proc_elapsed
+
 class SatELitePreprocessor(SAT_Preprocessor):
     """
     The standard SatELite preprocessor.
@@ -244,22 +246,28 @@ class SatELitePreprocessor(SAT_Preprocessor):
         """
 
         # FIXME better support for the no-cutoff case
+        from cargo.temporal import TimeDelta
+
         if cutoff is None:
             cutoff = TimeDelta(seconds = 1e6)
 
         with mkdtemp_scoped(prefix = "satelite.") as tmpdir:
             # run the solver
-            log.debug("preprocessing with SatELite")
+            from cargo.unix.accounting import run_cpu_limited
+
+            command = [
+                self.binary_path,
+                input_path,
+                join(output_dir, "preprocessed.cnf"),
+                join(output_dir, "variable_map"),
+                join(output_dir, "eliminated_clauses"),
+                ]
+
+            log.note("preprocessing with %s", command)
 
             run = \
                 run_cpu_limited(
-                    [
-                        self.binary_path,
-                        input_path,
-                        join(output_dir, "preprocessed.cnf"),
-                        join(output_dir, "variable_map"),
-                        join(output_dir, "eliminated_clauses"),
-                        ],
+                    command,
                     cutoff,
                     pty         = True,
                     environment = {

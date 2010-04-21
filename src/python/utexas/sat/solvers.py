@@ -107,20 +107,22 @@ class SolverError(RuntimeError):
     The solver failed in an unexpected way.
     """
 
-    pass
-
 class SAT_Result(object):
     """
     Minimal outcome of a SAT solver.
     """
 
-    def __init__(self, satisfiable, certificate):
+    @abstractproperty
+    def satisfiable(self):
         """
-        Initialize.
+        Did the solver report the instance satisfiable?
         """
 
-        self.satisfiable = satisfiable
-        self.certificate = certificate
+    @abstractproperty
+    def certificate(self):
+        """
+        Certificate of satisfiability, if any.
+        """
 
 class SAT_Solver(ABC):
     """
@@ -132,8 +134,6 @@ class SAT_Solver(ABC):
         """
         Attempt to solve the specified instance; return the outcome.
         """
-
-        pass
 
 class SAT_UncompressingSolver(SAT_Solver):
     """
@@ -207,6 +207,23 @@ class SAT_SanitizingSolver(SAT_Solver):
             # execute the next solver in the chain
             return self.solver.solve(sanitized_path, cutoff, seed)
 
+class SAT_PreprocessingSolverResult(SAT_Result):
+    """
+    Outcome of a solver with a preprocessing step.
+    """
+
+    def __init__(self, preprocessor_output, solver_result, certificate):
+        """
+        Initialize.
+        """
+
+        SAT_Result.__init__(self)
+
+        self.preprocessor_output = preprocessor_output
+        self.solver_result       = solver_result
+        self.satisfiable         = solver_result.satisfiable
+        self.certificate         = certificate
+
 class SAT_PreprocessingSolver(SAT_Solver):
     """
     Execute a solver after a preprocessor pass.
@@ -228,14 +245,16 @@ class SAT_PreprocessingSolver(SAT_Solver):
         """
 
         with mkdtemp_scoped(prefix = "sat_preprocessing.") as sandbox_path:
-            # FIXME share cutoff between preprocessor and solver
             preprocessed = self.preprocessor.preprocess(input_path, sandbox_path, cutoff)
-            result       = self.solver.solve(preprocessed.cnf_path, cutoff, seed)
+            remaining    = max(TimeDelta(), cutoff - preprocess.elapsed)
+            result       = self.solver.solve(preprocessed.cnf_path, remaining, seed)
 
-            if result.certificate is not None:
-                result.certificate = preprocessed.extend(result.certificate)
+            if result.certificate is None:
+                extended = None
+            else:
+                extended = preprocessed.extend(result.certificate)
 
-            return result
+            return SAT_PreprocessingSolverResult(preprocessed, result, extended)
 
 class SAT_RunResult(SAT_Result):
     """
@@ -247,11 +266,11 @@ class SAT_RunResult(SAT_Result):
         Initialize.
         """
 
-        # base
-        SAT_Result.__init__(self, satisfiable, certificate)
+        SAT_Result.__init__(self)
 
-        # members
-        self.run = run
+        self.satisfiable = satisfiable
+        self.certificate = certificate
+        self.run         = run
 
 class SAT_CompetitionSolver(SAT_Solver):
     """
@@ -414,13 +433,6 @@ class SAT_FakeSolver(SAT_Solver):
     Fake solver behavior from data.
     """
 
-    def __init__(self):
-        """
-        Initialize.
-        """
-
-        pass
-
     def solve(self, input_path, cutoff = None, seed = None):
         """
         Execute the solver and return its outcome, given a concrete input path.
@@ -428,8 +440,6 @@ class SAT_FakeSolver(SAT_Solver):
 
         # FIXME provide a SAT_ConcreteSolver base for the _solve() solvers?
         # FIXME support no-cutoff operation
-
-        pass
 
     def __get_outcome_matrix(self):
         """

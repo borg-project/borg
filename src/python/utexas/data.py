@@ -6,16 +6,10 @@ Storage and retrieval of research data.
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-if __name__ == "__main__":
-    from utexas.data import main
-
-    raise SystemExit(main())
-
 from uuid                       import (
     UUID,
     uuid4,
     )
-from socket                     import getfqdn
 from sqlalchemy                 import (
     Float,
     Column,
@@ -45,7 +39,6 @@ from cargo.flags                import (
     Flags,
     with_flags_parsed,
     )
-from cargo.temporal             import utc_now
 
 log             = get_logger(__name__)
 DatumBase       = declarative_base()
@@ -100,7 +93,7 @@ class TaskNameRecord(DatumBase):
 
     task = relation(TaskRecord)
 
-class SolverRecord(DatumBase):
+class SAT_SolverRecord(DatumBase):
     """
     Some solver for some domain.
     """
@@ -110,6 +103,37 @@ class SolverRecord(DatumBase):
     name = Column(String, primary_key = True)
     type = Column(String)
 
+class SAT_PreprocessorRecord(DatumBase):
+    """
+    Some solver for some domain.
+    """
+
+    __tablename__ = "sat_preprocessors"
+
+    name = Column(String, primary_key = True)
+
+class SAT_PreprocessorRunRecord(DatumBase):
+    """
+    Information about one run of a preprocessor on a SAT task.
+    """
+
+    __tablename__ = "sat_preprocessor_runs"
+
+    uuid                  = Column(SQL_UUID, primary_key = True, default = uuid4)
+    preprocessor_name     = Column(String, ForeignKey("sat_preprocessors.name"), nullable = False)
+    preprocessor_run_uuid = Column(SQL_UUID, ForeignKey("sat_preprocessor_runs.uuid"))
+    started               = Column(UTC_DateTime)
+    usage_elapsed         = Column(SQL_TimeDelta)
+    proc_elapsed          = Column(SQL_TimeDelta)
+    cutoff                = Column(SQL_TimeDelta)
+    fqdn                  = Column(String)
+    stdout                = Column(UnicodeText)
+    stderr                = Column(UnicodeText)
+    exit_status           = Column(Integer)
+    exit_signal           = Column(Integer)
+
+    preprocessor = relation(SAT_PreprocessorRecord)
+
 class SAT_SolverRunRecord(DatumBase):
     """
     Information about one run of a solver on a SAT task.
@@ -117,40 +141,26 @@ class SAT_SolverRunRecord(DatumBase):
 
     __tablename__ = "sat_solver_runs"
 
-    uuid          = Column(SQL_UUID, primary_key = True, default = uuid4)
-    task_uuid     = Column(SQL_UUID, ForeignKey("sat_tasks.uuid"), nullable = False)
-    solver_name   = Column(String, ForeignKey("sat_solvers.name"), nullable = False)
-    started       = Column(UTC_DateTime)
-    usage_elapsed = Column(SQL_TimeDelta)
-    proc_elapsed  = Column(SQL_TimeDelta)
-    cutoff        = Column(SQL_TimeDelta)
-    fqdn          = Column(String)
-    seed          = Column(Integer)
-    stdout        = Column(UnicodeText)
-    stderr        = Column(UnicodeText)
-    exit_status   = Column(Integer)
-    exit_signal   = Column(Integer)
-    satisfiable   = Column(Boolean)
-    certificate   = Column(SQL_List(Integer))
+    uuid                  = Column(SQL_UUID, primary_key = True, default = uuid4)
+    task_uuid             = Column(SQL_UUID, ForeignKey("sat_tasks.uuid"), nullable = False)
+    preprocessor_run_uuid = Column(SQL_UUID, ForeignKey("sat_preprocessor_runs.uuid"))
+    solver_name           = Column(String, ForeignKey("sat_solvers.name"), nullable = False)
+    started               = Column(UTC_DateTime)
+    usage_elapsed         = Column(SQL_TimeDelta)
+    proc_elapsed          = Column(SQL_TimeDelta)
+    cutoff                = Column(SQL_TimeDelta)
+    fqdn                  = Column(String)
+    seed                  = Column(Integer)
+    stdout                = Column(UnicodeText)
+    stderr                = Column(UnicodeText)
+    exit_status           = Column(Integer)
+    exit_signal           = Column(Integer)
+    satisfiable           = Column(Boolean)
+    certificate           = Column(SQL_List(Integer))
 
-    task   = relation(SAT_TaskRecord)
-    solver = relation(SolverRecord)
-
-    @staticmethod
-    def starting_now(*args, **kwargs):
-        """
-        Return a partially-initialized run starting now.
-        """
-
-        assert "started" not in kwargs
-        assert "fqdn" not in kwargs
-
-        run = SAT_SolverRun(*args, **kwargs)
-
-        run.started = utc_now()
-        run.fqdn    = getfqdn()
-
-        return run
+    task             = relation(SAT_TaskRecord)
+    solver           = relation(SAT_SolverRecord)
+    preprocessor_run = relation(SAT_PreprocessorRunRecord)
 
 class PortfolioScoreWorldRecord(DatumBase):
     """
@@ -193,18 +203,7 @@ def research_connect(engines = SQL_Engines.default, flags = module_flags.given):
     Connect to research data storage.
     """
 
-    flags  = module_flags.merged(flags)
-    engine = engines.get(flags.research_database)
+    flags = module_flags.merged(flags)
 
-    DatumBase.metadata.create_all(engine)
-
-    return engine
-
-@with_flags_parsed()
-def main(positional):
-    """
-    Create core database metadata.
-    """
-
-    research_connect()
+    return engines.get(flags.research_database)
 
