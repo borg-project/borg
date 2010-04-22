@@ -66,6 +66,12 @@ class SAT_Preprocessor(ABC):
         Preprocess an instance.
         """
 
+    @abstractmethod
+    def name(self):
+        """
+        Canonical name of the preprocessor.
+        """
+
 class SAT_UncompressingPreprocessor(ABC):
     """
     Uncompress and then preprocess SAT instances.
@@ -137,7 +143,16 @@ class SatELiteOutput(SAT_PreprocessorOutput):
 
             with mkdtemp_scoped(prefix = "tmp.satelite.") as tmpdir:
                 # run the solver
-                log.debug("extending model certificate with SatELite")
+                command = [
+                    self.binary_path,
+                    "+ext",
+                    self.cnf_path,
+                    certificate_file.name,
+                    join(self.output_dir, "variable_map"),
+                    join(self.output_dir, "eliminated_clauses"),
+                    ]
+
+                log.note("extending model certificate with %s", command)
 
                 popened = None
 
@@ -150,14 +165,7 @@ class SatELiteOutput(SAT_PreprocessorOutput):
 
                     popened = \
                         Popen(
-                            [
-                                self.binary_path,
-                                "+ext",
-                                self.cnf_path,
-                                certificate_file.name,
-                                join(self.output_dir, "variable_map"),
-                                join(self.output_dir, "eliminated_clauses"),
-                                ],
+                            command,
                             stdin      = None,
                             stdout     = subprocess.PIPE,
                             stderr     = subprocess.STDOUT,
@@ -276,4 +284,7 @@ class SatELitePreprocessor(SAT_Preprocessor):
                     )
 
         return SatELiteOutput(self.binary_path, output_dir, run)
+
+    @property
+    def name(self): return "SatELite"
 

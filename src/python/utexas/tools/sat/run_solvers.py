@@ -77,12 +77,6 @@ module_flags = \
             action  = "store_true",
             help    = "be noisier [%default]",
             ),
-        Flag(
-            "-r",
-            "--re-solver",
-            action  = "store_true",
-            help    = "interpret solver as regex [%default]",
-            ),
         )
 
 def get_solver_expectations(start_path):
@@ -133,11 +127,11 @@ def tmpdir_uncompliance(lines):
     included = list(strace_signal(lines))
 
     for line in included:
-        log.detail("from strace: %s", line)
+        log.detail("from strace: %s", line.strip())
 
     # examine interesting lines
     bad  = re.compile("open\\(\"/tmp/.+\", .+\\)")
-    good = re.compile("open\\(\"/tmp/solver\\..+\", .+\\)")
+    good = re.compile("open\\(\"/tmp/solver\\_scratch\\..+\", .+\\)")
 
     for line in included:
         if bad.search(line) and not good.search(line):
@@ -159,17 +153,18 @@ def do_run(solver, cnf_path, cutoff, seed_request):
     log.info("seed: %s", seed)
 
     # attempt to solve the instance
-    (satisfiable, run) = solver.solve(cutoff, cnf_path, seed)
+    result = solver.solve(cnf_path, cutoff, seed)
 
-    log.info("satisfiable? %s", satisfiable)
-    log.info("/proc-elapsed: %s", run.proc_elapsed)
-    log.info("usage-elapsed: %s", run.usage_elapsed)
-    log.info("exit status: %s", run.exit_status)
-    log.info("exit signal: %s", run.exit_signal)
-    log.info("stdout:\n%s", "".join(c for (_, c) in run.out_chunks))
-    log.info("stderr:\n%s", "".join(c for (_, c) in run.err_chunks))
+    log.info("result: %s", result)
+    log.info("satisfiable? %s", result.satisfiable)
+#     log.info("/proc-elapsed: %s", run.proc_elapsed)
+#     log.info("usage-elapsed: %s", run.usage_elapsed)
+#     log.info("exit status: %s", run.exit_status)
+#     log.info("exit signal: %s", run.exit_signal)
+    log.info("stdout:\n%s", "".join(c for (_, c) in result.run.out_chunks))
+    log.info("stderr:\n%s", "".join(c for (_, c) in result.run.err_chunks))
 
-    return (satisfiable, run, seed)
+    return (result.satisfiable, result.run, seed)
 
 def do_verified_run(solver, cnf_path, cutoff, seed_request):
     """
@@ -280,6 +275,13 @@ def main(positional):
 
     # basic flag handling
     flags = module_flags.given
+
+    # set up log output
+    import logging
+
+    from cargo.log import enable_default_logging
+
+    enable_default_logging()
 
     if flags.verbose:
         get_logger("utexas.tools.sat.run_solvers").setLevel(logging.NOTSET)

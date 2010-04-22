@@ -73,6 +73,37 @@ module_flags = \
             ),
         )
 
+class SAT_PortfolioResult(SAT_Result):
+    """
+    Result of a portfolio solver.
+    """
+
+    def __init__(self, satisfiable, certificate):
+        """
+        Initialize.
+        """
+
+        SAT_Result.__init__(self)
+
+        self._satisfiable = satisfiable
+        self._certificate = certificate
+
+    @property
+    def satisfiable(self):
+        """
+        Did the solver report the instance satisfiable?
+        """
+
+        return self._satisfiable
+
+    @property
+    def certificate(self):
+        """
+        Certificate of satisfiability, if any.
+        """
+
+        return self._certificate
+
 class SAT_PortfolioSolver(SAT_Solver):
     """
     Solve SAT instances with a portfolio.
@@ -107,7 +138,7 @@ class SAT_PortfolioSolver(SAT_Solver):
                 random,
                 )
 
-        return SAT_Result(satisfiable, certificate)
+        return SAT_PortfolioResult(satisfiable, certificate)
 
     def _solve_on(self, task, cutoff, random):
         """

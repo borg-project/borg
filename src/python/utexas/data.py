@@ -11,6 +11,7 @@ from uuid                       import (
     uuid4,
     )
 from sqlalchemy                 import (
+    Enum,
     Float,
     Column,
     String,
@@ -37,7 +38,6 @@ from cargo.sql.alchemy          import (
 from cargo.flags                import (
     Flag,
     Flags,
-    with_flags_parsed,
     )
 
 log             = get_logger(__name__)
@@ -53,6 +53,15 @@ module_flags    = \
             help    = "use research DATABASE by default [%default]",
             ),
         )
+
+def research_connect(engines = SQL_Engines.default, flags = module_flags.given):
+    """
+    Connect to research data storage.
+    """
+
+    flags = module_flags.merged(flags)
+
+    return engines.get(flags.research_database)
 
 class TaskRecord(DatumBase):
     """
@@ -84,7 +93,7 @@ class TaskNameRecord(DatumBase):
     Place a task in the context of a collection.
     """
 
-    __tablename__ = "task_descriptions"
+    __tablename__ = "task_names"
 
     uuid       = Column(SQL_UUID, primary_key = True, default = uuid4)
     task_uuid  = Column(SQL_UUID, ForeignKey("tasks.uuid"), nullable = False)
@@ -119,18 +128,17 @@ class SAT_PreprocessorRunRecord(DatumBase):
 
     __tablename__ = "sat_preprocessor_runs"
 
-    uuid                  = Column(SQL_UUID, primary_key = True, default = uuid4)
-    preprocessor_name     = Column(String, ForeignKey("sat_preprocessors.name"), nullable = False)
-    preprocessor_run_uuid = Column(SQL_UUID, ForeignKey("sat_preprocessor_runs.uuid"))
-    started               = Column(UTC_DateTime)
-    usage_elapsed         = Column(SQL_TimeDelta)
-    proc_elapsed          = Column(SQL_TimeDelta)
-    cutoff                = Column(SQL_TimeDelta)
-    fqdn                  = Column(String)
-    stdout                = Column(UnicodeText)
-    stderr                = Column(UnicodeText)
-    exit_status           = Column(Integer)
-    exit_signal           = Column(Integer)
+    uuid              = Column(SQL_UUID, primary_key = True, default = uuid4)
+    preprocessor_name = Column(String, ForeignKey("sat_preprocessors.name"), nullable = False)
+    started           = Column(UTC_DateTime)
+    usage_elapsed     = Column(SQL_TimeDelta)
+    proc_elapsed      = Column(SQL_TimeDelta)
+    cutoff            = Column(SQL_TimeDelta)
+    fqdn              = Column(String)
+    stdout            = Column(UnicodeText)
+    stderr            = Column(UnicodeText)
+    exit_status       = Column(Integer)
+    exit_signal       = Column(Integer)
 
     preprocessor = relation(SAT_PreprocessorRecord)
 
@@ -141,69 +149,89 @@ class SAT_SolverRunRecord(DatumBase):
 
     __tablename__ = "sat_solver_runs"
 
-    uuid                  = Column(SQL_UUID, primary_key = True, default = uuid4)
-    task_uuid             = Column(SQL_UUID, ForeignKey("sat_tasks.uuid"), nullable = False)
-    preprocessor_run_uuid = Column(SQL_UUID, ForeignKey("sat_preprocessor_runs.uuid"))
-    solver_name           = Column(String, ForeignKey("sat_solvers.name"), nullable = False)
-    started               = Column(UTC_DateTime)
-    usage_elapsed         = Column(SQL_TimeDelta)
-    proc_elapsed          = Column(SQL_TimeDelta)
-    cutoff                = Column(SQL_TimeDelta)
-    fqdn                  = Column(String)
-    seed                  = Column(Integer)
-    stdout                = Column(UnicodeText)
-    stderr                = Column(UnicodeText)
-    exit_status           = Column(Integer)
-    exit_signal           = Column(Integer)
-    satisfiable           = Column(Boolean)
-    certificate           = Column(SQL_List(Integer))
+    uuid          = Column(SQL_UUID, primary_key = True, default = uuid4)
+    solver_name   = Column(String, ForeignKey("sat_solvers.name"), nullable = False)
+    started       = Column(UTC_DateTime)
+    usage_elapsed = Column(SQL_TimeDelta)
+    proc_elapsed  = Column(SQL_TimeDelta)
+    cutoff        = Column(SQL_TimeDelta)
+    fqdn          = Column(String)
+    seed          = Column(Integer)
+    stdout        = Column(UnicodeText)
+    stderr        = Column(UnicodeText)
+    exit_status   = Column(Integer)
+    exit_signal   = Column(Integer)
 
-    task             = relation(SAT_TaskRecord)
-    solver           = relation(SAT_SolverRecord)
-    preprocessor_run = relation(SAT_PreprocessorRunRecord)
+    solver = relation(SAT_SolverRecord)
 
-class PortfolioScoreWorldRecord(DatumBase):
+class SAT_AttemptRecord(DatumBase):
     """
-    World from a (set of) portfolio tests.
+    An attempt to solve a task.
     """
 
-    __tablename__ = "portfolio_score_worlds"
+    __tablename__ = "sat_attempts"
 
-    uuid     = Column(SQL_UUID, primary_key = True, default = uuid4)
-    ntrain   = Column(Integer)
-    ntest    = Column(Integer)
-    limit    = Column(SQL_TimeDelta)
-    prefix   = Column(String)
-    discount = Column(Float)
-    tags     = Column(SQL_List(String))
+    uuid        = Column(SQL_UUID, primary_key = True, default = uuid4)
+    type        = Column(Enum("run", "preprocessing", "mock", name = "sat_attempt_type"))
+    task_uuid   = Column(SQL_UUID, ForeignKey("sat_tasks.uuid"))
+    trial_uuid  = Column(SQL_UUID, ForeignKey("sat_trials.uuid"))
+    budget      = Column(SQL_TimeDelta)
+    cost        = Column(SQL_TimeDelta)
+    satisfiable = Column(Boolean)
+    certificate = Column(SQL_List(Integer))
 
-class PortfolioScoreRecord(DatumBase):
+    __mapper_args__ = {"polymorphic_on": type}
+
+class SAT_RunAttemptRecord(DatumBase):
     """
-    Result of a portfolio test.
-    """
-
-    __tablename__ = "portfolio_scores"
-
-    # columns
-    uuid         = Column(SQL_UUID, primary_key = True, default = uuid4)
-    world_uuid   = Column(SQL_UUID, ForeignKey("portfolio_score_worlds.uuid"))
-    model_name   = Column(String)
-    planner_name = Column(String)
-    components   = Column(Integer)
-    solved       = Column(Integer)
-    spent        = Column(SQL_TimeDelta)
-    utility      = Column(Float)
-    tags         = Column(SQL_List(String))
-
-    # relations
-    world = relation(PortfolioScoreWorldRecord)
-
-def research_connect(engines = SQL_Engines.default, flags = module_flags.given):
-    """
-    Connect to research data storage.
+    An attempt to solve a task with a concrete solver.
     """
 
-    flags = module_flags.merged(flags)
+    __tablename__   = "sat_run_attempts"
+    __mapper_args__ = {"polymorphic_identity": "run"}
 
-    return engines.get(flags.research_database)
+    uuid            = Column(SQL_UUID, ForeignKey("sat_attempts.uuid"), primary_key = True)
+    solver_run_uuid = Column(SQL_UUID, ForeignKey("sat_solver_runs.uuid"), nullable = False)
+
+class SAT_PreprocessingAttemptRecord(DatumBase):
+    """
+    An attempt to solve a task with a preprocessor-solver pair.
+    """
+
+    __tablename__   = "sat_preprocessing_attempts"
+    __mapper_args__ = {"polymorphic_identity": "preprocessing"}
+
+    uuid                  = Column(SQL_UUID, ForeignKey("sat_attempts.uuid"), primary_key = True)
+    preprocessor_run_uuid = Column(SQL_UUID, ForeignKey("sat_preprocessor_runs.uuid"), nullable = False)
+    inner_attempt_uuid    = Column(SQL_UUID, ForeignKey("sat_attempts.uuid"))
+
+class SAT_Trials(DatumBase):
+    """
+    A set of attempts (or of inner trials).
+    """
+
+    __tablename__ = "sat_trials"
+
+    uuid        = Column(SQL_UUID, primary_key = True, default = uuid4)
+    parent_uuid = Column(SQL_UUID, ForeignKey("sat_trials.uuid"))
+    label       = Column(String)
+
+# class PortfolioScoreRecord(DatumBase):
+#     """
+#     Result of a portfolio test.
+#     """
+
+#     __tablename__ = "portfolio_scores"
+
+#     uuid         = Column(SQL_UUID, primary_key = True, default = uuid4)
+#     world_uuid   = Column(SQL_UUID, ForeignKey("portfolio_score_worlds.uuid"))
+#     model_name   = Column(String)
+#     planner_name = Column(String)
+#     components   = Column(Integer)
+#     solved       = Column(Integer)
+#     spent        = Column(SQL_TimeDelta)
+#     utility      = Column(Float)
+#     tags         = Column(SQL_List(String))
+
+#     world = relation(PortfolioScoreWorldRecord)
 

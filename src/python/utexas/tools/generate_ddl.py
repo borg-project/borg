@@ -39,18 +39,10 @@ module_flags = \
             ),
         )
 
-def main():
+def generate_ddl(engine):
     """
-    Create core database metadata.
+    Print or apply the database schema.
     """
-
-    # connect to the database
-    from cargo.flags import parse_given
-    from utexas.data import research_connect
-
-    parse_given(usage = "usage: %prog [options]")
-
-    engine = research_connect()
 
     # load the appropriate schema
     if module_flags.given.reflect:
@@ -81,4 +73,36 @@ def main():
 
         for table in sorted_tables:
             print CreateTable(table).compile(engine)
+
+def main():
+    """
+    Deal with core database metadata.
+    """
+
+    # get command line arguments
+    import utexas.data
+
+    from cargo.sql.alchemy import SQL_Engines
+    from cargo.flags       import parse_given
+
+    parse_given(usage = "usage: %prog [options]")
+
+    # be verbose in non-print modes
+    if module_flags.given.apply:
+        import logging
+
+        from cargo.log import (
+            get_logger,
+            enable_default_logging,
+            )
+
+        enable_default_logging()
+
+        get_logger("sqlalchemy.engine").setLevel(logging.DEBUG)
+
+    # connect to the database and go
+    with SQL_Engines.default:
+        from utexas.data import research_connect
+
+        generate_ddl(research_connect())
 
