@@ -296,8 +296,6 @@ class SatELitePreprocessor(SAT_Preprocessor):
                 join(output_dir, "eliminated_clauses"),
                 ]
 
-            log.note("preprocessing with %s", command)
-
             run = \
                 run_cpu_limited(
                     command,
