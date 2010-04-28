@@ -42,8 +42,9 @@ def get_named_solvers(paths = [], flags = {}):
 
     import json
 
-    from os.path  import dirname
-    from cargo.io import expandpath
+    from os.path            import dirname
+    from cargo.io           import expandpath
+    from utexas.sat.solvers import SAT_CompetitionSolver
 
     flags = module_flags.merged(flags)
 
@@ -84,7 +85,7 @@ class SolverError(RuntimeError):
 
 class SAT_Result(object):
     """
-    Minimal outcome of a SAT solver.
+    Outcome of a SAT solver.
     """
 
     @abstractproperty
@@ -98,6 +99,35 @@ class SAT_Result(object):
         """
         Certificate of satisfiability, if any.
         """
+
+class SAT_BareResult(SAT_Result):
+    """
+    Minimal outcome of a SAT solver.
+    """
+
+    def __init__(self, satisfiable, certificate):
+        """
+        Initialize.
+        """
+
+        self._satisfiable = satisfiable
+        self._certificate = certificate
+
+    @property
+    def satisfiable(self):
+        """
+        Did the solver report the instance satisfiable?
+        """
+
+        return self._satisfiable
+
+    @abstractproperty
+    def certificate(self):
+        """
+        Certificate of satisfiability, if any.
+        """
+
+        return self._certificate
 
 class SAT_Solver(ABC):
     """

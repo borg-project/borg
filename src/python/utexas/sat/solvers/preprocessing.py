@@ -4,7 +4,13 @@ utexas/sat/solvers/preprocessing.py
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from utexas.sat.solvers.base import SAT_Solver
+from cargo.log               import get_logger
+from utexas.sat.solvers.base import (
+    SAT_Result,
+    SAT_Solver,
+    )
+
+log = get_logger(__name__)
 
 class SAT_PreprocessingSolverResult(SAT_Result):
     """
@@ -22,15 +28,18 @@ class SAT_PreprocessingSolverResult(SAT_Result):
         self.solver_result       = solver_result
         self._certificate        = certificate
 
-    @abstractproperty
+    @property
     def satisfiable(self):
         """
         Did the solver report the instance satisfiable?
         """
 
-        return self.solver_result.satisfiable
+        if self.solver_result is None:
+            return self.preprocessor_output.solver_result.satisfiable
+        else:
+            return self.solver_result.satisfiable
 
-    @abstractproperty
+    @property
     def certificate(self):
         """
         Certificate of satisfiability, if any.
@@ -67,13 +76,31 @@ class SAT_PreprocessingSolver(SAT_Solver):
 
         with mkdtemp_scoped(prefix = "sat_preprocessing.") as sandbox_path:
             preprocessed = self.preprocessor.preprocess(input_path, sandbox_path, cutoff)
-            remaining    = max(TimeDelta(), cutoff - preprocessed.elapsed)
-            result       = self.solver.solve(preprocessed.cnf_path, remaining, seed)
 
-            if result.certificate is None:
-                extended = None
+            if preprocessed.solver_result is not None:
+                # the preprocessor solved the instance
+                return \
+                    SAT_PreprocessingSolverResult(
+                        preprocessed,
+                        None,
+                        preprocessed.solver_result.certificate,
+                        )
             else:
-                extended = preprocessed.extend(result.certificate)
+                # the preprocessor did not solve the instance
+                remaining = max(TimeDelta(), cutoff - preprocessed.elapsed)
 
-            return SAT_PreprocessingSolverResult(preprocessed, result, extended)
+                if preprocessed.cnf_path is None:
+                    # ... it failed unexpectedly
+                    result   = self.solver.solve(input_path, remaining, seed)
+                    extended = result.certificate
+                else:
+                    # ... it generated a new CNF
+                    result = self.solver.solve(preprocessed.cnf_path, remaining, seed)
+
+                    if result.certificate is None:
+                        extended = None
+                    else:
+                        extended = preprocessed.extend(result.certificate)
+
+                return SAT_PreprocessingSolverResult(preprocessed, result, extended)
 

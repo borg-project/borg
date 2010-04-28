@@ -4,7 +4,49 @@ utexas/sat/solvers/competition.py
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from utexas.sat.solvers.base import SAT_Solver
+import re
+
+from cargo.log               import get_logger
+from utexas.sat.solvers.base import (
+    SAT_Result,
+    SAT_Solver,
+    )
+
+log = get_logger(__name__)
+
+def scan_competition_output(lines):
+    """
+    Interpret reasonably well-formed competition-style output.
+    """
+
+    from itertools import imap
+
+    satisfiable = None
+    certificate = None
+
+    for line in lines:
+        # reported sat
+        if line.startswith("s SATISFIABLE"):
+            if satisfiable is not None:
+                raise RuntimeError("multiple solution lines in output")
+            else:
+                satisfiable = True
+        # reported unsat
+        elif line.startswith("s UNSATISFIABLE"):
+            if satisfiable is not None:
+                raise RuntimeError("multiple solution lines in output")
+            else:
+                satisfiable = False
+        # provided (part of) a sat certificate
+        elif line.startswith("v "):
+            literals = imap(int, line[2:].split())
+
+            if certificate is None:
+                certificate = list(literals)
+            else:
+                certificate.extend(literals)
+
+    return (satisfiable, certificate)
 
 class SAT_RunResult(SAT_Result):
     """
@@ -20,9 +62,9 @@ class SAT_RunResult(SAT_Result):
 
         self._satisfiable = satisfiable
         self._certificate = certificate
-        self.run         = run
+        self.run          = run
 
-    @abstractproperty
+    @property
     def satisfiable(self):
         """
         Did the solver report the instance satisfiable?
@@ -30,7 +72,7 @@ class SAT_RunResult(SAT_Result):
 
         return self._satisfiable
 
-    @abstractproperty
+    @property
     def certificate(self):
         """
         Certificate of satisfiability, if any.
@@ -73,6 +115,8 @@ class SAT_CompetitionSolver(SAT_Solver):
 
         Comments quote the competition specification.
         """
+
+        from utexas.sat.solvers import SolverError
 
         # FIXME support no-cutoff operation
 
@@ -162,33 +206,12 @@ class SAT_CompetitionSolver(SAT_Solver):
                     )
 
         # and analyze its output
-        satisfiable = None
-        certificate = None
-
         if run.exit_status is not None:
-            from itertools import imap
-
-            for line in "".join(c for (t, c) in run.out_chunks).split("\n"):
-                # reported sat
-                if line.startswith("s SATISFIABLE"):
-                    if satisfiable is not None:
-                        raise SolverError("multiple solution lines in solver output")
-                    else:
-                        satisfiable = True
-                # reported unsat
-                elif line.startswith("s UNSATISFIABLE"):
-                    if satisfiable is not None:
-                        raise SolverError("multiple solution lines in solver output")
-                    else:
-                        satisfiable = False
-                # provided (part of) a sat certificate
-                elif line.startswith("v "):
-                    literals = imap(int, line[2:].split())
-
-                    if certificate is None:
-                        certificate = list(literals)
-                    else:
-                        certificate.extend(literals)
+            out_lines                  = "".join(c for (t, c) in run.out_chunks).split("\n")
+            (satisfiable, certificate) = scan_competition_output(out_lines)
+        else:
+            satisfiable = None
+            certificate = None
 
         # crazy solver?
         if satisfiable is True:

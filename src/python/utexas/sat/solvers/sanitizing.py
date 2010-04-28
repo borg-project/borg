@@ -4,7 +4,10 @@ utexas/sat/solvers/sanitizing.py
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+from cargo.log               import get_logger
 from utexas.sat.solvers.base import SAT_Solver
+
+log = get_logger(__name__)
 
 class SAT_SanitizingSolver(SAT_Solver):
     """
@@ -33,15 +36,15 @@ class SAT_SanitizingSolver(SAT_Solver):
 
         # FIXME use a temporary file, not directory
 
-        with mkdtemp_scoped(prefix = "solver_input.") as sandbox_path:
+        with mkdtemp_scoped(prefix = "sanitized.") as sandbox_path:
             # unconditionally sanitize the instance
             from utexas.sat.cnf import write_sanitized_cnf
 
             sanitized_path = join(sandbox_path, "sanitized.cnf")
 
-            with open(uncompressed_path) as uncompressed_file:
+            with open(input_path) as input_path:
                 with open(sanitized_path, "w") as sanitized_file:
-                    write_sanitized_cnf(uncompressed_file, sanitized_file)
+                    write_sanitized_cnf(input_path, sanitized_file)
                     sanitized_file.flush()
                     fsync(sanitized_file.fileno())
 

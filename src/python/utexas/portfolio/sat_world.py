@@ -32,7 +32,6 @@ from utexas.sat.solvers       import get_random_seed
 from utexas.data              import (
     DatumBase,
     ResearchSession,
-    SAT_SolverRunRecord,
     )
 from utexas.portfolio.world   import (
     Task,

@@ -4,14 +4,17 @@ utexas/sat/solvers/uncompressing.py
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+from cargo.log               import get_logger
 from utexas.sat.solvers.base import SAT_Solver
+
+log = get_logger(__name__)
 
 class SAT_UncompressingSolver(SAT_Solver):
     """
     Execute another solver using an uncompressed instance.
     """
 
-    def __init__(self, solver):
+    def __init__(self, solver, name = None):
         """
         Initialize.
         """
@@ -19,6 +22,7 @@ class SAT_UncompressingSolver(SAT_Solver):
         SAT_Solver.__init__(self)
 
         self.solver = solver
+        self.name   = name
 
     def solve(self, input_path, cutoff = None, seed = None):
         """

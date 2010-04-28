@@ -25,7 +25,7 @@ from cargo.flags                import (
 from cargo.temporal             import TimeDelta
 from utexas.sat.solvers         import (
     SAT_Solver,
-    SAT_Result,
+    SAT_BareResult,
     SAT_UncompressingSolver,
     SAT_PreprocessingSolver,
     get_named_solvers,
@@ -73,36 +73,10 @@ module_flags = \
             ),
         )
 
-class SAT_PortfolioResult(SAT_Result):
+class SAT_PortfolioResult(SAT_BareResult):
     """
     Result of a portfolio solver.
     """
-
-    def __init__(self, satisfiable, certificate):
-        """
-        Initialize.
-        """
-
-        SAT_Result.__init__(self)
-
-        self._satisfiable = satisfiable
-        self._certificate = certificate
-
-    @property
-    def satisfiable(self):
-        """
-        Did the solver report the instance satisfiable?
-        """
-
-        return self._satisfiable
-
-    @property
-    def certificate(self):
-        """
-        Certificate of satisfiability, if any.
-        """
-
-        return self._certificate
 
 class SAT_PortfolioSolver(SAT_Solver):
     """
@@ -252,6 +226,31 @@ def main((input_path,)):
 
     # load configuration
     # FIXME actually load configuration
+
+    from uuid               import UUID
+    from utexas.data        import (
+        SAT_TaskRow,
+        research_connect,
+        )
+    from utexas.sat.tasks   import SAT_MockFileTask
+    from utexas.sat.solvers import (
+        SAT_MockCompetitionSolver,
+        SAT_MockPreprocessingSolver,
+        )
+
+    task_row          = SAT_TaskRow(uuid = UUID("f5af42bf-f3e1-5b3f-ae6d-57a9b879a703"))
+#     preprocessor_row  = SAT_PreprocessorRow(name = "SatELite")
+    task              = SAT_MockFileTask(task_row)
+#     preprocessor_task = SAT_MockPreprocessedTask("SatELite", inner_task)
+    engine            = research_connect()
+    inner_solver      = SAT_MockCompetitionSolver("sat/2009/precosat", engine)
+    preprocessing     = SAT_MockPreprocessingSolver("SatELite", inner_solver, engine)
+
+    preprocessing.solve(task, TimeDelta(seconds = 8))
+
+#     print inner_task.select_attempts(preprocessor_task.select_attempts()).compile()
+
+    raise SystemExit()
 
     # solvers to use
     solver_names = [

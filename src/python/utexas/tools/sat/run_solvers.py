@@ -14,8 +14,8 @@ if __name__ == "__main__":
 
 import re
 import json
-import logging
 import numpy
+import utexas.sat.solvers
 
 from os.path            import (
     join,
@@ -32,9 +32,8 @@ from cargo.flags        import (
     with_flags_parsed,
     )
 from cargo.temporal     import TimeDelta
-from utexas.sat.solvers import get_named_solvers
 
-log = get_logger(__name__, level = logging.NOTE)
+log = get_logger(__name__, default_level = "NOTE")
 
 module_flags = \
     Flags(
@@ -153,14 +152,20 @@ def do_run(solver, cnf_path, cutoff, seed_request):
     log.info("seed: %s", seed)
 
     # attempt to solve the instance
-    result = solver.solve(cnf_path, cutoff, seed)
+    from utexas.sat.solvers import (
+        SAT_SanitizingSolver,
+        SAT_UncompressingSolver,
+        )
+
+    u_solver = SAT_UncompressingSolver(SAT_SanitizingSolver(solver), solver.name)
+    result   = u_solver.solve(cnf_path, cutoff, seed)
 
     log.info("result: %s", result)
     log.info("satisfiable? %s", result.satisfiable)
-#     log.info("/proc-elapsed: %s", run.proc_elapsed)
-#     log.info("usage-elapsed: %s", run.usage_elapsed)
-#     log.info("exit status: %s", run.exit_status)
-#     log.info("exit signal: %s", run.exit_signal)
+    log.info("/proc-elapsed: %s", result.run.proc_elapsed)
+    log.info("usage-elapsed: %s", result.run.usage_elapsed)
+    log.info("exit status: %s", result.run.exit_status)
+    log.info("exit signal: %s", result.run.exit_signal)
     log.info("stdout:\n%s", "".join(c for (_, c) in result.run.out_chunks))
     log.info("stderr:\n%s", "".join(c for (_, c) in result.run.err_chunks))
 
@@ -277,18 +282,18 @@ def main(positional):
     flags = module_flags.given
 
     # set up log output
-    import logging
-
     from cargo.log import enable_default_logging
 
     enable_default_logging()
 
     if flags.verbose:
-        get_logger("utexas.tools.sat.run_solvers").setLevel(logging.NOTSET)
-        get_logger("cargo.unix.accounting").setLevel(logging.DEBUG)
-        get_logger("utexas.sat.solvers").setLevel(logging.DEBUG)
+        get_logger("utexas.tools.sat.run_solvers", level = "NOTSET")
+        get_logger("cargo.unix.accounting", level = "DEBUG")
+        get_logger("utexas.sat.solvers", level = "DEBUG")
 
     # build the solvers
+    from utexas.sat.solvers import get_named_solvers
+
     solvers = get_named_solvers()
 
     # get expectations, if any

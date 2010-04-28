@@ -34,6 +34,24 @@ class SAT_PreprocessorOutput(ABC):
     A preprocessed instance with associated variable maps.
     """
 
+    @abstractproperty
+    def elapsed(self):
+        """
+        Time elapsed in preprocessor execution.
+        """
+
+    @abstractproperty
+    def cnf_path(self):
+        """
+        The path to the post-preprocessed CNF, if any.
+        """
+
+    @abstractproperty
+    def solver_result(self):
+        """
+        The result of the integrated solver, if any.
+        """
+
     @abstractmethod
     def extend(self, certificate):
         """
@@ -43,22 +61,16 @@ class SAT_PreprocessorOutput(ABC):
         solution to the unprocessed CNF expression.
         """
 
-    @abstractproperty
-    def cnf_path(self):
-        """
-        The path to the preprocessed CNF.
-        """
-
-    @abstractproperty
-    def elapsed(self):
-        """
-        Time elapsed in preprocessor execution.
-        """
-
 class SAT_Preprocessor(ABC):
     """
     Preprocess SAT instances.
     """
+
+    @abstractproperty
+    def name(self):
+        """
+        Canonical name of the preprocessor.
+        """
 
     @abstractmethod
     def preprocess(self, input_path, output_dir, cutoff = None):
@@ -66,13 +78,7 @@ class SAT_Preprocessor(ABC):
         Preprocess an instance.
         """
 
-    @abstractmethod
-    def name(self):
-        """
-        Canonical name of the preprocessor.
-        """
-
-class SAT_UncompressingPreprocessor(ABC):
+class SAT_UncompressingPreprocessor(SAT_Preprocessor):
     """
     Uncompress and then preprocess SAT instances.
     """
@@ -115,19 +121,52 @@ class SatELiteOutput(SAT_PreprocessorOutput):
     Result of the SatELite preprocessor.
     """
 
-    def __init__(self, binary_path, output_dir, run):
+    def __init__(self, run, binary_path, output_dir, solver_result):
         """
         Initialize.
         """
 
-        self.binary_path = binary_path
-        self.output_dir  = output_dir
-        self.run         = run
+        SAT_PreprocessorOutput.__init__(self)
+
+        self.run            = run
+        self.binary_path    = binary_path
+        self.output_dir     = output_dir
+        self._solver_result = solver_result
+
+    @property
+    def elapsed(self):
+        """
+        Time elapsed in preprocessor execution.
+        """
+
+        return self.run.proc_elapsed
+
+    @property
+    def cnf_path(self):
+        """
+        The path to the preprocessed CNF.
+        """
+
+        if self.output_dir is None:
+            return None
+        else:
+            return join(self.output_dir, "preprocessed.cnf")
+
+    @property
+    def solver_result(self):
+        """
+        The result of the integrated solver, if any.
+        """
+
+        return self._solver_result
 
     def extend(self, certificate):
         """
         Extend the specified certificate.
         """
+
+        if self.cnf_path is None:
+            raise RuntimeError("extend() on SatELite output that has no CNF")
 
         # write the certificate to a file
         from os       import fsync
@@ -205,22 +244,6 @@ class SatELiteOutput(SAT_PreprocessorOutput):
 
                     return extended
 
-    @property
-    def cnf_path(self):
-        """
-        The path to the preprocessed CNF.
-        """
-
-        return join(self.output_dir, "preprocessed.cnf")
-
-    @property
-    def elapsed(self):
-        """
-        Time elapsed in preprocessor execution.
-        """
-
-        return self.run.proc_elapsed
-
 class SatELitePreprocessor(SAT_Preprocessor):
     """
     The standard SatELite preprocessor.
@@ -254,7 +277,9 @@ class SatELitePreprocessor(SAT_Preprocessor):
         """
 
         # FIXME better support for the no-cutoff case
-        from cargo.temporal import TimeDelta
+
+        from cargo.temporal     import TimeDelta
+        from utexas.sat.solvers import scan_competition_output
 
         if cutoff is None:
             cutoff = TimeDelta(seconds = 1e6)
@@ -283,7 +308,19 @@ class SatELitePreprocessor(SAT_Preprocessor):
                         },
                     )
 
-        return SatELiteOutput(self.binary_path, output_dir, run)
+        # interpret its behavior
+        if run.exit_status in (10, 20):
+            from utexas.sat.solvers import SAT_BareResult
+
+            out_lines                  = "".join(c for (t, c) in run.out_chunks).split("\n")
+            (satisfiable, certificate) = scan_competition_output(out_lines)
+            result                     = SAT_BareResult(satisfiable, certificate)
+
+            return SatELiteOutput(run, self.binary_path, None, result)
+        elif run.exit_status == 0:
+            return SatELiteOutput(run, self.binary_path, output_dir, None)
+        else:
+            return SatELiteOutput(run, self.binary_path, None, None)
 
     @property
     def name(self): return "SatELite"
