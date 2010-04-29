@@ -80,8 +80,6 @@ class MultinomialMixtureActionModel(ActionModel):
         out = numpy.empty((M, D))
         pi  = numpy.copy(self._mixture.pi)
 
-#         log.debug("pre pi: %s", pi)
-
         multinomial_model_predict(
             pi,
             self.mix_MKD,
@@ -89,11 +87,29 @@ class MultinomialMixtureActionModel(ActionModel):
             out,
             )
 
-#         log.debug("post pi: %s", pi)
+        # log an outcome-probability table
+        rows = {}
 
+        for action in self._actions:
+            ps = rows.get(action.solver, [])
+
+            ps.append((action.cutoff, out[action_indices[action]]))
+
+            rows[action.solver] = ps
+
+        sorted_rows = [(k.name, sorted(v, key = lambda (c, p): c)) for (k, v) in rows.items()]
+        sorted_all  = sorted(sorted_rows, key = lambda (k, v): k)
+        longest     = max(len(s) for (s, _) in sorted_all)
+        table       = \
+            "\n".join(
+                "%s: %s" % (s.ljust(longest + 1), " ".join("%.4f" % p[0] for (c, p) in r)) \
+                for (s, r) in sorted_all \
+                )
+
+        log.debug("probabilities of action success:\n%s", table)
+
+        # return predictions
         predicted = out[numpy.array([action_indices[a] for a in feasible])]
-
-        log.info("predicted: %s", predicted)
 
         return dict(zip(feasible, predicted))
 

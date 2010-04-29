@@ -237,7 +237,7 @@ def main((input_path,)):
     random = RandomState(flags.seed)
 
     if flags.model is not None:
-        # configurable model
+        # configurable model-based portfolio
         import cPickle as pickle
 
         with open(flags.model) as file:
@@ -245,9 +245,9 @@ def main((input_path,)):
 
         actions        = [SAT_WorldAction(named_solvers[s], c) for (s, c) in model._actions]
         model._actions = actions
-        planner = HardMyopicActionPlanner(1.0 - 5e-3)
+        planner = HardMyopicActionPlanner(1.0 - 2e-3)
     else:
-        # hardcoded default solvers
+        # hardcoded random portfolio
         solver_names = [
             "sat/2009/CirCUs",
             "sat/2009/clasp",
@@ -260,8 +260,6 @@ def main((input_path,)):
             "sat/2009/rsat_09",
             "sat/2009/SApperloT",
             ]
-
-        # hardcoded random model
         solvers = map(named_solvers.__getitem__, solver_names)
         cutoffs = [TimeDelta(seconds = c) for c in r_[10.0:800.0:6j]]
         actions = [SAT_WorldAction(*a) for a in product(solvers, cutoffs)]
