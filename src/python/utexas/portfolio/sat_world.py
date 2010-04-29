@@ -8,49 +8,27 @@ The world of SAT.
 
 import numpy
 
-from itertools                import izip
-from contextlib               import closing
-from collections              import (
-    Sequence,
-    defaultdict,
-    )
-from sqlalchemy               import (
-    and_,
-    case,
-    select,
-    create_engine,
-    )
-from sqlalchemy.orm           import sessionmaker
-from sqlalchemy.sql.functions import random as sql_random
-from cargo.log                import get_logger
-from cargo.flags              import (
-    Flag,
-    Flags,
-    )
-from cargo.iterators          import grab
-from utexas.sat.solvers       import get_random_seed
-from utexas.data              import (
-    DatumBase,
-    ResearchSession,
-    )
-from utexas.portfolio.world   import (
+from cargo.log               import get_logger
+from utexas.sat.solvers      import get_random_seed
+from utexas.portfolio.world  import (
     Task,
     World,
     Action,
     Outcome,
     )
 
-log          = get_logger(__name__)
-module_flags = \
-    Flags(
-        "SAT Data Storage",
-        Flag(
-            "--sat-world-cache",
-            default = "sqlite:///:memory:",
-            metavar = "DATABASE",
-            help    = "use research DATABASE by default [%default]",
-            ),
-        )
+log = get_logger(__name__)
+
+# module_flags = \
+#     Flags(
+#         "SAT Data Storage",
+#         Flag(
+#             "--sat-world-cache",
+#             default = "sqlite:///:memory:",
+#             metavar = "DATABASE",
+#             help    = "use research DATABASE by default [%default]",
+#             ),
+#         )
 
 class SAT_WorldTask(Task):
     """
@@ -184,103 +162,100 @@ SAT_WorldOutcome.BY_INDEX = [
     SAT_WorldOutcome.UNSOLVED,
     ]
 
-class SAT_World(object):
-    # FIXME
-    def __init__(self, actions, tasks, flags = module_flags.given):
-        these_flags = module_flags.merged(flags)
+# class SAT_World(object):
+#     def __init__(self, actions, tasks, flags = module_flags.given):
+#         these_flags = module_flags.merged(flags)
 
-        # world properties
-        self.actions   = actions
-        self.tasks     = tasks
-        self.outcomes  = SAT_Outcome.BY_INDEX
-        self.utilities = numpy.array([o.utility for o in self.outcomes])
+#         self.actions   = actions
+#         self.tasks     = tasks
+#         self.outcomes  = SAT_Outcome.BY_INDEX
+#         self.utilities = numpy.array([o.utility for o in self.outcomes])
 
-        # establish a local sqlite cache
-        # FIXME engine disposal?
-        self.LocalResearchSession = sessionmaker(bind = create_engine(these_flags.sat_world_cache))
+#         self.LocalResearchSession = sessionmaker(bind = create_engine(these_flags.sat_world_cache))
 
-    def act(self, task, action, nrestarts = 1, random = numpy.random):
-        """
-        Retrieve a random sample.
-        """
+#     def act(self, task, action, nrestarts = 1, random = numpy.random):
+#         """
+#         Retrieve a random sample.
+#         """
 
-        log.debug("taking %i action(s) %s on task %s", nrestarts, action, task)
+#         log.debug("taking %i action(s) %s on task %s", nrestarts, action, task)
 
-        return [o for (o, _) in self.act_extra(task, action, nrestarts, random)]
+#         return [o for (o, _) in self.act_extra(task, action, nrestarts, random)]
 
-    def act_extra(self, task, action, nrestarts = 1, random = numpy.random):
-        """
-        Act, and provide a "true" value for time spent.
-        """
+#     def act_extra(self, task, action, nrestarts = 1, random = numpy.random):
+#         """
+#         Act, and provide a "true" value for time spent.
+#         """
+# from cargo.iterators          import grab
 
-        sat_case  = [(SAT_SolverRun.proc_elapsed <= action.cutoff, SAT_SolverRun.satisfiable)]
-        statement = \
-            select(
-                [
-                    case(sat_case),
-                    SAT_SolverRun.proc_elapsed,
-                    ],
-                and_(
-                    SAT_SolverRun.task_uuid   == task.task.uuid,
-                    SAT_SolverRun.solver_name == action.solver.name,
-                    SAT_SolverRun.cutoff      >= action.cutoff,
-                    ),
-                )
+#         sat_case  = [(SAT_SolverRun.proc_elapsed <= action.cutoff, SAT_SolverRun.satisfiable)]
+#         statement = \
+#             select(
+#                 [
+#                     case(sat_case),
+#                     SAT_SolverRun.proc_elapsed,
+#                     ],
+#                 and_(
+#                     SAT_SolverRun.task_uuid   == task.task.uuid,
+#                     SAT_SolverRun.solver_name == action.solver.name,
+#                     SAT_SolverRun.cutoff      >= action.cutoff,
+#                     ),
+#                 )
 
-        with closing(self.LocalResearchSession()) as lsession:
-            rows  = lsession.connection().execute(statement)
-            pairs = [(SAT_Outcome.BY_VALUE[s], min(e, action.cutoff)) for (s, e) in rows]
+#         with closing(self.LocalResearchSession()) as lsession:
+#             rows  = lsession.connection().execute(statement)
+#             pairs = [(SAT_Outcome.BY_VALUE[s], min(e, action.cutoff)) for (s, e) in rows]
 
-            return [grab(pairs, random) for i in xrange(nrestarts)]
+#             return [grab(pairs, random) for i in xrange(nrestarts)]
 
-    def act_once_extra(self, task, action):
-        """
-        Act, and provide a "true" value for time spent.
-        """
+#     def act_once_extra(self, task, action):
+#         """
+#         Act, and provide a "true" value for time spent.
+#         """
 
-        sat_case  = [(SAT_SolverRun.proc_elapsed <= action.cutoff, SAT_SolverRun.satisfiable)]
-        statement = \
-            select(
-                [
-                    case(sat_case),
-                    SAT_SolverRun.proc_elapsed,
-                    ],
-                and_(
-                    SAT_SolverRun.task_uuid   == task.task.uuid,
-                    SAT_SolverRun.solver_name == action.solver.name,
-                    SAT_SolverRun.cutoff      >= action.cutoff,
-                    ),
-                order_by = sql_random(),
-                limit    = 1,
-                )
+#         sat_case  = [(SAT_SolverRun.proc_elapsed <= action.cutoff, SAT_SolverRun.satisfiable)]
+#         statement = \
+#             select(
+#                 [
+#                     case(sat_case),
+#                     SAT_SolverRun.proc_elapsed,
+#                     ],
+#                 and_(
+#                     SAT_SolverRun.task_uuid   == task.task.uuid,
+#                     SAT_SolverRun.solver_name == action.solver.name,
+#                     SAT_SolverRun.cutoff      >= action.cutoff,
+#                     ),
+#                 order_by = sql_random(),
+#                 limit    = 1,
+#                 )
 
-        with closing(self.LocalResearchSession()) as lsession:
-            ((sat, elapsed),) = lsession.connection().execute(statement)
+#         with closing(self.LocalResearchSession()) as lsession:
+#             ((sat, elapsed),) = lsession.connection().execute(statement)
 
-            return (SAT_Outcome.BY_VALUE[sat], min(elapsed, action.cutoff))
+#             return (SAT_Outcome.BY_VALUE[sat], min(elapsed, action.cutoff))
 
-    def get_true_probabilities(self, task, action):
-        """
-        Get the true outcome probabilities for an action.
-        """
+#     def get_true_probabilities(self, task, action):
+#         """
+#         Get the true outcome probabilities for an action.
+#         """
 
-        sat_case  = [(SAT_SolverRun.proc_elapsed <= action.cutoff, SAT_SolverRun.satisfiable)]
-        statement = \
-            select(
-                [case(sat_case)],
-                and_(
-                    SAT_SolverRun.task_uuid   == task.task.uuid,
-                    SAT_SolverRun.solver_name == action.solver.name,
-                    SAT_SolverRun.cutoff      >= action.cutoff,
-                    ),
-                )
+#         sat_case  = [(SAT_SolverRun.proc_elapsed <= action.cutoff, SAT_SolverRun.satisfiable)]
+#         statement = \
+#             select(
+#                 [case(sat_case)],
+#                 and_(
+#                     SAT_SolverRun.task_uuid   == task.task.uuid,
+#                     SAT_SolverRun.solver_name == action.solver.name,
+#                     SAT_SolverRun.cutoff      >= action.cutoff,
+#                     ),
+#                 )
 
-        with closing(self.LocalResearchSession()) as lsession:
-            rows   = lsession.connection().execute(statement)
-            counts = numpy.zeros(len(self.outcomes))
+#         with closing(self.LocalResearchSession()) as lsession:
+#             rows   = lsession.connection().execute(statement)
+#             counts = numpy.zeros(len(self.outcomes))
 
-            for (sat,) in rows:
-                counts[SAT_Outcome.BY_VALUE[sat].n] += 1
+#             for (sat,) in rows:
+#                 counts[SAT_Outcome.BY_VALUE[sat].n] += 1
 
-        return counts / numpy.sum(counts)
+#         return counts / numpy.sum(counts)
 

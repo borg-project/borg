@@ -12,58 +12,36 @@ if __name__ == "__main__":
 
     raise SystemExit(main())
 
-import numpy
+import utexas.sat.preprocessors
 
 from logging                    import Formatter
-from numpy.random               import RandomState
 from cargo.log                  import get_logger
 from cargo.flags                import (
     Flag,
     Flags,
     with_flags_parsed,
     )
-from cargo.temporal             import TimeDelta
 from utexas.sat.solvers         import (
     SAT_Solver,
     SAT_BareResult,
-    SAT_UncompressingSolver,
-    SAT_PreprocessingSolver,
-    get_named_solvers,
     )
-from utexas.sat.preprocessors   import SatELitePreprocessor
-from utexas.portfolio.models    import RandomActionModel
-from utexas.portfolio.planners  import HardMyopicActionPlanner
 from utexas.portfolio.sat_world import (
     SAT_WorldTask,
     SAT_WorldAction,
     )
-from utexas.portfolio.strategies import ModelingSelectionStrategy
 
-log = get_logger(__name__, level = "NOTE")
+log = get_logger(__name__, default_level = "NOTE")
 
 module_flags = \
     Flags(
         "Solver Execution Options",
         Flag(
-            "-c",
-            "--configuration",
-            metavar = "FILE",
-            help    = "load portfolio configuration from FILE [%default]",
-            ),
-        Flag(
             "-s",
             "--seed",
             type    = int,
-            default = 42,
+            default = 43,
             metavar = "INT",
             help    = "use INT to seed the internal PRNG [%default]",
-            ),
-        Flag(
-            "-u",
-            "--cutoff",
-            type    = float,
-            metavar = "FLOAT",
-            help    = "run for at most ~FLOAT seconds [%default]",
             ),
         Flag(
             "-v",
@@ -96,6 +74,8 @@ class SAT_PortfolioSolver(SAT_Solver):
         Execute the solver and return its outcome, given an input path.
         """
 
+        from numpy.random import RandomState
+
         # get us a pseudorandom sequence
         if type(seed) is int:
             random = RandomState(seed)
@@ -118,6 +98,8 @@ class SAT_PortfolioSolver(SAT_Solver):
         """
         Evaluate on a specific task.
         """
+
+        from cargo.temporal import TimeDelta
 
         remaining = cutoff
         nleft     = self.max_invocations
@@ -219,53 +201,48 @@ def main((input_path,)):
     flags = module_flags.given
 
     if flags.verbose:
-        get_logger("utexas.tools.sat.run_solvers").setLevel(logging.NOTSET)
-        get_logger("cargo.unix.accounting").setLevel(logging.NOTE)
-        get_logger("utexas.sat.solvers").setLevel(logging.DEBUG)
-        get_logger("utexas.sat.preprocessors").setLevel(logging.DEBUG)
-
-    # load configuration
-    # FIXME actually load configuration
-
-    from uuid               import UUID
-    from utexas.data        import (
-        SAT_TaskRow,
-        research_connect,
-        )
-    from utexas.sat.tasks   import SAT_MockFileTask
-    from utexas.sat.solvers import (
-        SAT_MockCompetitionSolver,
-        SAT_MockPreprocessingSolver,
-        )
-
-    task_row          = SAT_TaskRow(uuid = UUID("f5af42bf-f3e1-5b3f-ae6d-57a9b879a703"))
-#     preprocessor_row  = SAT_PreprocessorRow(name = "SatELite")
-    task              = SAT_MockFileTask(task_row)
-#     preprocessor_task = SAT_MockPreprocessedTask("SatELite", inner_task)
-    engine            = research_connect()
-    inner_solver      = SAT_MockCompetitionSolver("sat/2009/precosat", engine)
-    preprocessing     = SAT_MockPreprocessingSolver("SatELite", inner_solver, engine)
-
-    preprocessing.solve(task, TimeDelta(seconds = 8))
-
-#     print inner_task.select_attempts(preprocessor_task.select_attempts()).compile()
-
-    raise SystemExit()
+        get_logger("utexas.tools.sat.run_solvers", level = "NOTSET")
+        get_logger("cargo.unix.accounting", level = "DETAIL")
+        get_logger("utexas.sat.solvers", level = "DETAIL")
+        get_logger("utexas.sat.preprocessors", level = "DETAIL")
 
     # solvers to use
+    from utexas.sat.solvers         import (
+        SAT_Solver,
+        SAT_BareResult,
+        SAT_UncompressingSolver,
+        SAT_PreprocessingSolver,
+        get_named_solvers,
+        )
+
     solver_names = [
+        "sat/2009/CirCUs",
         "sat/2009/clasp",
         "sat/2009/glucose",
-#         "sat/2009/minisat_cumr_p",
+        "sat/2009/LySAT_i",
+        "sat/2009/minisat_09z",
+        "sat/2009/minisat_cumr_p",
         "sat/2009/mxc_09",
         "sat/2009/precosat",
+        "sat/2009/rsat_09",
+        "sat/2009/SApperloT",
         ]
     named_solvers = get_named_solvers()
     solvers       = map(named_solvers.__getitem__, solver_names)
 
     # instantiate the random strategy
+    from itertools                   import product
+    from numpy                       import r_
+    from numpy.random                import RandomState
+    from cargo.temporal              import TimeDelta
+    from utexas.sat.preprocessors    import SatELitePreprocessor
+    from utexas.portfolio.models     import RandomActionModel
+    from utexas.portfolio.planners   import HardMyopicActionPlanner
+    from utexas.portfolio.strategies import ModelingSelectionStrategy
+
     random   = RandomState(flags.seed)
-    actions  = [SAT_WorldAction(s, TimeDelta(seconds = 4.0)) for s in solvers]
+    cutoffs  = [TimeDelta(seconds = c) for c in r_[10.0:900.0:8j]]
+    actions  = [SAT_WorldAction(*a) for a in product(solvers, cutoffs)]
     strategy = \
         ModelingSelectionStrategy(
             RandomActionModel(random),
@@ -281,12 +258,7 @@ def main((input_path,)):
             )
 
     # run it
-    if flags.cutoff is None:
-        cutoff = None
-    else:
-        cutoff = TimeDelta(seconds = flags.cutoff)
-
-    result = solver.solve(input_path, cutoff, seed = random)
+    result = solver.solve(input_path, TimeDelta(seconds = 1e6), seed = random)
 
     # tell the world
     if result.satisfiable is True:
