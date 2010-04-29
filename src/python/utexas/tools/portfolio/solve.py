@@ -251,7 +251,7 @@ def main((input_path,)):
         with open(flags.model) as file:
             model = pickle.load(file)
 
-        r              = flags.calibration / 9.45 # hardcoded carrion score
+        r              = flags.calibration / 2.1 # hardcoded rhavan score
         map_action     = lambda (s, c): SAT_WorldAction(named_solvers[s], TimeDelta(seconds = c.as_s * r))
         actions        = map(map_action, model._actions)
         model._actions = actions
