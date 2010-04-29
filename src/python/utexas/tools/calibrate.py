@@ -56,7 +56,6 @@ def main():
     # get command line arguments
     import utexas.sat.solvers
 
-    from cargo.sql.alchemy import SQL_Engines
     from cargo.flags       import parse_given
 
     parse_given()
