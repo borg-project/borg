@@ -44,6 +44,14 @@ module_flags = \
             help    = "use INT to seed the internal PRNG [%default]",
             ),
         Flag(
+            "-c",
+            "--calibration",
+            type    = float,
+            default = 9.45,
+            metavar = "FLOAT",
+            help    = "assume machine speed FLOAT [%default]",
+            ),
+        Flag(
             "-m",
             "--model",
             metavar = "PATH",
@@ -243,9 +251,11 @@ def main((input_path,)):
         with open(flags.model) as file:
             model = pickle.load(file)
 
-        actions        = [SAT_WorldAction(named_solvers[s], c) for (s, c) in model._actions]
+        r              = flags.calibration / 9.45 # hardcoded carrion score
+        map_action     = lambda (s, c): SAT_WorldAction(named_solvers[s], TimeDelta(seconds = c.as_s * r))
+        actions        = map(map_action, model._actions)
         model._actions = actions
-        planner = HardMyopicActionPlanner(1.0 - 2e-3)
+        planner        = HardMyopicActionPlanner(1.0 - 2e-3)
     else:
         # hardcoded random portfolio
         solver_names = [
