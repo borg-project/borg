@@ -1,6 +1,4 @@
 """
-utexas/tools/print_run.py
-
 Print a solver run.
 
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
@@ -84,8 +82,6 @@ def main():
     from cargo.log import enable_default_logging
 
     enable_default_logging()
-
-    get_logger("cargo.labor.storage", level = "NOTE")
 
     # print run
     with SQL_Engines.default:
