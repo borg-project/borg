@@ -44,6 +44,12 @@ module_flags = \
             help    = "use INT to seed the internal PRNG [%default]",
             ),
         Flag(
+            "-m",
+            "--model",
+            metavar = "PATH",
+            help    = "read model from PATH [%default]",
+            ),
+        Flag(
             "-v",
             "--verbose",
             action  = "store_true",
@@ -201,10 +207,11 @@ def main((input_path,)):
     flags = module_flags.given
 
     if flags.verbose:
-        get_logger("utexas.tools.sat.run_solvers", level = "NOTSET")
         get_logger("cargo.unix.accounting", level = "DETAIL")
         get_logger("utexas.sat.solvers", level = "DETAIL")
         get_logger("utexas.sat.preprocessors", level = "DETAIL")
+        get_logger("utexas.tools.sat.run_solvers", level = "NOTSET")
+        get_logger("utexas.portfolio.models", level = "NOTSET")
 
     # solvers to use
     from utexas.sat.solvers         import (
@@ -215,20 +222,7 @@ def main((input_path,)):
         get_named_solvers,
         )
 
-    solver_names = [
-        "sat/2009/CirCUs",
-        "sat/2009/clasp",
-        "sat/2009/glucose",
-        "sat/2009/LySAT_i",
-        "sat/2009/minisat_09z",
-        "sat/2009/minisat_cumr_p",
-        "sat/2009/mxc_09",
-        "sat/2009/precosat",
-        "sat/2009/rsat_09",
-        "sat/2009/SApperloT",
-        ]
     named_solvers = get_named_solvers()
-    solvers       = map(named_solvers.__getitem__, solver_names)
 
     # instantiate the random strategy
     from itertools                   import product
@@ -240,13 +234,44 @@ def main((input_path,)):
     from utexas.portfolio.planners   import HardMyopicActionPlanner
     from utexas.portfolio.strategies import ModelingSelectionStrategy
 
-    random   = RandomState(flags.seed)
-    cutoffs  = [TimeDelta(seconds = c) for c in r_[10.0:900.0:8j]]
-    actions  = [SAT_WorldAction(*a) for a in product(solvers, cutoffs)]
+    random = RandomState(flags.seed)
+
+    if flags.model is not None:
+        # configurable model
+        import cPickle as pickle
+
+        with open(flags.model) as file:
+            model = pickle.load(file)
+
+        actions        = [SAT_WorldAction(named_solvers[s], c) for (s, c) in model._actions]
+        model._actions = actions
+        planner = HardMyopicActionPlanner(1.0 - 5e-3)
+    else:
+        # hardcoded default solvers
+        solver_names = [
+            "sat/2009/CirCUs",
+            "sat/2009/clasp",
+            "sat/2009/glucose",
+            "sat/2009/LySAT_i",
+            "sat/2009/minisat_09z",
+            "sat/2009/minisat_cumr_p",
+            "sat/2009/mxc_09",
+            "sat/2009/precosat",
+            "sat/2009/rsat_09",
+            "sat/2009/SApperloT",
+            ]
+
+        # hardcoded random model
+        solvers = map(named_solvers.__getitem__, solver_names)
+        cutoffs = [TimeDelta(seconds = c) for c in r_[10.0:800.0:6j]]
+        actions = [SAT_WorldAction(*a) for a in product(solvers, cutoffs)]
+        model   = RandomActionModel(random)
+        planner = HardMyopicActionPlanner(1.0)
+
     strategy = \
         ModelingSelectionStrategy(
-            RandomActionModel(random),
-            HardMyopicActionPlanner(1.0),
+            model,
+            planner,
             actions,
             )
     solver   = \

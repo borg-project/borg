@@ -8,48 +8,11 @@ if __name__ == "__main__":
 
     raise SystemExit(main())
 
-import re
-import json
-import logging
 import numpy
 
-from os.path            import (
-    join,
-    dirname,
-    )
-from copy               import copy
-from tempfile           import NamedTemporaryFile
-from cargo.io           import expandpath
-from cargo.log          import get_logger
-from cargo.json         import follows
-from cargo.flags        import (
-    Flag,
-    Flags,
-    with_flags_parsed,
-    )
-from cargo.temporal     import TimeDelta
-from utexas.sat.solvers import get_named_solvers
+from cargo.log import get_logger
 
-log = get_logger(__name__, level = logging.NOTE)
-
-module_flags = \
-    Flags(
-        "Script Options",
-        Flag(
-            "-t",
-            "--training",
-            default = "training.json",
-            metavar = "FILE",
-            help    = "load training data from FILE [%default]",
-            ),
-        Flag(
-            "-o",
-            "--output",
-            default = "portfolio.json",
-            metavar = "FILE",
-            help    = "write configuration to FILE [%default]",
-            ),
-        )
+log = get_logger(__name__, level = "NOTE")
 
 # portfolio configuration information:
 # - model name
@@ -61,6 +24,8 @@ def smooth_mult(mixture):
     """
     Apply a smoothing term to the multinomial mixture components.
     """
+
+    from cargo.statistics.multinomial import Multinomial
 
     log.info("heuristically smoothing mult mixture")
 
@@ -79,10 +44,14 @@ def make_mult_mixture_model(training, ncomponents):
 
     log.info("building multinomial mixture model")
 
-    model  = \
+    from cargo.statistics.mixture     import EM_MixtureEstimator
+    from cargo.statistics.multinomial import MultinomialEstimator
+    from utexas.portfolio.models      import MultinomialMixtureActionModel
+
+    model = \
         MultinomialMixtureActionModel(
             training,
-            ExpectationMaximizationMixtureEstimator(
+            EM_MixtureEstimator(
                 [[MultinomialEstimator()] * ncomponents] * len(training),
                 ),
             )
@@ -109,13 +78,16 @@ def main():
 
     enable_default_logging()
 
-    get_logger("cargo.labor.storage", level = "NOTE")
+    get_logger("cargo.statistics.mixture", level = "DEBUG")
 
     # load samples
     import cPickle as pickle
 
     with open(samples_path) as file:
         samples = pickle.load(file)
+
+    # FIXME write the samples this way
+    samples = dict((k, numpy.array(v)) for (k, v) in samples.items())
 
     # run inference and store model
     model = make_mult_mixture_model(samples, 16)

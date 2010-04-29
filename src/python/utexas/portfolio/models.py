@@ -8,12 +8,12 @@ from cargo.log import get_logger
 # from cargo.statistics.dcm import DirichletCompoundMultinomial
 # from cargo.statistics.mixture import FiniteMixture
 # from utexas.portfolio.world import get_positive_counts
-from utexas.portfolio.strategies import ActionModel
-# from cargo.statistics._statistics import (
-#     dcm_post_pi_K,
-#     dcm_model_predict,
-#     multinomial_model_predict,
-#     )
+from utexas.portfolio.strategies  import ActionModel
+from cargo.statistics._statistics import (
+    dcm_post_pi_K,
+    dcm_model_predict,
+    multinomial_model_predict,
+    )
 
 log = get_logger(__name__)
 
@@ -40,13 +40,20 @@ class MultinomialMixtureActionModel(ActionModel):
         M = self.mixture.ndomains
         K = self.mixture.ncomponents
 
-        self.mix_KD_per = numpy.empty((M, K), numpy.object)
+#         self.mix_KD_per = numpy.empty((M, K), numpy.object)
+
+#         for m in xrange(M):
+#             for k in xrange(K):
+#                 self.mix_KD_per[m][k] = self.mixture.components[m, k].log_beta
+        D = 2 # FIXME
+
+        self.mix_MKD = numpy.empty((M, K, D))
 
         for m in xrange(M):
             for k in xrange(K):
-                self.mix_KD_per[m][k] = self.mixture.components[m, k].log_beta
+                self.mix_MKD[m, k] = self.mixture.components[m, k].log_beta
 
-    def predict(self, task, history, actions):
+    def predict(self, task, history, feasible):
         """
         Given history, return the probability of each outcome of each action.
 
@@ -57,24 +64,38 @@ class MultinomialMixtureActionModel(ActionModel):
         # mise en place
         M = self.mixture.ndomains
         K = self.mixture.ncomponents
+        D = 2 # FIXME
+
+        action_indices = dict((a, i) for (i, a) in enumerate(self._actions))
+
+        # get the task-specific history
+        counts_MD = numpy.zeros((len(self._actions), 2), numpy.uint)
+
+        for (t, a, o) in history:
+            if t == task:
+                na = action_indices[a]
+                counts_MD[na, o.n] += 1
 
         # get the outcome probabilities
-        out = [numpy.empty(len(a.outcomes)) for a in FIXME]
-
-        pi = numpy.copy(self._mixture.pi)
+        out = numpy.empty((M, D))
+        pi  = numpy.copy(self._mixture.pi)
 
 #         log.debug("pre pi: %s", pi)
 
         multinomial_model_predict(
-            numpy.copy(self._mixture.pi),
-            self.mix_KD_per,
-            history,
+            pi,
+            self.mix_MKD,
+            counts_MD,
             out,
             )
 
 #         log.debug("post pi: %s", pi)
 
-        return out
+        predicted = out[numpy.array([action_indices[a] for a in feasible])]
+
+        log.info("predicted: %s", predicted)
+
+        return dict(zip(feasible, predicted))
 
     # properties
     mixture = property(lambda self: self._mixture)

@@ -146,7 +146,7 @@ def get_samples_for(session, solver_name, cutoff, task):
     spa0  = SPA.__table__
     query = \
         select(
-            [func.count(), func.count(SRA.satisfiable)],
+            [SA.cost, SRA.satisfiable],
             and_(
                 SA.uuid                  == SRA.__table__.c.uuid,
                 SRA.solver_name          == solver_name,
@@ -158,10 +158,19 @@ def get_samples_for(session, solver_name, cutoff, task):
                 )
             )
 
-    ((nruns, nsolved),) = session.execute(query)
+    nruns   = 0
+    nsolved = 0
+
+    for (c, s) in session.execute(query):
+        nruns += 1
+
+        if c <= cutoff and s:
+            nsolved += 1
 
     if nruns > 0:
         print solver_name, cutoff, task.uuid, float(nsolved) / nruns
+    else:
+        print solver_name, cutoff, task.uuid, "*"
 
     return numpy.array([nsolved, nruns - nsolved], numpy.uint)
 
@@ -231,8 +240,6 @@ def main():
     from cargo.log import enable_default_logging
 
     enable_default_logging()
-
-    get_logger("cargo.labor.storage", level = "NOTE")
 
     # practice
     with SQL_Engines.default:
