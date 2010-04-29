@@ -106,7 +106,7 @@ class MultinomialMixtureActionModel(ActionModel):
                 for (s, r) in sorted_all \
                 )
 
-        log.debug("probabilities of action success:\n%s", table)
+        log.debug("probabilities of action success (multinomial model):\n%s", table)
 
         # return predictions
         predicted = out[numpy.array([action_indices[a] for a in feasible])]
@@ -121,25 +121,19 @@ class DCM_MixtureActionModel(ActionModel):
     A DCM mixture model.
     """
 
-    def __init__(self, world, training, estimator):
+    def __init__(self, training, estimator):
         """
         Initialize.
         """
 
-        # members
-        self.__world     = world
-        self.__training  = world.counts_from_events(training)
-        self.__estimator = estimator
-
         # model
-        counts         = get_positive_counts(self.__training)
-        training_split = [counts[:, naction, :] for naction in xrange(world.nactions)]
-        self.mixture   = estimator.estimate(training_split)
+        self.mixture  = estimator.estimate(training.values())
+        self._actions = training.keys()
 
         # cache mixture components as matrices
         M = self.mixture.ndomains
         K = self.mixture.ncomponents
-        D = self.__world.noutcomes
+        D = 2 # FIXME
 
         self.sum_MK  = numpy.empty((M, K))
         self.mix_MKD = numpy.empty((M, K, D))
@@ -163,21 +157,27 @@ class DCM_MixtureActionModel(ActionModel):
 
         return post_pi_K
 
-    def predict(self, task, history, out = None):
+#     def predict(self, task, history, out = None):
+    def predict(self, task, history, feasible):
 
         # mise en place
         M = self.mixture.ndomains
         K = self.mixture.ncomponents
-        D = self.__world.noutcomes
+        D = 2 # FIXME
+
+        action_indices = dict((a, i) for (i, a) in enumerate(self._actions))
 
         # get the task-specific history
-        history_counts = self.__world.counts_from_events(history)
-        counts_MD      = history_counts[task.n]
-        post_pi_K      = self.get_post_pi_K(counts_MD)
+        counts_MD = numpy.zeros((len(self._actions), 2), numpy.uint)
+
+        for (t, a, o) in history:
+            if t == task:
+                na = action_indices[a]
+                counts_MD[na, o.n] += 1
 
         # get the outcome probabilities
-        if out is None:
-            out = numpy.empty((M, D))
+        post_pi_K = self.get_post_pi_K(counts_MD)
+        out       = numpy.empty((M, D))
 
         dcm_model_predict(
             post_pi_K,
@@ -187,7 +187,31 @@ class DCM_MixtureActionModel(ActionModel):
             out,
             )
 
-        return out
+        # log an outcome-probability table
+        rows = {}
+
+        for action in self._actions:
+            ps = rows.get(action.solver, [])
+
+            ps.append((action.cutoff, out[action_indices[action]]))
+
+            rows[action.solver] = ps
+
+        sorted_rows = [(k.name, sorted(v, key = lambda (c, p): c)) for (k, v) in rows.items()]
+        sorted_all  = sorted(sorted_rows, key = lambda (k, v): k)
+        longest     = max(len(s) for (s, _) in sorted_all)
+        table       = \
+            "\n".join(
+                "%s: %s" % (s.ljust(longest + 1), " ".join("%.4f" % p[0] for (c, p) in r)) \
+                for (s, r) in sorted_all \
+                )
+
+        log.debug("probabilities of action success (DCM model):\n%s", table)
+
+        # return predictions
+        predicted = out[numpy.array([action_indices[a] for a in feasible])]
+
+        return dict(zip(feasible, predicted))
 
 class OracleActionModel(ActionModel):
     """

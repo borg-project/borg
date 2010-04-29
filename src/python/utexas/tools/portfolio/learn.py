@@ -10,15 +10,24 @@ if __name__ == "__main__":
 
 import numpy
 
-from cargo.log import get_logger
+from cargo.log   import get_logger
+from cargo.flags import (
+    Flag,
+    Flags,
+    )
 
-log = get_logger(__name__, level = "NOTE")
-
-# portfolio configuration information:
-# - model name
-# - model configuration
-# - planner name
-# - planner configuration
+log          = get_logger(__name__)
+module_flags = \
+    Flags(
+        "Script Options",
+        Flag(
+            "-m",
+            "--model-type",
+            type    = ["multinomial", "dcm"],
+            default = "dcm",
+            metavar = "TYPE",
+            help    = "learn a TYPE model [%default]",
+            ),
 
 def smooth_mult(mixture):
     """
@@ -60,6 +69,64 @@ def make_mult_mixture_model(training, ncomponents):
 
     return model
 
+def smooth_dcm(mixture):
+    """
+    Apply a smoothing term to the DCM mixture components.
+    """
+
+    log.info("heuristically smoothing DCM mixture")
+
+    from cargo.statistics.dcm import DirichletCompoundMultinomial
+
+    # find the smallest non-zero dimension
+    smallest = numpy.inf
+    epsilon  = 1e-6
+
+    for components in mixture.components:
+        for component in components:
+            for v in component.alpha:
+                if v < smallest and v > epsilon:
+                    smallest = v
+
+    if numpy.isinf(smallest):
+        smallest = epsilon
+
+    log.debug("smallest nonzero value is %f", smallest)
+
+    for m in xrange(mixture.ndomains):
+        for k in xrange(mixture.ncomponents):
+            alpha                    = mixture.components[m, k].alpha
+            mixture.components[m, k] = DirichletCompoundMultinomial(alpha + smallest * 1e-2)
+
+def make_dcm_mixture_model(training, ncomponents):
+    """
+    Return a new DCM mixture model.
+    """
+
+    log.info("building DCM mixture model")
+
+    from cargo.statistics.dcm     import DCM_Estimator
+    from cargo.statistics.mixture import (
+        RestartedEstimator,
+        EM_MixtureEstimator,
+        )
+    from utexas.portfolio.models  import DCM_MixtureActionModel
+
+    model  = \
+        DCM_MixtureActionModel(
+            training,
+            RestartedEstimator(
+                EM_MixtureEstimator(
+                    [[DCM_Estimator()] * ncomponents] * len(training),
+                    ),
+                nrestarts = 2,
+                ),
+            )
+
+    smooth_dcm(model.mixture)
+
+    return model
+
 def main():
     """
     Main.
@@ -78,7 +145,7 @@ def main():
 
     enable_default_logging()
 
-    get_logger("cargo.statistics.mixture", level = "DEBUG")
+    get_logger("cargo.statistics.mixture", level = "DETAIL")
 
     # load samples
     import cPickle as pickle
@@ -90,7 +157,12 @@ def main():
     samples = dict((k, numpy.array(v)) for (k, v) in samples.items())
 
     # run inference and store model
-    model = make_mult_mixture_model(samples, 16)
+    model_type = module_flags.given.model_type
+
+    if model_type == "dcm":
+        model = make_dcm_mixture_model(samples, 16)
+    elif model_type == "multinomial":
+        model = make_mult_mixture_model(samples, 16)
 
     with open(model_path, "w") as file:
         pickle.dump(model, file, -1)
