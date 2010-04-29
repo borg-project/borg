@@ -1,8 +1,4 @@
 """
-utexas/portfolio/models.py
-
-Various models of task/action outcomes.
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
@@ -37,7 +33,8 @@ class MultinomialMixtureActionModel(ActionModel):
         """
 
         # model
-        self.__mixture = estimator.estimate(training)
+        self._mixture = estimator.estimate(training.values())
+        self._actions = training.keys()
 
         # store mixture components in a matrix
         M = self.mixture.ndomains
@@ -49,7 +46,7 @@ class MultinomialMixtureActionModel(ActionModel):
             for k in xrange(K):
                 self.mix_KD_per[m][k] = self.mixture.components[m, k].log_beta
 
-    def predict(self, task, history, out = None):
+    def predict(self, task, history, actions):
         """
         Given history, return the probability of each outcome of each action.
 
@@ -62,15 +59,14 @@ class MultinomialMixtureActionModel(ActionModel):
         K = self.mixture.ncomponents
 
         # get the outcome probabilities
-        if out is None:
-            out = [numpy.empty(len(a.outcomes)) for a in FIXME]
+        out = [numpy.empty(len(a.outcomes)) for a in FIXME]
 
-        pi = numpy.copy(self.__mixture.pi)
+        pi = numpy.copy(self._mixture.pi)
 
 #         log.debug("pre pi: %s", pi)
 
         multinomial_model_predict(
-            numpy.copy(self.__mixture.pi),
+            numpy.copy(self._mixture.pi),
             self.mix_KD_per,
             history,
             out,
@@ -81,7 +77,7 @@ class MultinomialMixtureActionModel(ActionModel):
         return out
 
     # properties
-    mixture = property(lambda self: self.__mixture)
+    mixture = property(lambda self: self._mixture)
 
 class DCM_MixtureActionModel(ActionModel):
     """

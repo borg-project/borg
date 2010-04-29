@@ -95,7 +95,7 @@ class ModelingSelectionStrategy(SelectionStrategy):
         if budget is None:
             feasible = self.actions
         else:
-            feasible  = [a for a in self.actions if a.cutoff <= budget]
+            feasible  = [a for a in self.actions if a.cost <= budget]
 
         predicted = self.model.predict(task, self.history, feasible)
         selected  = self.planner.select(predicted, self.utilities) # FIXME

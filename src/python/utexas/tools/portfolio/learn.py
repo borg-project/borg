@@ -1,14 +1,10 @@
 # vim: set fileencoding=UTF-8 :
 """
-utexas/tools/portfolio/train.py
-
-Solve a task using a portfolio.
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
 if __name__ == "__main__":
-    from utexas.tools.portfolio.solve import main
+    from utexas.tools.portfolio.learn import main
 
     raise SystemExit(main())
 
@@ -76,7 +72,7 @@ def smooth_mult(mixture):
             beta                     /= numpy.sum(beta)
             mixture.components[m, k]  = Multinomial(beta)
 
-def make_mult_mixture_model(world, training, ncomponents):
+def make_mult_mixture_model(training, ncomponents):
     """
     Return a new multinomial mixture strategy for evaluation.
     """
@@ -85,10 +81,9 @@ def make_mult_mixture_model(world, training, ncomponents):
 
     model  = \
         MultinomialMixtureActionModel(
-            world,
             training,
             ExpectationMaximizationMixtureEstimator(
-                [[MultinomialEstimator()] * ncomponents] * world.nactions,
+                [[MultinomialEstimator()] * ncomponents] * len(training),
                 ),
             )
 
@@ -96,53 +91,35 @@ def make_mult_mixture_model(world, training, ncomponents):
 
     return model
 
-def train_portfolio(tasks, solvers, cutoffs):
-    """
-    Return trained portfolio.
-    """
-
-    model = make_mult_mixture_model(world, train_history, 4)
-
-"""
-    # build the strategy
-    if isinstance(s_name, SAT_WorldAction):
-        # fixed strategy
-        strategy = FixedSelectionStrategy(s_name)
-    elif s_name == "model":
-        # model-based strategy; build the model
-        if model_name == "dcm":
-            model = make_dcm_mixture_model(world, train_history, K)
-        elif model_name == "random":
-            model = RandomActionModel(world)
-        else:
-            raise ValueError()
-
-        # build the planner
-        if planner_name == "hard":
-            planner = HardMyopicActionPlanner(world, discount)
-        elif planner_name == "soft":
-            planner = SoftMyopicActionPlanner(world, discount)
-        else:
-            raise ValueError()
-
-        strategy = ModelingSelectionStrategy(world, model, planner)
-    else:
-        raise ValueError()
-"""
-
-@with_flags_parsed(
-    usage = "usage: %prog [options]",
-    )
-def main(positional):
+def main():
     """
     Main.
     """
 
-    # basic flag handling
-    flags = module_flags.given
+    # get command line arguments
+    import utexas.data
 
-    if flags.verbose:
-        get_logger("utexas.tools.sat.run_solvers").setLevel(logging.NOTSET)
-        get_logger("cargo.unix.accounting").setLevel(logging.DEBUG)
-        get_logger("utexas.sat.solvers").setLevel(logging.DEBUG)
+    from cargo.sql.alchemy import SQL_Engines
+    from cargo.flags       import parse_given
+
+    (samples_path, model_path) = parse_given()
+
+    # set up log output
+    from cargo.log import enable_default_logging
+
+    enable_default_logging()
+
+    get_logger("cargo.labor.storage", level = "NOTE")
+
+    # load samples
+    import cPickle as pickle
+
+    with open(samples_path) as file:
+        samples = pickle.load(file)
+
+    # run inference and store model
+    model = make_mult_mixture_model(samples, 16)
+
+    with open(model_path, "w") as file:
+        pickle.dump(model, file, -1)
 
