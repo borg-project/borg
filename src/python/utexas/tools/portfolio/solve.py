@@ -47,7 +47,7 @@ module_flags = \
             "-c",
             "--calibration",
             type    = float,
-            default = 9.45,
+            default = 5.59,
             metavar = "FLOAT",
             help    = "assume machine speed FLOAT [%default]",
             ),
