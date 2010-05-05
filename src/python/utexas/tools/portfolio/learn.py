@@ -23,11 +23,28 @@ module_flags = \
         Flag(
             "-m",
             "--model-type",
-            type    = ["multinomial", "dcm"],
+            choices = ["multinomial", "dcm"],
             default = "dcm",
             metavar = "TYPE",
             help    = "learn a TYPE model [%default]",
             ),
+        Flag(
+            "-r",
+            "--restarts",
+            type    = int,
+            default = 2,
+            metavar = "INT",
+            help    = "make INT inference restarts [%default]",
+            ),
+        Flag(
+            "-k",
+            "--components",
+            type    = int,
+            default = 16,
+            metavar = "INT",
+            help    = "use INT latent classes [%default]",
+            ),
+        )
 
 def smooth_mult(mixture):
     """
@@ -46,23 +63,29 @@ def smooth_mult(mixture):
             beta                     /= numpy.sum(beta)
             mixture.components[m, k]  = Multinomial(beta)
 
-def make_mult_mixture_model(training, ncomponents):
+def make_mult_mixture_model(training, ncomponents, nrestarts):
     """
     Return a new multinomial mixture strategy for evaluation.
     """
 
     log.info("building multinomial mixture model")
 
-    from cargo.statistics.mixture     import EM_MixtureEstimator
+    from cargo.statistics.mixture     import (
+        RestartedEstimator,
+        EM_MixtureEstimator,
+        )
     from cargo.statistics.multinomial import MultinomialEstimator
     from utexas.portfolio.models      import MultinomialMixtureActionModel
 
     model = \
         MultinomialMixtureActionModel(
             training,
-            EM_MixtureEstimator(
-                [[MultinomialEstimator()] * ncomponents] * len(training),
-                ),
+            RestartedEstimator(
+                EM_MixtureEstimator(
+                    [[MultinomialEstimator()] * ncomponents] * len(training),
+                    ),
+                nrestarts = nrestarts,
+                )
             )
 
     smooth_mult(model.mixture)
@@ -98,7 +121,7 @@ def smooth_dcm(mixture):
             alpha                    = mixture.components[m, k].alpha
             mixture.components[m, k] = DirichletCompoundMultinomial(alpha + smallest * 1e-2)
 
-def make_dcm_mixture_model(training, ncomponents):
+def make_dcm_mixture_model(training, ncomponents, nrestarts):
     """
     Return a new DCM mixture model.
     """
@@ -119,7 +142,7 @@ def make_dcm_mixture_model(training, ncomponents):
                 EM_MixtureEstimator(
                     [[DCM_Estimator()] * ncomponents] * len(training),
                     ),
-                nrestarts = 2,
+                nrestarts = nrestarts,
                 ),
             )
 
@@ -157,12 +180,14 @@ def main():
     samples = dict((k, numpy.array(v)) for (k, v) in samples.items())
 
     # run inference and store model
-    model_type = module_flags.given.model_type
+    model_type  = module_flags.given.model_type
+    ncomponents = module_flags.given.components
+    nrestarts   = module_flags.given.restarts
 
     if model_type == "dcm":
-        model = make_dcm_mixture_model(samples, 16)
+        model = make_dcm_mixture_model(samples, ncomponents, nrestarts)
     elif model_type == "multinomial":
-        model = make_mult_mixture_model(samples, 16)
+        model = make_mult_mixture_model(samples, ncomponents, nrestarts)
 
     with open(model_path, "w") as file:
         pickle.dump(model, file, -1)
