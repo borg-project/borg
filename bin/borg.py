@@ -22,9 +22,24 @@ def addenv(variable, value, separator = ":"):
     else:
         putenv(variable, "%s%s%s" % (value, separator, old))
 
-def exec_main(as_module):
+def get_default_root():
     """
-    Launch the solver in a custom environment.
+    The computed root directory of this package.
+    """
+
+    from os.path import abspath
+
+    return abspath(sys.path[0])
+
+def execute_borg(
+    root      = get_default_root(),
+    support   = "",
+    submodule = "",
+    as_module = False,
+    argv      = sys.argv,
+    ):
+    """
+    Set up the solver environment, and run.
     """
 
     from os      import (
@@ -34,51 +49,71 @@ def exec_main(as_module):
         )
     from os.path import (
         join,
-        abspath,
+        isdir,
+        exists,
         normpath,
-        basename,
         )
+
+    root_path      = normpath(root)
+    support_path   = join(root, support)
+    submodule_path = join(root, submodule)
 
     # provide the borg root path
-    borg_root = abspath(sys.path[0])
+    putenv("BORG_ROOT", root_path)
 
-    putenv("BORG_ROOT", borg_root)
+    # set up submodule paths for python
+    python_paths = [
+        join(root_path, "src/python"),
+        join(submodule_path, "cargo/src/python"),
+        join(submodule_path, "borg/src/python"),
+        ]
 
-    # build relevant custom environment variables
-    putnv("PYTHONHOME", join(borg_root, "ext/prefix"))
+    addenv("PYTHONPATH", ":".join(python_paths))
 
-    python_paths   = (
-        join(borg_root, "src/dep/cargo/src/python"),
-        join(borg_root, "src/dep/borg/src/python"),
-        join(borg_root, "ext/prefix/lib/python2.6"),
-        )
+    # set up the local prefix if it exists
+    prefix_path = join(support_path, "prefix")
 
-    addenv("PATH", join(borg_root, "ext/prefix/bin"))
-    addenv("PYTHONPATH", ":".join(map(normpath, python_paths)))
-    addenv("CMAKE_PREFIX_PATH", join(borg_root, "ext/prefix"))
-    addenv("LD_LIBRARY_PATH", join(borg_root, "ext/prefix/lib"))
-    addenv("CARGO_FLAGS_EXTRA_FILE", join(borg_root, "ext/flags.json"))
+    if isdir(prefix_path):
+        # common
+        addenv("CMAKE_PREFIX_PATH", prefix_path)
+        addenv("PATH", join(prefix_path, "bin"))
+        addenv("LD_LIBRARY_PATH", join(prefix_path, "lib"))
 
-    # including a default tmpdir
+        # only if python is installed locally
+        local_python_binary = join(prefix_path, "bin/python")
+
+        if exists(local_python_binary):
+            local_python = local_python_binary
+
+            putenv("PYTHONHOME", prefix_path)
+            addenv("PYTHONPATH", join(prefix_path, "lib/python2.6"))
+        else:
+            local_python = None
+    else:
+        local_python = None
+
+    # set up standard configuration file(s)
+    flags_path = join(support_path, "flags.json")
+
+    if exists(flags_path):
+        addenv("CARGO_FLAGS_EXTRA_FILE", flags_path)
+
+    # set up a default (local) tmpdir, if one exists
     tmpdir_name = "TMPDIR"
 
     if getenv(tmpdir_name) is None:
-        putenv(tmpdir_name, join(borg_root, "ext/tmp"))
+        tmpdir_path = join(support_path, "tmp")
 
-    # make the call
+        if isdir(tmpdir_path):
+            putenv(tmpdir_name, tmpdir_path)
+
+    # execute the command
     if as_module:
-        program   = join(borg_root, "ext/prefix/bin/python")
+        program   = local_python if local_python else "python"
         arguments = [program, "-m"] + sys.argv[1:]
     else:
         program   = sys.argv[1]
         arguments = sys.argv[1:]
 
     execvp(program, arguments)
-
-if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        exec_main()
-    else:
-        print "usage: ./solver <module>"
-        print "(see README)"
 
