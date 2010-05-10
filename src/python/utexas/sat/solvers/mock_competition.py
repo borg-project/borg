@@ -59,28 +59,43 @@ class SAT_MockCompetitionSolver(SAT_Solver):
             )
         from sqlalchemy.sql.functions import random as sql_random
         from utexas.data              import (
-            CPU_LimitedRunRow as CLR,
+            SAT_AttemptRow    as SA,
             SAT_RunAttemptRow as SRA,
             )
 
         from_ = task.select_attempts().alias()
         query = \
             select(
-                SRA.__table__.columns,
+                [
+                    from_.c.cost,
+                    from_.c.satisfiable,
+                    from_.c.certificate,
+                    ],
                 and_(
+                    from_.c.budget   >= cutoff,
                     from_.c.uuid     == SRA.__table__.c.uuid,
                     SRA.solver_name  == self.solver_name,
-                    SRA.run_uuid     == CLR.uuid,
-                    CLR.cutoff       >= cutoff,
-#                     CLR.proc_elapsed <= cutoff,
                     ),
                 order_by = sql_random(),
                 limit    = 1,
                 )
 
         # execute the query
-        from contextlib import closing
+        from contextlib              import closing
+        from utexas.sat.solvers.base import SAT_BareResult
 
         with closing(self.LocalResearchSession()) as session:
-            print list(session.execute(query))
+            ((cost, satisfiable, certificate_blob),) = session.execute(query)
+
+            if cost <= cutoff:
+                if satisfiable:
+                    certificate = SA.unpack_certificate(certificate_blob)
+                elif certificate_blob is not None:
+                    raise RuntimeError("non-sat row has non-null certificate")
+                else:
+                    certificate = None
+
+                return SAT_BareResult(satisfiable, certificate)
+            else:
+                return SAT_BareResult(None, None)
 

@@ -33,12 +33,17 @@ class SAT_MockPreprocessingSolver(SAT_Solver):
         Execute the solver and return its outcome, given an input task.
         """
 
-        # build the query
-        from sqlalchemy       import (
+        # argument sanity
+        if cutoff is None:
+            raise ValueError("cutoff required")
+
+        # build the preprocessor-run query
+        from sqlalchemy  import (
             and_,
             select,
             )
-        from utexas.data      import (
+        from utexas.data import (
+            SAT_AttemptRow              as SA,
             CPU_LimitedRunRow           as CLR,
             SAT_PreprocessingAttemptRow as SPA,
             )
@@ -46,30 +51,50 @@ class SAT_MockPreprocessingSolver(SAT_Solver):
         from_ = task.select_attempts().alias()
         query = \
             select(
-                SPA.__table__.columns,
+                [
+                    SPA.inner_attempt_uuid,
+                    SPA.preprocessed,
+                    from_.c.satisfiable,
+                    from_.c.certificate,
+                    CLR.proc_elapsed,
+                    ],
                 and_(
+                    from_.c.budget        >= cutoff,
                     from_.c.uuid          == SPA.__table__.c.uuid,
                     SPA.preprocessor_name == self.preprocessor_name,
                     SPA.run_uuid          == CLR.uuid,
-                    CLR.cutoff            >= cutoff,
-#                     CLR.proc_elapsed      <= cutoff,
                     ),
                 )
 
-        # grab a matching run
-        from contextlib import closing
+        # select a preprocessor run
+        from contextlib               import closing
+        from sqlalchemy.sql.functions import random as sql_random
+        from utexas.sat.solvers.base  import SAT_BareResult
 
-        # FIXME need to actually select a single row, etc.
+        pre_query = query.order_by(sql_random()).limit(1)
 
+        with closing(self.LocalResearchSession()) as session:
+            row = session.execute(pre_query)
+
+            ((inner_attempt_uuid, preprocessed, satisfiable, certificate_blob, elapsed),) = row
+
+            if elapsed > cutoff:
+                return SAT_BareResult(None, None)
+            elif inner_attempt_uuid is None:
+                if certificate_blob is not None:
+                    certificate = SA.unpack_certificate(certificate_blob)
+                else:
+                    certificate = None
+
+                return SAT_BareResult(satisfiable, certificate)
+
+        # not solved by the preprocessor; try the inner solver
         from utexas.sat.tasks import SAT_MockPreprocessedTask
 
-        outer_task = SAT_MockPreprocessedTask(self.preprocessor_name, task, query)
+        if preprocessed:
+            outer_task = SAT_MockPreprocessedTask(self.preprocessor_name, task, query)
+        else:
+            outer_task = task
 
         return self.solver.solve(outer_task, cutoff, seed)
-
-#         with closing(self.LocalResearchSession()) as session:
-#             rows = session.execute(query)
-
-#             for row in rows:
-#                 print row
 

@@ -96,8 +96,6 @@ class SAT_MockFileTask(SAT_MockTask):
                     ),
                 )
 
-#         print "\n", select(query.alias().columns).compile()
-
         return query
 
 class SAT_MockPreprocessedTask(SAT_MockTask):
@@ -127,16 +125,20 @@ class SAT_MockPreprocessedTask(SAT_MockTask):
         Return a query selecting attempts on this task.
         """
 
-        from sqlalchemy  import select
+        from sqlalchemy  import (
+            and_,
+            select,
+            )
         from utexas.data import SAT_AttemptRow
 
         query = \
             select(
                 SAT_AttemptRow.__table__.columns,
-                SAT_AttemptRow.uuid == self.from_.c.inner_attempt_uuid,
+                and_(
+                    SAT_AttemptRow.uuid == self.from_.c.inner_attempt_uuid,
+                    SAT_AttemptRow.task == None,
+                    )
                 )
-
-        print "\n", query
 
         return query
 

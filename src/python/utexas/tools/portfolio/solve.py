@@ -1,7 +1,5 @@
 # vim: set fileencoding=UTF-8 :
 """
-utexas/tools/portfolio/solve.py
-
 Solve a task using a portfolio.
 
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
@@ -215,14 +213,14 @@ def main((input_path,)):
     flags = module_flags.given
 
     if flags.verbose:
-        get_logger("cargo.unix.accounting", level = "DETAIL")
-        get_logger("utexas.sat.solvers", level = "DETAIL")
-        get_logger("utexas.sat.preprocessors", level = "DETAIL")
+        get_logger("cargo.unix.accounting",        level = "DETAIL")
+        get_logger("utexas.sat.solvers",           level = "DETAIL")
+        get_logger("utexas.sat.preprocessors",     level = "DETAIL")
         get_logger("utexas.tools.sat.run_solvers", level = "NOTSET")
-        get_logger("utexas.portfolio.models", level = "NOTSET")
+        get_logger("utexas.portfolio.models",      level = "NOTSET")
 
     # solvers to use
-    from utexas.sat.solvers         import (
+    from utexas.sat.solvers import (
         SAT_Solver,
         SAT_BareResult,
         SAT_UncompressingSolver,
@@ -232,7 +230,7 @@ def main((input_path,)):
 
     named_solvers = get_named_solvers()
 
-    # instantiate the random strategy
+    # instantiate the strategy
     from itertools                   import product
     from numpy                       import r_
     from numpy.random                import RandomState

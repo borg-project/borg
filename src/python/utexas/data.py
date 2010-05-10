@@ -267,11 +267,7 @@ class SAT_AttemptRow(DatumBase):
         Get the certificate array, uncompressed.
         """
 
-        import json
-
-        from cargo.io import unxzed
-
-        return json.loads(unxzed(self.certificate))
+        return SAT_AttemptRow.unpack_certificate(self.certificate)
 
     def set_certificate(self, certificate):
         """
@@ -282,7 +278,19 @@ class SAT_AttemptRow(DatumBase):
 
         from cargo.io import xzed
 
-        self.certificate = xzed(json.dumps(self.certificate))
+        self.certificate = xzed(json.dumps(certificate))
+
+    @staticmethod
+    def unpack_certificate(blob):
+        """
+        Uncompress and interpret a certificate array.
+        """
+
+        import json
+
+        from cargo.io import unxzed
+
+        return json.loads(unxzed(blob))
 
 class SAT_RunAttemptRow(SAT_AttemptRow):
     """
@@ -310,6 +318,7 @@ class SAT_PreprocessingAttemptRow(SAT_AttemptRow):
     run_uuid           = Column(SQL_UUID, ForeignKey("cpu_limited_runs.uuid"), nullable = False)
     preprocessor_name  = Column(String, ForeignKey("sat_preprocessors.name"), nullable = False)
     inner_attempt_uuid = Column(SQL_UUID, ForeignKey("sat_attempts.uuid"))
+    preprocessed       = Column(Boolean)
 
     __mapper_args__ = {
         "polymorphic_identity" : "preprocessing",
@@ -332,23 +341,4 @@ class SAT_PortfolioAttemptRow(SAT_AttemptRow):
     __mapper_args__ = {"polymorphic_identity": "portfolio"}
 
     uuid = Column(SQL_UUID, ForeignKey("sat_attempts.uuid"), primary_key = True)
-
-# class PortfolioScoreRow(DatumBase):
-#     """
-#     Result of a portfolio test.
-#     """
-
-#     __tablename__ = "portfolio_scores"
-
-#     uuid         = Column(SQL_UUID, primary_key = True, default = uuid4)
-#     world_uuid   = Column(SQL_UUID, ForeignKey("portfolio_score_worlds.uuid"))
-#     model_name   = Column(String)
-#     planner_name = Column(String)
-#     components   = Column(Integer)
-#     solved       = Column(Integer)
-#     spent        = Column(SQL_TimeDelta)
-#     utility      = Column(Float)
-#     tags         = Column(SQL_List(String))
-
-#     world = relationship(PortfolioScoreWorldRow)
 
