@@ -36,6 +36,8 @@ class SAT_FileTask(SAT_Task):
         Initialize.
         """
 
+        SAT_Task.__init__(self)
+
         self.path = path
 
     @property
@@ -60,6 +62,8 @@ class SAT_MockFileTask(SAT_MockTask):
         """
         Initialize.
         """
+
+        SAT_MockTask.__init__(self)
 
         self.task_row = task_row
 
@@ -107,6 +111,8 @@ class SAT_MockPreprocessedTask(SAT_MockTask):
         """
         Initialize.
         """
+
+        SAT_MockTask.__init__(self)
 
         self.preprocessor_name = preprocessor_name
         self.inner_task        = inner_task

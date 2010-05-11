@@ -10,22 +10,12 @@ if __name__ == "__main__":
 
     raise SystemExit(main())
 
-import utexas.sat.preprocessors
-
 from logging                    import Formatter
 from cargo.log                  import get_logger
 from cargo.flags                import (
     Flag,
     Flags,
     with_flags_parsed,
-    )
-from utexas.sat.solvers         import (
-    SAT_Solver,
-    SAT_BareResult,
-    )
-from utexas.portfolio.sat_world import (
-    SAT_WorldTask,
-    SAT_WorldAction,
     )
 
 log = get_logger(__name__, default_level = "NOTE")
@@ -62,94 +52,6 @@ module_flags = \
             help    = "be noisier [%default]",
             ),
         )
-
-class SAT_PortfolioResult(SAT_BareResult):
-    """
-    Result of a portfolio solver.
-    """
-
-class SAT_PortfolioSolver(SAT_Solver):
-    """
-    Solve SAT instances with a portfolio.
-    """
-
-    def __init__(self, strategy):
-        """
-        Initialize.
-        """
-
-        self.strategy        = strategy
-        self.max_invocations = 50
-
-    def solve(self, input_path, cutoff = None, seed = None):
-        """
-        Execute the solver and return its outcome, given an input path.
-        """
-
-        from numpy.random import RandomState
-
-        # get us a pseudorandom sequence
-        if type(seed) is int:
-            random = RandomState(seed)
-        elif hasattr(seed, "rand"):
-            random = seed
-        else:
-            raise ValueError("seed or PRNG required")
-
-        # solve the instance
-        (satisfiable, certificate) = \
-            self._solve_on(
-                SAT_WorldTask(input_path, input_path),
-                cutoff,
-                random,
-                )
-
-        return SAT_PortfolioResult(satisfiable, certificate)
-
-    def _solve_on(self, task, cutoff, random):
-        """
-        Evaluate on a specific task.
-        """
-
-        from cargo.temporal import TimeDelta
-
-        remaining = cutoff
-        nleft     = self.max_invocations
-
-        while (remaining is None or remaining > TimeDelta()) and nleft > 0:
-            (action, pair)     = self._solve_once_on(task, remaining, random)
-            (outcome, result)  = pair
-            nleft             -= 1
-
-            if remaining is not None:
-                remaining -= action.cost
-
-            if result.satisfiable is not None:
-                return (result.satisfiable, result.certificate)
-
-        return (None, None)
-
-    def _solve_once_on(self, task, remaining, random):
-        """
-        Evaluate once on a specific task.
-        """
-
-        # select an action
-        action_generator = self.strategy.select(task, remaining)
-        action           = action_generator.send(None)
-
-        if action is None:
-            return (None, None)
-
-        # take it, and provide the outcome
-        (outcome, result) = action.take(task, random)
-
-        try:
-            action_generator.send(outcome)
-        except StopIteration:
-            pass
-
-        return (action, (outcome, result))
 
 class CompetitionFormatter(Formatter):
     """
@@ -221,8 +123,6 @@ def main((input_path,)):
 
     # solvers to use
     from utexas.sat.solvers import (
-        SAT_Solver,
-        SAT_BareResult,
         SAT_UncompressingSolver,
         SAT_PreprocessingSolver,
         get_named_solvers,
@@ -238,6 +138,7 @@ def main((input_path,)):
     from utexas.sat.preprocessors    import SatELitePreprocessor
     from utexas.portfolio.models     import RandomActionModel
     from utexas.portfolio.planners   import HardMyopicActionPlanner
+    from utexas.portfolio.sat_world  import SAT_WorldAction
     from utexas.portfolio.strategies import ModelingSelectionStrategy
 
     random = RandomState(flags.seed)
@@ -289,7 +190,10 @@ def main((input_path,)):
             )
 
     # run it
-    result = solver.solve(input_path, TimeDelta(seconds = 1e6), seed = random)
+    from utexas.sat.tasks import SAT_FileTask
+
+    task   = SAT_FileTask(input_path)
+    result = solver.solve(task, TimeDelta(seconds = 1e6), seed = random)
 
     # tell the world
     if result.satisfiable is True:

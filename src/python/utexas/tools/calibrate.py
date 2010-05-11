@@ -56,7 +56,7 @@ def main():
     # get command line arguments
     import utexas.sat.solvers
 
-    from cargo.flags       import parse_given
+    from cargo.flags import parse_given
 
     parse_given()
 

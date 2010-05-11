@@ -30,8 +30,7 @@ from cargo.flags        import (
 from cargo.temporal     import TimeDelta
 from utexas.sat.solvers import get_named_solvers
 
-log = get_logger(__name__, level = logging.NOTE)
-
+log          = get_logger(__name__, level = logging.NOTE)
 module_flags = \
     Flags(
         "Script Options",
