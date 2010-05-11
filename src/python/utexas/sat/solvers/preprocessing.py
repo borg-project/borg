@@ -5,47 +5,61 @@ utexas/sat/solvers/preprocessing.py
 """
 
 from cargo.log               import get_logger
+from cargo.temporal          import TimeDelta
 from utexas.sat.solvers.base import (
-    SAT_Result,
     SAT_Solver,
+    SAT_BareResult,
     )
 
 log = get_logger(__name__)
 
-class SAT_PreprocessingSolverResult(SAT_Result):
+class SAT_PreprocessingSolverResult(SAT_BareResult):
     """
     Outcome of a solver with a preprocessing step.
     """
 
-    def __init__(self, preprocessor_output, solver_result, certificate):
+    def __init__(self, solver, task, preprocessor_output, solver_result, certificate):
         """
         Initialize.
         """
 
-        SAT_Result.__init__(self)
+        if self.solver_result is None:
+            satisfiable = self.preprocessor_output.solver_result.satisfiable
+        else:
+            satisfiable = self.solver_result.satisfiable
+
+        SAT_BareResult.__init__(
+            self,
+            solver,
+            task,
+            run.cutoff,
+            run.proc_elapsed,
+            satisfiable,
+            certificate,
+            )
 
         self.preprocessor_output = preprocessor_output
         self.solver_result       = solver_result
-        self._certificate        = certificate
 
-    @property
-    def satisfiable(self):
+    def to_orm(self):
         """
-        Did the solver report the instance satisfiable?
+        Return a database description of this result.
         """
 
         if self.solver_result is None:
-            return self.preprocessor_output.solver_result.satisfiable
+            inner_attempt_row = None
         else:
-            return self.solver_result.satisfiable
+            inner_attempt_row = self.solver_result.to_orm()
 
-    @property
-    def certificate(self):
-        """
-        Certificate of satisfiability, if any.
-        """
+        attempt_row       = \
+            SAT_PreprocessingAttemptRow(
+                run           = CPU_LimitedRunRow.from_run(self.preprocessor_output.run),
+                preprocessor  = self.solver.preprocessor.to_orm(),
+                inner_attempt = inner_attempt_row,
+                preprocessed  = self.preprocessor_output.preprocessed,
+                )
 
-        return self._certificate
+        return self.update_orm(attempt_row)
 
 class SAT_PreprocessingSolver(SAT_Solver):
     """
@@ -60,27 +74,24 @@ class SAT_PreprocessingSolver(SAT_Solver):
         SAT_Solver.__init__(self)
 
         self.preprocessor = preprocessor
-        self.solver       = solver
+        self.inner_solver = solver
 
-    def solve(self, input_path, cutoff = None, seed = None):
+    def solve(self, task, cutoff = TimeDelta(seconds = 1e6), seed = None):
         """
         Execute the solver and return its outcome, given a concrete input path.
         """
 
-        from cargo.io       import mkdtemp_scoped
-        from cargo.temporal import TimeDelta
-
-        # FIXME improve no-cutoff support
-        if cutoff is None:
-            cutoff = TimeDelta(seconds = 1e6)
+        from cargo.io import mkdtemp_scoped
 
         with mkdtemp_scoped(prefix = "sat_preprocessing.") as sandbox_path:
-            preprocessed = self.preprocessor.preprocess(input_path, sandbox_path, cutoff)
+            preprocessed = self.preprocessor.preprocess(task, sandbox_path, cutoff)
 
             if preprocessed.solver_result is not None:
                 # the preprocessor solved the instance
                 return \
                     SAT_PreprocessingSolverResult(
+                        self,
+                        task,
                         preprocessed,
                         None,
                         preprocessed.solver_result.certificate,
@@ -91,16 +102,23 @@ class SAT_PreprocessingSolver(SAT_Solver):
 
                 if preprocessed.cnf_path is None:
                     # ... it failed unexpectedly
-                    result   = self.solver.solve(input_path, remaining, seed)
+                    result   = self.inner_solver.solve(task, remaining, seed)
                     extended = result.certificate
                 else:
                     # ... it generated a new CNF
-                    result = self.solver.solve(preprocessed.cnf_path, remaining, seed)
+                    result = self.inner_solver.solve(preprocessed.cnf_path, remaining, seed)
 
                     if result.certificate is None:
                         extended = None
                     else:
                         extended = preprocessed.extend(result.certificate)
 
-                return SAT_PreprocessingSolverResult(preprocessed, result, extended)
+                return \
+                    SAT_PreprocessingSolverResult(
+                        self,
+                        task,
+                        preprocessed,
+                        result,
+                        extended,
+                        )
 

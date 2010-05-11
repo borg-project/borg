@@ -35,6 +35,12 @@ class SAT_PreprocessorOutput(ABC):
     """
 
     @abstractproperty
+    def preprocessed(self):
+        """
+        Did the preprocessor sucessfully preprocess the instance?
+        """
+
+    @abstractproperty
     def elapsed(self):
         """
         Time elapsed in preprocessor execution.
@@ -132,6 +138,14 @@ class SatELiteOutput(SAT_PreprocessorOutput):
         self.binary_path    = binary_path
         self.output_dir     = output_dir
         self._solver_result = solver_result
+
+    @property
+    def preprocessed(self):
+        """
+        Did the preprocessor sucessfully preprocess the instance?
+        """
+
+        return bool(self.cnf_path)
 
     @property
     def elapsed(self):

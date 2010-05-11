@@ -5,9 +5,58 @@ utexas/sat/solvers/preprocessing.py
 """
 
 from cargo.log               import get_logger
-from utexas.sat.solvers.base import SAT_Solver
+from utexas.sat.solvers.base import (
+    SAT_Solver,
+    SAT_BareResult,
+    )
 
 log = get_logger(__name__)
+
+class SAT_MockPreprocessingResult(SAT_BareResult):
+    """
+    Outcome of a simulated preprocessing solver.
+    """
+
+    def __init__(self, solver, task, budget, cost, satisfiable, certificate, inner_result):
+        """
+        Initialize.
+        """
+
+        SAT_BareResult.__init__(
+            self,
+            solver,
+            task,
+            budget,
+            cost,
+            satisfiable,
+            certificate,
+            )
+
+        self.inner_result = inner_result
+
+    def to_orm(self):
+        """
+        Return a database description of this result.
+        """
+
+        if self.inner_result is None:
+            inner_attempt_row = None
+        else:
+            inner_attempt_row = self.inner_result.to_orm()
+
+        preprocessor_row = SAT_PreprocessorRow(name = self.solver.preprocessor_name)
+        attempt_row      = \
+            SAT_PreprocessingAttemptRow(
+                run          = \
+                    CPU_LimitedRunRow(
+                        cutoff       = self.budget,
+                        proc_elapsed = self.cost,
+                        ),
+                preprocessor      = preprocessor_row,
+                inner_attempt_row = inner_attempt_row,
+                )
+
+        return self.update_orm(attempt_row)
 
 class SAT_MockPreprocessingSolver(SAT_Solver):
     """
@@ -19,14 +68,14 @@ class SAT_MockPreprocessingSolver(SAT_Solver):
         Initialize.
         """
 
-        from sqlalchemy.orm import sessionmaker
+        from cargo.sql.alchemy import session_maker
 
         SAT_Solver.__init__(self)
 
-        self.preprocessor_name    = preprocessor_name
-        self.solver               = solver
-        self.engine               = engine
-        self.LocalResearchSession = sessionmaker(bind = self.engine)
+        self.preprocessor_name = preprocessor_name
+        self.solver            = solver
+        self.engine            = engine
+        self.Session           = session_maker(bind = self.engine)
 
     def solve(self, task, cutoff = None, seed = None):
         """
@@ -67,26 +116,24 @@ class SAT_MockPreprocessingSolver(SAT_Solver):
                 )
 
         # select a preprocessor run
-        from contextlib               import closing
         from sqlalchemy.sql.functions import random as sql_random
-        from utexas.sat.solvers.base  import SAT_BareResult
 
         pre_query = query.order_by(sql_random()).limit(1)
 
-        with closing(self.LocalResearchSession()) as session:
+        with self.Session() as session:
             row = session.execute(pre_query)
 
             ((inner_attempt_uuid, preprocessed, satisfiable, certificate_blob, elapsed),) = row
 
             if elapsed > cutoff:
-                return SAT_BareResult(None, None)
+                return SAT_MockPreprocessingResult(self, task, cutoff, elapsed, None, None, None)
             elif inner_attempt_uuid is None:
                 if certificate_blob is not None:
                     certificate = SA.unpack_certificate(certificate_blob)
                 else:
                     certificate = None
 
-                return SAT_BareResult(satisfiable, certificate)
+                return SAT_MockPreprocessingResult(self, task, cutoff, elapsed, satisfiable, certificate, None)
 
         # not solved by the preprocessor; try the inner solver
         from utexas.sat.tasks import SAT_MockPreprocessedTask
@@ -96,5 +143,16 @@ class SAT_MockPreprocessingSolver(SAT_Solver):
         else:
             outer_task = task
 
-        return self.solver.solve(outer_task, cutoff, seed)
+        inner_result = self.solver.solve(outer_task, cutoff - elapsed, seed)
+
+        return \
+            SAT_MockPreprocessingResult(
+                self,
+                task,
+                cutoff,
+                inner_result.cost + elapsed,
+                inner_result.satisfiable,
+                inner_result.certificate,
+                inner_result,
+                )
 

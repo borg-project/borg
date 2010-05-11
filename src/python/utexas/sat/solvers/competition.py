@@ -4,12 +4,10 @@ utexas/sat/solvers/competition.py
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-import re
-
 from cargo.log               import get_logger
 from utexas.sat.solvers.base import (
-    SAT_Result,
     SAT_Solver,
+    SAT_BareResult,
     )
 
 log = get_logger(__name__)
@@ -48,37 +46,42 @@ def scan_competition_output(lines):
 
     return (satisfiable, certificate)
 
-class SAT_RunResult(SAT_Result):
+class SAT_RunResult(SAT_BareResult):
     """
     Outcome of an external SAT solver binary.
     """
 
-    def __init__(self, satisfiable, certificate, run):
+    def __init__(self, solver, task, satisfiable, certificate, run):
         """
         Initialize.
         """
 
-        SAT_Result.__init__(self)
+        SAT_BareResult.__init__(
+            self,
+            solver,
+            task,
+            run.cutoff,
+            run.proc_elapsed,
+            satisfiable,
+            certificate,
+            )
 
-        self._satisfiable = satisfiable
-        self._certificate = certificate
-        self.run          = run
+        self.run  = run
+        self.seed = seed
 
-    @property
-    def satisfiable(self):
+    def to_orm(self):
         """
-        Did the solver report the instance satisfiable?
-        """
-
-        return self._satisfiable
-
-    @property
-    def certificate(self):
-        """
-        Certificate of satisfiability, if any.
+        Return a database description of this result.
         """
 
-        return self._certificate
+        attempt_row = \
+            SAT_RunAttemptRow(
+                run    = CPU_LimitedRunRow.from_run(self.run),
+                solver = self.solver.to_orm(),
+                seed   = self.seed,
+                )
+
+        return self.update_orm(attempt_row)
 
 class SAT_CompetitionSolver(SAT_Solver):
     """
@@ -221,6 +224,16 @@ class SAT_CompetitionSolver(SAT_Solver):
             raise SolverError("solver did not report sat but provided certificate")
 
         return SAT_RunResult(satisfiable, certificate, run)
+
+    def to_orm(self):
+        """
+        Return a database description of this solver.
+        """
+
+        if self.name is None:
+            raise RuntimeError("an anonymous solver has no database twin")
+        else:
+            return SAT_SolverRow(name = self.name)
 
     @property
     def seeded(self):

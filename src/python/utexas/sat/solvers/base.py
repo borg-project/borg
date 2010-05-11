@@ -88,6 +88,50 @@ class SAT_Result(object):
     Outcome of a SAT solver.
     """
 
+    @abstractmethod
+    def to_orm(self):
+        """
+        Return an ORM-mapped description of this result.
+        """
+
+    def update_orm(self, attempt):
+        """
+        Set the properties of an ORM-mapped description.
+        """
+
+        attempt.budget      = self.budget
+        attempt.cost        = self.cost
+        attempt.satisfiable = self.satisfiable
+        attempt.task        = self.task.to_orm()
+
+        attempt.set_certificate(self.certificate)
+
+        return attempt
+
+    @abstractproperty
+    def solver(self):
+        """
+        The solver which obtained this result.
+        """
+
+    @abstractproperty
+    def task(self):
+        """
+        The task on which this result was obtained.
+        """
+
+    @abstractproperty
+    def budget(self):
+        """
+        The budget provided to the solver to obtain this result.
+        """
+
+    @abstractproperty
+    def cost(self):
+        """
+        The cost of obtaining this result.
+        """
+
     @abstractproperty
     def satisfiable(self):
         """
@@ -105,13 +149,56 @@ class SAT_BareResult(SAT_Result):
     Minimal outcome of a SAT solver.
     """
 
-    def __init__(self, satisfiable, certificate):
+    def __init__(self, solver, task, budget, cost, satisfiable, certificate):
         """
         Initialize.
         """
 
+        self._solver      = solver
+        self._task        = task
+        self._budget      = budget
+        self._cost        = cost
         self._satisfiable = satisfiable
         self._certificate = certificate
+
+    def to_orm(self):
+        """
+        Return a database description of this result.
+        """
+
+        return self.update_orm(SAT_AttemptRow())
+
+    @abstractproperty
+    def solver(self):
+        """
+        The solver which obtained this result.
+        """
+
+        return self._solver
+
+    @abstractproperty
+    def task(self):
+        """
+        The task on which this result was obtained.
+        """
+
+        return self._task
+
+    @abstractproperty
+    def budget(self):
+        """
+        The budget provided to the solver to obtain this result.
+        """
+
+        return self._budget
+
+    @abstractproperty
+    def cost(self):
+        """
+        The cost of obtaining this result.
+        """
+
+        return self._cost
 
     @property
     def satisfiable(self):
@@ -121,7 +208,7 @@ class SAT_BareResult(SAT_Result):
 
         return self._satisfiable
 
-    @abstractproperty
+    @property
     def certificate(self):
         """
         Certificate of satisfiability, if any.
@@ -135,8 +222,15 @@ class SAT_Solver(ABC):
     """
 
     @abstractmethod
-    def solve(self, input_path, cutoff = None, seed = None):
+    def solve(self, task, cutoff = None, seed = None):
         """
         Attempt to solve the specified instance; return the outcome.
         """
+
+    def to_orm(self):
+        """
+        Return a database description of this solver.
+        """
+
+        raise RuntimeError("solver has no database analogue")
 

@@ -20,6 +20,13 @@ class SAT_Task(ABC):
     A satisfiability task.
     """
 
+    def to_orm(self):
+        """
+        Return a database description of this task.
+        """
+
+        raise RuntimeError("task has no database analogue")
+
     @abstractproperty
     def name(self):
         """
@@ -66,6 +73,13 @@ class SAT_MockFileTask(SAT_MockTask):
         SAT_MockTask.__init__(self)
 
         self.task_row = task_row
+
+    def to_orm(self):
+        """
+        Return a database description of this task.
+        """
+
+        return self.task_row
 
     @property
     def name(self):

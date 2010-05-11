@@ -5,30 +5,50 @@ utexas/sat/solvers/mock_competition.py
 """
 
 from cargo.log               import get_logger
-from utexas.sat.solvers.base import SAT_Solver
+from utexas.sat.solvers.base import (
+    SAT_Solver,
+    SAT_BareResult,
+    )
 
 log = get_logger(__name__)
 
-#         sat_case  = [(SAT_SolverRun.proc_elapsed <= action.cutoff, SAT_SolverRun.satisfiable)]
-#         statement = \
-#             select(
-#                 [
-#                     case(sat_case),
-#                     SAT_SolverRun.proc_elapsed,
-#                     ],
-#                 and_(
-#                     SAT_SolverRun.task_uuid   == task.task.uuid,
-#                     SAT_SolverRun.solver_name == action.solver.name,
-#                     SAT_SolverRun.cutoff      >= action.cutoff,
-#                     ),
-#                 order_by = sql_random(),
-#                 limit    = 1,
-#                 )
+class SAT_MockCompetitionResult(SAT_BareResult):
+    """
+    Outcome of a simulated external SAT solver binary.
+    """
 
-#         with closing(self.LocalResearchSession()) as l_session:
-#             ((sat, elapsed),) = l_session.execute(statement)
+    def __init__(self, solver, task, budget, cost, satisfiable, certificate):
+        """
+        Initialize.
+        """
 
-#             return (SAT_Outcome.BY_VALUE[sat], min(elapsed, action.cutoff))
+        SAT_BareResult.__init__(
+            self,
+            solver,
+            task,
+            budget,
+            cost,
+            satisfiable,
+            certificate,
+            )
+
+    def to_orm(self):
+        """
+        Return a database description of this result.
+        """
+
+        attempt_row = \
+            SAT_RunAttemptRow(
+                run    = \
+                    CPU_LimitedRunRow(
+                        cutoff = self.budget,
+                        proc_elapsed = self.cost,
+                        ),
+                solver = self.solver.to_orm(),
+                seed   = self.seed,
+                )
+
+        return self.update_orm(attempt_row)
 
 class SAT_MockCompetitionSolver(SAT_Solver):
     """
@@ -40,12 +60,12 @@ class SAT_MockCompetitionSolver(SAT_Solver):
         Initialize.
         """
 
-        from sqlalchemy.orm import sessionmaker
+        from cargo.sql.alchemy import session_maker
 
         SAT_Solver.__init__(self)
 
-        self.solver_name          = solver_name
-        self.LocalResearchSession = sessionmaker(bind = engine)
+        self.solver_name = solver_name
+        self.Session     = session_maker(bind = engine)
 
     def solve(self, task, cutoff = None, seed = None):
         """
@@ -81,10 +101,7 @@ class SAT_MockCompetitionSolver(SAT_Solver):
                 )
 
         # execute the query
-        from contextlib              import closing
-        from utexas.sat.solvers.base import SAT_BareResult
-
-        with closing(self.LocalResearchSession()) as session:
+        with self.Session() as session:
             ((cost, satisfiable, certificate_blob),) = session.execute(query)
 
             if cost <= cutoff:
@@ -95,7 +112,14 @@ class SAT_MockCompetitionSolver(SAT_Solver):
                 else:
                     certificate = None
 
-                return SAT_BareResult(satisfiable, certificate)
+                return SAT_MockCompetitionResult(self, task, cutoff, cost, satisfiable, certificate)
             else:
-                return SAT_BareResult(None, None)
+                return SAT_MockCompetitionResult(self, task, cutoff, cost, None, None)
+
+    def to_orm(self):
+        """
+        Return a database description of this solver.
+        """
+
+        return SAT_SolverRow(name = self.solver_name)
 

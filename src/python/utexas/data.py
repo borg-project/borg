@@ -305,7 +305,8 @@ class SAT_RunAttemptRow(SAT_AttemptRow):
     solver_name = Column(String, ForeignKey("sat_solvers.name"), nullable = False)
     seed        = Column(Integer)
 
-    run = relationship(CPU_LimitedRunRow)
+    run    = relationship(CPU_LimitedRunRow)
+    solver = relationship(SAT_SolverRow)
 
 class SAT_PreprocessingAttemptRow(SAT_AttemptRow):
     """
@@ -326,6 +327,7 @@ class SAT_PreprocessingAttemptRow(SAT_AttemptRow):
         }
 
     run           = relationship(CPU_LimitedRunRow)
+    preprocessor  = relationship(SAT_PreprocessorRow)
     inner_attempt = \
         relationship(
             SAT_AttemptRow,
