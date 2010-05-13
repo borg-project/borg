@@ -20,29 +20,33 @@ class SelectionStrategy(ABC):
     """
 
     @abstractmethod
-    def select(self, task):
+    def select(self, task, budget):
         """
         Select an action, yield it, and receive its outcome.
         """
 
-        pass
-
-class ActionModel(ABC):
+class SequenceSelectionStrategy(SelectionStrategy):
     """
-    A model of action outcomes.
+    A strategy the follows an iterable sequence.
     """
 
-    @abstractmethod
-    def predict(self, task, history, out = None):
+    name = "sequence"
+
+    def __init__(self, actions):
         """
-        Return the predicted probability of each outcome given history.
-
-        @return: numpy.ndarray(noutcomes, numpy.float); sums to one.
+        Initialize.
         """
 
-        pass
+        self.action_sequence = iter(actions)
 
-class FixedSelectionStrategy(SelectionStrategy):
+    def select(self, task, budget):
+        """
+        Select an action, yield it, and receive its outcome.
+        """
+
+        yield self.action_sequence.next()
+
+class FixedSelectionStrategy(SequenceSelectionStrategy):
     """
     A strategy that repeats a fixed action.
     """
@@ -54,17 +58,9 @@ class FixedSelectionStrategy(SelectionStrategy):
         Initialize.
         """
 
-        self.action = action
+        from itertools import repeat
 
-    def select(self, task, actions):
-        """
-        Select an action, yield it, and receive its outcome.
-        """
-
-        if self.action in actions:
-            yield self.action
-        else:
-            yield None
+        SequenceSelectionStrategy.__init__(self, repeat(action))
 
 class ModelingSelectionStrategy(SelectionStrategy):
     """

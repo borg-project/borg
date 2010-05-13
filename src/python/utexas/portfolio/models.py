@@ -17,6 +17,17 @@ from cargo.statistics._statistics import (
 
 log = get_logger(__name__)
 
+class ActionModel(ABC):
+    """
+    A model of action outcomes.
+    """
+
+    @abstractmethod
+    def predict(self, task, history):
+        """
+        Return a map between actions and (normalized) predicted probabilities.
+        """
+
 class MultinomialMixtureActionModel(ActionModel):
     """
     An arbitrary mixture model.
