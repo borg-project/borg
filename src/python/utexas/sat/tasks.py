@@ -45,7 +45,7 @@ class SAT_FileTask(SAT_Task):
 
         SAT_Task.__init__(self)
 
-        self.path = path
+        self._path = path
 
     @property
     def name(self):
@@ -53,7 +53,15 @@ class SAT_FileTask(SAT_Task):
         An arbitrary printable name for the task.
         """
 
-        return self.path
+        return self._path
+
+    @property
+    def path(self):
+        """
+        The path of the associated task file.
+        """
+
+        return self._path
 
 class SAT_MockTask(SAT_Task):
     """

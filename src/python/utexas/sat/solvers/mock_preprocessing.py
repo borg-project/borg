@@ -63,7 +63,7 @@ class SAT_MockPreprocessingSolver(SAT_Solver):
     Execute a solver after a preprocessor pass.
     """
 
-    def __init__(self, preprocessor_name, solver, Session):
+    def __init__(self, preprocessor_name, solver):
         """
         Initialize.
         """
@@ -72,16 +72,17 @@ class SAT_MockPreprocessingSolver(SAT_Solver):
 
         self.preprocessor_name = preprocessor_name
         self.solver            = solver
-        self.Session           = Session
 
-    def solve(self, task, cutoff = None, seed = None):
+    def solve(self, task, budget, random, environment):
         """
         Execute the solver and return its outcome, given an input task.
         """
 
         # argument sanity
-        if cutoff is None:
-            raise ValueError("cutoff required")
+        from utexas.sat.tasks import SAT_MockTask
+
+        if not isinstance(task, SAT_MockTask):
+            raise TypeError("mock solver requires a mock task")
 
         # build the preprocessor-run query
         from sqlalchemy  import (
@@ -105,7 +106,7 @@ class SAT_MockPreprocessingSolver(SAT_Solver):
                     CLR.proc_elapsed,
                     ],
                 and_(
-                    from_.c.budget        >= cutoff,
+                    from_.c.budget        >= budget,
                     from_.c.uuid          == SPA.__table__.c.uuid,
                     SPA.preprocessor_name == self.preprocessor_name,
                     SPA.run_uuid          == CLR.uuid,
@@ -117,20 +118,20 @@ class SAT_MockPreprocessingSolver(SAT_Solver):
 
         pre_query = query.order_by(sql_random()).limit(1)
 
-        with self.Session() as session:
+        with environment.CacheSession() as session:
             row = session.execute(pre_query)
 
             ((inner_attempt_uuid, preprocessed, satisfiable, certificate_blob, elapsed),) = row
 
-            if elapsed > cutoff:
-                return SAT_MockPreprocessingResult(self, task, cutoff, elapsed, None, None, None)
+            if elapsed > budget:
+                return SAT_MockPreprocessingResult(self, task, budget, elapsed, None, None, None)
             elif inner_attempt_uuid is None:
                 if certificate_blob is not None:
                     certificate = SA.unpack_certificate(certificate_blob)
                 else:
                     certificate = None
 
-                return SAT_MockPreprocessingResult(self, task, cutoff, elapsed, satisfiable, certificate, None)
+                return SAT_MockPreprocessingResult(self, task, budget, elapsed, satisfiable, certificate, None)
 
         # not solved by the preprocessor; try the inner solver
         from utexas.sat.tasks import SAT_MockPreprocessedTask
@@ -140,13 +141,13 @@ class SAT_MockPreprocessingSolver(SAT_Solver):
         else:
             outer_task = task
 
-        inner_result = self.solver.solve(outer_task, cutoff - elapsed, seed)
+        inner_result = self.solver.solve(outer_task, budget - elapsed, random, environment)
 
         return \
             SAT_MockPreprocessingResult(
                 self,
                 task,
-                cutoff,
+                budget,
                 inner_result.cost + elapsed,
                 inner_result.satisfiable,
                 inner_result.certificate,

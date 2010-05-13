@@ -15,6 +15,7 @@ def test_mock_preprocessing_simple():
     from utexas.data                       import SAT_TaskRow
     from utexas.sat.tasks                  import SAT_MockFileTask
     from utexas.sat.solvers                import (
+        SAT_Environment,
         SAT_MockCompetitionSolver,
         SAT_MockPreprocessingSolver,
         )
@@ -34,9 +35,10 @@ def test_mock_preprocessing_simple():
 
         task_row     = fake_data.session.query(SAT_TaskRow).get(task_uuid)
         task         = SAT_MockFileTask(task_row)
-        inner_solver = SAT_MockCompetitionSolver("foo_solver", fake_data.Session)
-        outer_solver = SAT_MockPreprocessingSolver("bar_preprocessor", inner_solver, fake_data.Session)
-        result       = outer_solver.solve(task, cutoff = TimeDelta(seconds = seconds))
+        inner_solver = SAT_MockCompetitionSolver("foo_solver")
+        outer_solver = SAT_MockPreprocessingSolver("bar_preprocessor", inner_solver)
+        environment  = SAT_Environment(CacheSession = fake_data.Session)
+        result       = outer_solver.solve(task, TimeDelta(seconds = seconds), None, environment)
 
         assert_equal(result.satisfiable, satisfiable)
         assert_equal(result.certificate, certificate)

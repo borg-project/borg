@@ -1,6 +1,4 @@
 """
-utexas/sat/solvers/uncompressing.py
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
@@ -24,7 +22,7 @@ class SAT_UncompressingSolver(SAT_Solver):
         self.solver = solver
         self.name   = name
 
-    def solve(self, input_path, cutoff = None, seed = None):
+    def solve(self, task, budget, random, environment):
         """
         Attempt to solve the specified instance; return the outcome.
         """
@@ -35,18 +33,21 @@ class SAT_UncompressingSolver(SAT_Solver):
             mkdtemp_scoped,
             )
 
-        # FIXME only create the temporary directory if necessary
+        # argument sanity
+        from utexas.sat.tasks import SAT_FileTask
+
+        if not isinstance(task, SAT_FileTask):
+            raise TypeError("uncompressing solver requires a file-backed task")
 
         with mkdtemp_scoped(prefix = "solver_input.") as sandbox_path:
             # decompress the instance, if necessary
-            uncompressed_path = \
-                decompress_if(
-                    input_path,
-                    join(sandbox_path, "uncompressed.cnf"),
-                    )
+            sandboxed_path    = join(sandbox_path, "uncompressed.cnf")
+            uncompressed_path = decompress_if(task.path, sandboxed_path)
 
-            log.info("uncompressed task is %s", uncompressed_path)
+            log.info("uncompressed task file is %s", uncompressed_path)
 
             # execute the next solver in the chain
-            return self.solver.solve(uncompressed_path, cutoff, seed)
+            uncompressed_task = SAT_FileTask(uncompressed_path)
+
+            return self.solver.solve(uncompressed_task, budget, random, environment)
 

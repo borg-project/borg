@@ -67,7 +67,7 @@ class SAT_MockCompetitionSolver(SAT_Solver):
     Fake competition solver behavior by recycling past data.
     """
 
-    def __init__(self, solver_name, Session):
+    def __init__(self, solver_name):
         """
         Initialize.
         """
@@ -75,9 +75,8 @@ class SAT_MockCompetitionSolver(SAT_Solver):
         SAT_Solver.__init__(self)
 
         self.solver_name = solver_name
-        self.Session     = Session
 
-    def solve(self, task, cutoff = None, seed = None):
+    def solve(self, task, budget, random, environment):
         """
         Execute the solver and return its outcome, given a concrete input path.
         """
@@ -100,9 +99,10 @@ class SAT_MockCompetitionSolver(SAT_Solver):
                     from_.c.cost,
                     from_.c.satisfiable,
                     from_.c.certificate,
+                    SRA.seed,
                     ],
                 and_(
-                    from_.c.budget   >= cutoff,
+                    from_.c.budget   >= budget,
                     from_.c.uuid     == SRA.__table__.c.uuid,
                     SRA.solver_name  == self.solver_name,
                     ),
@@ -111,17 +111,17 @@ class SAT_MockCompetitionSolver(SAT_Solver):
                 )
 
         # execute the query
-        with self.Session() as session:
+        with environment.CacheSession() as session:
             # unpack the result row, if any
             row = session.execute(query).first()
 
             if row is None:
                 raise RuntimeError("no matching attempt row in database")
             else:
-                (cost, satisfiable, certificate_blob) = row
+                (cost, satisfiable, certificate_blob, seed) = row
 
             # interpret the result row
-            if cost <= cutoff:
+            if cost <= budget:
                 if certificate_blob is None:
                     certificate = None
                 elif satisfiable:
@@ -129,9 +129,9 @@ class SAT_MockCompetitionSolver(SAT_Solver):
                 else:
                     raise RuntimeError("non-sat row has non-null certificate")
 
-                return SAT_MockCompetitionResult(self, task, cutoff, cost, satisfiable, certificate, seed)
+                return SAT_MockCompetitionResult(self, task, budget, cost, satisfiable, certificate, seed)
             else:
-                return SAT_MockCompetitionResult(self, task, cutoff, cost, None, None, seed)
+                return SAT_MockCompetitionResult(self, task, budget, cost, None, None, seed)
 
     def to_orm(self, session):
         """

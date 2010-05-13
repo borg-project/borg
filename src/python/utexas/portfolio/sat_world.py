@@ -12,23 +12,11 @@ from cargo.log               import get_logger
 from utexas.sat.solvers      import get_random_seed
 from utexas.portfolio.world  import (
     Task,
-    World,
     Action,
     Outcome,
     )
 
 log = get_logger(__name__)
-
-# module_flags = \
-#     Flags(
-#         "SAT Data Storage",
-#         Flag(
-#             "--sat-world-cache",
-#             default = "sqlite:///:memory:",
-#             metavar = "DATABASE",
-#             help    = "use research DATABASE by default [%default]",
-#             ),
-#         )
 
 class SAT_WorldTask(Task):
     """
@@ -55,13 +43,6 @@ class SAT_WorldTask(Task):
         else:
             return self.name
 
-    def __json__(self):
-        """
-        Make JSONable.
-        """
-
-        return (self.path, self.name)
-
 class SAT_WorldAction(Action):
     """
     An action in the world.
@@ -83,13 +64,6 @@ class SAT_WorldAction(Action):
         """
 
         return "%s_%ims" % (self.solver.name, int(self.cutoff.as_s * 1000))
-
-    def __json__(self):
-        """
-        Make JSONable.
-        """
-
-        return (self.solver.name, self.cutoff.as_s)
 
     def take(self, task, random = numpy.random):
         """
@@ -125,13 +99,6 @@ class SAT_WorldOutcome(Outcome):
         """
 
         return str(self.utility)
-
-    def __json__(self):
-        """
-        Make JSONable.
-        """
-
-        return self.n
 
     @staticmethod
     def from_result(result):

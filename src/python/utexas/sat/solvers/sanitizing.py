@@ -1,6 +1,4 @@
 """
-utexas/sat/solvers/sanitizing.py
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
@@ -23,7 +21,7 @@ class SAT_SanitizingSolver(SAT_Solver):
 
         self.solver = solver
 
-    def solve(self, input_path, cutoff = None, seed = None):
+    def solve(self, task, budget, random, environment):
         """
         Attempt to solve the specified instance; return the outcome.
         """
@@ -32,9 +30,11 @@ class SAT_SanitizingSolver(SAT_Solver):
         from os.path  import join
         from cargo.io import mkdtemp_scoped
 
-        log.info("starting to solve %s", input_path)
+        # argument sanity
+        from utexas.sat.tasks import SAT_FileTask
 
-        # FIXME use a temporary file, not directory
+        if not isinstance(task, SAT_FileTask):
+            raise TypeError("sanitizing solver requires a file-backed task")
 
         with mkdtemp_scoped(prefix = "sanitized.") as sandbox_path:
             # unconditionally sanitize the instance
@@ -42,14 +42,16 @@ class SAT_SanitizingSolver(SAT_Solver):
 
             sanitized_path = join(sandbox_path, "sanitized.cnf")
 
-            with open(input_path) as input_path:
+            with open(task.path) as task_file:
                 with open(sanitized_path, "w") as sanitized_file:
-                    write_sanitized_cnf(input_path, sanitized_file)
+                    write_sanitized_cnf(task_file, sanitized_file)
                     sanitized_file.flush()
                     fsync(sanitized_file.fileno())
 
-            log.info("sanitized task is %s", sanitized_path)
+            log.info("sanitized task file is %s", sanitized_path)
 
             # execute the next solver in the chain
-            return self.solver.solve(sanitized_path, cutoff, seed)
+            sanitized_task = SAT_FileTask(sanitized_path)
+
+            return self.solver.solve(sanitized_task, budget, random, environment)
 

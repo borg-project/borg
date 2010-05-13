@@ -51,7 +51,7 @@ class SAT_RunResult(SAT_BareResult):
     Outcome of an external SAT solver binary.
     """
 
-    def __init__(self, solver, task, satisfiable, certificate, run):
+    def __init__(self, solver, task, satisfiable, certificate, run, seed):
         """
         Initialize.
         """
@@ -60,7 +60,7 @@ class SAT_RunResult(SAT_BareResult):
             self,
             solver,
             task,
-            run.cutoff,
+            run.limit,
             run.proc_elapsed,
             satisfiable,
             certificate,
@@ -112,16 +112,18 @@ class SAT_CompetitionSolver(SAT_Solver):
         self.solvers_home = solvers_home
         self.name         = name
 
-    def solve(self, input_path, cutoff = None, seed = None):
+    def solve(self, task, budget, random, environment):
         """
-        Execute the solver and return its outcome, given a concrete input path.
-
-        Comments quote the competition specification.
+        Execute the solver and return its outcome.
         """
 
         from utexas.sat.solvers import SolverError
 
-        # FIXME support no-cutoff operation
+        # argument sanity
+        from utexas.sat.tasks import SAT_FileTask
+
+        if not isinstance(task, SAT_FileTask):
+            raise TypeError("competition solver requires a file-backed task")
 
         def expand(strings, variable, value):
             """
@@ -146,25 +148,28 @@ class SAT_CompetitionSolver(SAT_Solver):
             basename,
             )
 
-        (without, _) = splitext(input_path)
-        base         = basename(input_path)
+        (without, _) = splitext(task.path)
+        base         = basename(task.path)
         base_without = basename(without)
         expanded     = expand(expanded, "BENCHNAMENOPATHNOEXT", base_without)
         expanded     = expand(expanded, "BENCHNAMENOPATH", base)
         expanded     = expand(expanded, "BENCHNAMENOEXT", without)
-        expanded     = expand(expanded, "BENCHNAME", input_path)
+        expanded     = expand(expanded, "BENCHNAME", task.path)
 
         # RANDOMSEED: a random seed which is a number between 0 and 4294967295
-        if seed is not None:
+        from utexas.sat.solvers import get_random_seed
+
+        if self.seeded:
+            seed     = get_random_seed(random)
             expanded = expand(expanded, "RANDOMSEED", seed)
-        elif any("RANDOMSEED" in s for s in self.command):
-            raise ValueError("no seed provided for seeded solver")
+        else:
+            seed = None
 
         # TIMELIMIT (or TIMEOUT): the total CPU time (in seconds) that the
         # solver may use before being killed
         from cargo.temporal import TimeDelta
 
-        cutoff_s                 = TimeDelta.from_timedelta(cutoff).as_s
+        cutoff_s                 = TimeDelta.from_timedelta(budget).as_s
         expanded                 = expand(expanded, "TIMELIMIT", cutoff_s)
         expanded                 = expand(expanded, "TIMEOUT", cutoff_s)
         environment["TIMELIMIT"] = "%.1f" % cutoff_s
@@ -203,7 +208,7 @@ class SAT_CompetitionSolver(SAT_Solver):
             run = \
                 run_cpu_limited(
                     expanded,
-                    cutoff,
+                    budget,
                     pty         = True,
                     environment = environment,
                     )
@@ -223,7 +228,7 @@ class SAT_CompetitionSolver(SAT_Solver):
         elif certificate is not None:
             raise SolverError("solver did not report sat but provided certificate")
 
-        return SAT_RunResult(satisfiable, certificate, run)
+        return SAT_RunResult(self, task, satisfiable, certificate, run, seed)
 
     def to_orm(self):
         """

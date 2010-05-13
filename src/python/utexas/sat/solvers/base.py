@@ -83,6 +83,20 @@ class SolverError(RuntimeError):
     The solver failed in an unexpected way.
     """
 
+class SAT_Environment(object):
+    """
+    Support SAT solver execution.
+    """
+
+    def __init__(self, named_solvers = None, MainSession = None, CacheSession = None):
+        """
+        Initialize.
+        """
+
+        self.named_solvers = named_solvers
+        self.MainSession   = MainSession
+        self.CacheSession  = CacheSession
+
 class SAT_Result(object):
     """
     Outcome of a SAT solver.
@@ -222,7 +236,7 @@ class SAT_Solver(ABC):
     """
 
     @abstractmethod
-    def solve(self, task, cutoff = None, seed = None):
+    def solve(self, task, budget, random, environment):
         """
         Attempt to solve the specified instance; return the outcome.
         """
