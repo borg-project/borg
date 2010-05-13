@@ -12,6 +12,23 @@ class SAT_PortfolioResult(SAT_BareResult):
     Result of a portfolio solver.
     """
 
+    def __init__(self, solver, task, budget, cost, results):
+        """
+        Initialize.
+        """
+
+        if results:
+            last_result = results[-1]
+            satisfiable = last_result.satisfiable
+            certificate = last_result.certificate
+
+        SAT_BareResult.__init__(
+            self,
+            solver,
+            )
+
+        self._results = results
+
 class SAT_PortfolioSolver(SAT_Solver):
     """
     Solve SAT instances with a portfolio.
@@ -25,74 +42,55 @@ class SAT_PortfolioSolver(SAT_Solver):
         self.strategy        = strategy
         self.max_invocations = 50
 
-    def solve(self, input_path, cutoff = None, seed = None):
+    def solve(self, task, budget, random, environment):
         """
         Execute the solver and return its outcome, given an input path.
         """
 
-        from numpy.random               import RandomState
-        from utexas.portfolio.sat_world import SAT_WorldTask
-
-        # get us a pseudorandom sequence
-        if type(seed) is int:
-            random = RandomState(seed)
-        elif hasattr(seed, "rand"):
-            random = seed
-        else:
-            raise ValueError("seed or PRNG required")
-
-        # solve the instance
-        (satisfiable, certificate) = \
-            self._solve_on(
-                SAT_WorldTask(input_path, input_path),
-                cutoff,
-                random,
-                )
-
-        return SAT_PortfolioResult(satisfiable, certificate)
-
-    def _solve_on(self, task, cutoff, random):
-        """
-        Evaluate on a specific task.
-        """
-
         from cargo.temporal import TimeDelta
 
-        remaining = cutoff
+        # solve the instance
+        remaining = budget
         nleft     = self.max_invocations
 
-        while (remaining is None or remaining > TimeDelta()) and nleft > 0:
-            (action, pair)     = self._solve_once_on(task, remaining, random)
-            (outcome, result)  = pair
+        while remaining > TimeDelta() and nleft > 0:
+            (action, result)   = self._solve_once_on(task, remaining, random, environment)
             nleft             -= 1
 
-            if remaining is not None:
+            if action is None:
+                break
+            else:
                 remaining -= action.cost
 
-            if result.satisfiable is not None:
-                return (result.satisfiable, result.certificate)
+                if result.satisfiable is not None:
+                    return result
 
-        return (None, None)
+        return SAT_BareResult(self, task, budget, budget - remaining, None, None)
 
-    def _solve_once_on(self, task, remaining, random):
+    def _solve_once_on(self, task, budget, random, environment):
         """
         Evaluate once on a specific task.
         """
 
         # select an action
-        action_generator = self.strategy.select(task, remaining)
+        action_generator = self.strategy.select(task, budget)
         action           = action_generator.send(None)
 
         if action is None:
             return (None, None)
+        if action.cost > budget:
+            raise RuntimeError("strategy selected an infeasible action")
 
         # take it, and provide the outcome
-        (outcome, result) = action.take(task, random)
+        from utexas.portfolio.sat_world import SAT_WorldOutcome
+
+        result  = action.solver.solve(task, budget, random, environment)
+        outcome = SAT_WorldOutcome.from_result(result)
 
         try:
             action_generator.send(outcome)
         except StopIteration:
             pass
 
-        return (action, (outcome, result))
+        return (action, result)
 

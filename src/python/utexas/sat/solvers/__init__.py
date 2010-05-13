@@ -11,6 +11,7 @@ from sanitizing         import *
 from uncompressing      import *
 from preprocessing      import *
 from competition        import *
+from portfolio          import *
 from mock_competition   import *
 from mock_preprocessing import *
 

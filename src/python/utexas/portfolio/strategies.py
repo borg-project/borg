@@ -1,8 +1,4 @@
 """
-utexas/portfolio/strategies.py
-
-General selection strategies.
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
@@ -44,7 +40,12 @@ class SequenceSelectionStrategy(SelectionStrategy):
         Select an action, yield it, and receive its outcome.
         """
 
-        yield self.action_sequence.next()
+        selected = self.action_sequence.next()
+
+        if selected.cost > budget:
+            yield None
+        else:
+            yield selected
 
 class FixedSelectionStrategy(SequenceSelectionStrategy):
     """

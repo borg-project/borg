@@ -1,84 +1,92 @@
 """
-utexas/portfolio/sat_world.py
-
-The world of SAT.
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-import numpy
+# import numpy
 
-from cargo.log               import get_logger
-from utexas.sat.solvers      import get_random_seed
+# from utexas.sat.solvers      import get_random_seed
 from utexas.portfolio.world  import (
-    Task,
     Action,
     Outcome,
     )
 
-log = get_logger(__name__)
+# class SAT_WorldTask(Task):
+#     """
+#     A task in the world.
+#     """
 
-class SAT_WorldTask(Task):
-    """
-    A task in the world.
-    """
+#     def __init__(self, path, name = None):
+#         """
+#         Initialize.
 
-    def __init__(self, path, name = None):
-        """
-        Initialize.
+#         @param task: SAT task description.
+#         """
 
-        @param task: SAT task description.
-        """
+#         self.path = path
+#         self.name = name
 
-        self.path = path
-        self.name = name
+#     def __str__(self):
+#         """
+#         Return a human-readable description of this task.
+#         """
 
-    def __str__(self):
-        """
-        Return a human-readable description of this task.
-        """
-
-        if self.name is None:
-            return self.path
-        else:
-            return self.name
+#         if self.name is None:
+#             return self.path
+#         else:
+#             return self.name
 
 class SAT_WorldAction(Action):
     """
     An action in the world.
     """
 
-    def __init__(self, solver, cutoff):
+    def __init__(self, solver, budget):
         """
         Initialize.
         """
 
-        self.solver   = solver
-        self.cutoff   = cutoff
-        self.cost     = cutoff
-        self.outcomes = SAT_WorldOutcome.BY_INDEX
+        self._solver = solver
+        self._cost   = budget
+#         self._outcomes = SAT_WorldOutcome.BY_INDEX
 
-    def __str__(self):
+    @property
+    def description(self):
         """
-        Return a human-readable description of this action.
-        """
-
-        return "%s_%ims" % (self.solver.name, int(self.cutoff.as_s * 1000))
-
-    def take(self, task, random = numpy.random):
-        """
-        Take the action.
+        A human-readable description of this action.
         """
 
-        if self.solver.seeded:
-            seed = get_random_seed(random)
-        else:
-            seed = None
+        return "%s_%ims" % (self.solver.name, int(self.cost.as_s * 1000))
 
-        result  = self.solver.solve(task.path, self.cutoff, seed = seed)
-        outcome = SAT_WorldOutcome.from_result(result)
+    @property
+    def solver(self):
+        """
+        The solver associated with this SAT action.
+        """
 
-        return (outcome, result)
+        return self._solver
+
+    @property
+    def cost(self):
+        """
+        The typical cost of taking this action.
+        """
+
+        return self._cost
+
+#     def take(self, task, random = numpy.random):
+#         """
+#         Take the action.
+#         """
+
+#         if self.solver.seeded:
+#             seed = get_random_seed(random)
+#         else:
+#             seed = None
+
+#         result  = self.solver.solve(task.path, self.cutoff, seed = seed)
+#         outcome = SAT_WorldOutcome.from_result(result)
+
+#         return (outcome, result)
 
 class SAT_WorldOutcome(Outcome):
     """
