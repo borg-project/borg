@@ -17,7 +17,7 @@ class SAT_MockCompetitionResult(SAT_BareResult):
     Outcome of a simulated external SAT solver binary.
     """
 
-    def __init__(self, solver, task, budget, cost, satisfiable, certificate):
+    def __init__(self, solver, task, budget, cost, satisfiable, certificate, seed):
         """
         Initialize.
         """
@@ -32,40 +32,50 @@ class SAT_MockCompetitionResult(SAT_BareResult):
             certificate,
             )
 
-    def to_orm(self):
+        self.seed = seed
+
+    def to_orm(self, session):
         """
         Return a database description of this result.
         """
 
+        from utexas.data import (
+            SAT_RunAttemptRow,
+            CPU_LimitedRunRow,
+            )
+
         attempt_row = \
-            SAT_RunAttemptRow(
-                run    = \
-                    CPU_LimitedRunRow(
-                        cutoff = self.budget,
-                        proc_elapsed = self.cost,
-                        ),
-                solver = self.solver.to_orm(),
-                seed   = self.seed,
+            self.update_orm(
+                session,
+                SAT_RunAttemptRow(
+                    run    = \
+                        CPU_LimitedRunRow(
+                            cutoff       = self.budget,
+                            proc_elapsed = self.cost,
+                            ),
+                    solver = self.solver.to_orm(session),
+                    seed   = self.seed,
+                    ),
                 )
 
-        return self.update_orm(attempt_row)
+        session.add(attempt_row)
+
+        return attempt_row
 
 class SAT_MockCompetitionSolver(SAT_Solver):
     """
     Fake competition solver behavior by recycling past data.
     """
 
-    def __init__(self, solver_name, engine):
+    def __init__(self, solver_name, Session):
         """
         Initialize.
         """
 
-        from cargo.sql.alchemy import session_maker
-
         SAT_Solver.__init__(self)
 
         self.solver_name = solver_name
-        self.Session     = session_maker(bind = engine)
+        self.Session     = Session
 
     def solve(self, task, cutoff = None, seed = None):
         """
@@ -102,24 +112,33 @@ class SAT_MockCompetitionSolver(SAT_Solver):
 
         # execute the query
         with self.Session() as session:
-            ((cost, satisfiable, certificate_blob),) = session.execute(query)
+            # unpack the result row, if any
+            row = session.execute(query).first()
 
-            if cost <= cutoff:
-                if satisfiable:
-                    certificate = SA.unpack_certificate(certificate_blob)
-                elif certificate_blob is not None:
-                    raise RuntimeError("non-sat row has non-null certificate")
-                else:
-                    certificate = None
-
-                return SAT_MockCompetitionResult(self, task, cutoff, cost, satisfiable, certificate)
+            if row is None:
+                raise RuntimeError("no matching attempt row in database")
             else:
-                return SAT_MockCompetitionResult(self, task, cutoff, cost, None, None)
+                (cost, satisfiable, certificate_blob) = row
 
-    def to_orm(self):
+            # interpret the result row
+            if cost <= cutoff:
+                if certificate_blob is None:
+                    certificate = None
+                elif satisfiable:
+                    certificate = SA.unpack_certificate(certificate_blob)
+                else:
+                    raise RuntimeError("non-sat row has non-null certificate")
+
+                return SAT_MockCompetitionResult(self, task, cutoff, cost, satisfiable, certificate, seed)
+            else:
+                return SAT_MockCompetitionResult(self, task, cutoff, cost, None, None, seed)
+
+    def to_orm(self, session):
         """
         Return a database description of this solver.
         """
 
-        return SAT_SolverRow(name = self.solver_name)
+        from utexas.data import SAT_SolverRow
+
+        return session.query(SAT_SolverRow).filter_by(name = self.solver_name).first()
 

@@ -166,11 +166,12 @@ class FakeSolverData(object):
         Prepare for a test.
         """
 
-        from sqlalchemy     import create_engine
-        from sqlalchemy.orm import sessionmaker
+        from sqlalchemy        import create_engine
+        from cargo.sql.alchemy import make_session
 
         self.engine  = create_engine("sqlite:///:memory:")
-        self.session = sessionmaker(bind = self.engine)()
+        self.Session = make_session(bind = self.engine)
+        self.session = self.Session()
 
         add_fake_runs(self.session)
 

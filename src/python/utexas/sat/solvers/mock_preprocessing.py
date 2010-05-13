@@ -63,19 +63,16 @@ class SAT_MockPreprocessingSolver(SAT_Solver):
     Execute a solver after a preprocessor pass.
     """
 
-    def __init__(self, preprocessor_name, solver, engine):
+    def __init__(self, preprocessor_name, solver, Session):
         """
         Initialize.
         """
-
-        from cargo.sql.alchemy import session_maker
 
         SAT_Solver.__init__(self)
 
         self.preprocessor_name = preprocessor_name
         self.solver            = solver
-        self.engine            = engine
-        self.Session           = session_maker(bind = self.engine)
+        self.Session           = Session
 
     def solve(self, task, cutoff = None, seed = None):
         """

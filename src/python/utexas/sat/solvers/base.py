@@ -94,7 +94,7 @@ class SAT_Result(object):
         Return an ORM-mapped description of this result.
         """
 
-    def update_orm(self, attempt):
+    def update_orm(self, session, attempt):
         """
         Set the properties of an ORM-mapped description.
         """
@@ -102,7 +102,7 @@ class SAT_Result(object):
         attempt.budget      = self.budget
         attempt.cost        = self.cost
         attempt.satisfiable = self.satisfiable
-        attempt.task        = self.task.to_orm()
+        attempt.task        = self.task.to_orm(session)
 
         attempt.set_certificate(self.certificate)
 

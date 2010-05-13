@@ -34,8 +34,8 @@ def test_mock_preprocessing_simple():
 
         task_row     = fake_data.session.query(SAT_TaskRow).get(task_uuid)
         task         = SAT_MockFileTask(task_row)
-        inner_solver = SAT_MockCompetitionSolver("foo_solver", fake_data.engine)
-        outer_solver = SAT_MockPreprocessingSolver("bar_preprocessor", inner_solver, fake_data.engine)
+        inner_solver = SAT_MockCompetitionSolver("foo_solver", fake_data.Session)
+        outer_solver = SAT_MockPreprocessingSolver("bar_preprocessor", inner_solver, fake_data.Session)
         result       = outer_solver.solve(task, cutoff = TimeDelta(seconds = seconds))
 
         assert_equal(result.satisfiable, satisfiable)

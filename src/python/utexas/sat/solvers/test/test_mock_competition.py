@@ -31,7 +31,7 @@ def test_mock_competition_simple():
 
         task_row = fake_data.session.query(SAT_TaskRow).get(task_uuid)
         task     = SAT_MockFileTask(task_row)
-        solver   = SAT_MockCompetitionSolver("foo_solver", fake_data.engine)
+        solver   = SAT_MockCompetitionSolver("foo_solver", fake_data.Session)
         result   = solver.solve(task, cutoff = TimeDelta(seconds = seconds))
 
         assert_equal(result.satisfiable, satisfiable)
