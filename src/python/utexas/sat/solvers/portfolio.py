@@ -12,22 +12,38 @@ class SAT_PortfolioResult(SAT_BareResult):
     Result of a portfolio solver.
     """
 
-    def __init__(self, solver, task, budget, cost, results):
+    def __init__(self, solver, task, budget, cost, record):
         """
         Initialize.
         """
 
-        if results:
-            last_result = results[-1]
-            satisfiable = last_result.satisfiable
-            certificate = last_result.certificate
+        if record:
+            (_, result) = record[-1]
+            satisfiable = result.satisfiable
+            certificate = result.certificate
+        else:
+            satisfiable = None
+            certificate = None
 
         SAT_BareResult.__init__(
             self,
             solver,
+            task,
+            budget,
+            cost,
+            satisfiable,
+            certificate,
             )
 
-        self._results = results
+        self._record = record
+
+    @property
+    def record(self):
+        """
+        List of (subsolver, result) pairs.
+        """
+
+        return self._record
 
 class SAT_PortfolioSolver(SAT_Solver):
     """
@@ -52,6 +68,7 @@ class SAT_PortfolioSolver(SAT_Solver):
         # solve the instance
         remaining = budget
         nleft     = self.max_invocations
+        record    = []
 
         while remaining > TimeDelta() and nleft > 0:
             (action, result)   = self._solve_once_on(task, remaining, random, environment)
@@ -62,10 +79,12 @@ class SAT_PortfolioSolver(SAT_Solver):
             else:
                 remaining -= action.cost
 
-                if result.satisfiable is not None:
-                    return result
+                record.append((action.solver, result))
 
-        return SAT_BareResult(self, task, budget, budget - remaining, None, None)
+                if result.satisfiable is not None:
+                    break
+
+        return SAT_PortfolioResult(self, task, budget, budget - remaining, record)
 
     def _solve_once_on(self, task, budget, random, environment):
         """

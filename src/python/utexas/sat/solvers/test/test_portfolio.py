@@ -10,14 +10,13 @@ class FixedSolver(SAT_Solver):
     A fake, fixed-result solver.
     """
 
-    def __init__(self, satisfiable, certificate, record):
+    def __init__(self, satisfiable, certificate):
         """
         Initialize.
         """
 
         self.satisfiable = satisfiable
         self.certificate = certificate
-        self.record      = record
 
     def solve(self, task, budget, random, environment):
         """
@@ -25,8 +24,6 @@ class FixedSolver(SAT_Solver):
         """
 
         from utexas.sat.solvers import SAT_BareResult
-
-        self.record.append(self)
 
         return \
             SAT_BareResult(
@@ -49,12 +46,11 @@ def test_sat_portfolio_solver():
     from utexas.portfolio.sat_world  import SAT_WorldAction
     from utexas.portfolio.strategies import SequenceSelectionStrategy
 
-    record      = []
     certificate = [1, 2, 3, 4, 0]
     subsolvers  = [
-        FixedSolver(None,  None,        record),
-        FixedSolver(True,  certificate, record),
-        FixedSolver(False, None,        record),
+        FixedSolver(None,  None),
+        FixedSolver(True,  certificate),
+        FixedSolver(False, None),
         ]
     actions     = [SAT_WorldAction(s, TimeDelta(seconds = 16.0)) for s in subsolvers]
 
@@ -68,8 +64,6 @@ def test_sat_portfolio_solver():
 
         from utexas.sat.tasks import SAT_FileTask
 
-        del record[:]
-
         strategy = SequenceSelectionStrategy(actions)
         solver   = SAT_PortfolioSolver(strategy)
         task     = SAT_FileTask("/tmp/arbitrary_path.cnf")
@@ -77,7 +71,7 @@ def test_sat_portfolio_solver():
 
         assert_equal(result.satisfiable, satisfiable)
         assert_equal(result.certificate, certificate)
-        assert_equal(record,             clean_record)
+        assert_equal([s for (s, _) in result.record], clean_record)
 
     # yield the individual tests
     yield (test_now,  2.0, None, None,        [])
