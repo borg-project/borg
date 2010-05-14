@@ -80,14 +80,16 @@ class SAT_MockFileTask(SAT_MockTask):
 
         SAT_MockTask.__init__(self)
 
-        self.task_row = task_row
+        self.task_uuid = task_row.uuid
 
     def to_orm(self, session):
         """
         Return a database description of this task.
         """
 
-        return session.merge(self.task_row)
+        from utexas.data import SAT_TaskRow
+
+        return session.query(SAT_TaskRow).get(self.task_uuid)
 
     @property
     def name(self):
@@ -112,11 +114,11 @@ class SAT_MockFileTask(SAT_MockTask):
             sat_attempts_trials_table as satt,
             )
 
-        query = \
+        query    = \
             select(
                 SAT_AttemptRow.__table__.columns,
                 and_(
-                    SAT_AttemptRow.task_uuid == self.task_row.uuid,
+                    SAT_AttemptRow.task_uuid == self.task_uuid,
                     SAT_AttemptRow.uuid      == satt.c.attempt_uuid,
                     satt.c.trial_uuid        == SAT_TrialRow.RECYCLABLE_UUID,
                     ),

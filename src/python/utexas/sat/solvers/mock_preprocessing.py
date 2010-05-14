@@ -47,7 +47,7 @@ class SAT_MockPreprocessingResult(SAT_BareResult):
         preprocessor_row = SAT_PreprocessorRow(name = self.solver.preprocessor_name)
         attempt_row      = \
             SAT_PreprocessingAttemptRow(
-                run          = \
+                run               = \
                     CPU_LimitedRunRow(
                         cutoff       = self.budget,
                         proc_elapsed = self.cost,

@@ -7,7 +7,7 @@ from utexas.sat.solvers.test.support import FixedSolver
 
 def test_named_solver():
     """
-    Test the name-based SAT solver.
+    Test the lookup-based SAT solver.
     """
 
     # set up the solver

@@ -38,7 +38,7 @@ def test_tools_portfolio_solve():
                 )
             cnf_file.flush()
 
-            # invole the script solver
+            # invoke the script solver
             import numpy
 
             from cargo.temporal     import TimeDelta
