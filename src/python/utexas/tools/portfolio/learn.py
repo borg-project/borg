@@ -23,7 +23,7 @@ module_flags = \
         Flag(
             "-m",
             "--model-type",
-            choices = ["multinomial", "dcm"],
+            choices = ["multinomial", "dcm", "random"],
             default = "dcm",
             metavar = "TYPE",
             help    = "learn a TYPE model [%default]",
@@ -150,6 +150,26 @@ def make_dcm_mixture_model(training, ncomponents, nrestarts):
 
     return model
 
+def make_random_model():
+    # hardcoded random portfolio
+    solver_names = [
+        "sat/2009/CirCUs",
+        "sat/2009/clasp",
+        "sat/2009/glucose",
+        "sat/2009/LySAT_i",
+        "sat/2009/minisat_09z",
+        "sat/2009/minisat_cumr_p",
+        "sat/2009/mxc_09",
+        "sat/2009/precosat",
+        "sat/2009/rsat_09",
+        "sat/2009/SApperloT",
+        ]
+    solvers = map(named_solvers.__getitem__, solver_names)
+    cutoffs = [TimeDelta(seconds = c) for c in r_[10.0:800.0:6j]]
+    actions = [SAT_WorldAction(*a) for a in product(solvers, cutoffs)]
+    model   = RandomActionModel(random)
+    planner = HardMyopicActionPlanner(1.0)
+
 def main():
     """
     Main.
@@ -161,7 +181,7 @@ def main():
     from cargo.sql.alchemy import SQL_Engines
     from cargo.flags       import parse_given
 
-    (samples_path, model_path) = parse_given()
+    (samples_path, solver_path) = parse_given()
 
     # set up log output
     from cargo.log import enable_default_logging
@@ -179,7 +199,7 @@ def main():
     # FIXME write the samples this way
     samples = dict((k, numpy.array(v)) for (k, v) in samples.items())
 
-    # run inference and store model
+    # run inference and build model
     model_type  = module_flags.given.model_type
     ncomponents = module_flags.given.components
     nrestarts   = module_flags.given.restarts
@@ -188,7 +208,33 @@ def main():
         model = make_dcm_mixture_model(samples, ncomponents, nrestarts)
     elif model_type == "multinomial":
         model = make_mult_mixture_model(samples, ncomponents, nrestarts)
+    elif model_type == "random":
+        model = make_random_model(samples)
 
     with open(model_path, "w") as file:
         pickle.dump(model, file, -1)
+
+    # build the entire solver
+    r              = flags.calibration / 2.1 # hardcoded rhavan score
+    map_action     = lambda (s, c): SAT_WorldAction(named_solvers[s], TimeDelta(seconds = c.as_s * r))
+    actions        = map(map_action, model._actions)
+    model._actions = actions
+    planner        = HardMyopicActionPlanner(1.0 - 2e-3)
+    strategy       = \
+        ModelingSelectionStrategy(
+            model,
+            planner,
+            actions,
+            )
+    solver         = \
+        SAT_UncompressingSolver(
+            SAT_PreprocessingSolver(
+                SatELitePreprocessor(),
+                SAT_PortfolioSolver(strategy),
+                ),
+            )
+
+    # write it to disk
+    with open(solver_path, "w") as file:
+        pickle.dump(file, solver)
 

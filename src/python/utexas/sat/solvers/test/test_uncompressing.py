@@ -50,7 +50,6 @@ def test_sat_uncompressing_solver():
 
     with NamedTemporaryFile(suffix = ".cnf.gz") as named_file:
         # write the compressed CNF expression
-        from os         import fsync
         from gzip       import GzipFile
         from contextlib import closing
 
@@ -58,7 +57,6 @@ def test_sat_uncompressing_solver():
             gzip_file.write(raw_cnf)
 
         named_file.flush()
-        fsync(named_file.fileno())
 
         # test the solver
         from utexas.sat.tasks   import SAT_FileTask

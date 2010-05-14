@@ -2,9 +2,40 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from uuid import uuid4
+from uuid               import uuid4
+from utexas.sat.solvers import SAT_Solver
 
 task_uuids = [uuid4() for i in xrange(5)]
+
+class FixedSolver(SAT_Solver):
+    """
+    A fake, fixed-result solver.
+    """
+
+    def __init__(self, satisfiable, certificate):
+        """
+        Initialize.
+        """
+
+        self.satisfiable = satisfiable
+        self.certificate = certificate
+
+    def solve(self, task, budget, random, environment):
+        """
+        Pretend to solve the task.
+        """
+
+        from utexas.sat.solvers import SAT_BareResult
+
+        return \
+            SAT_BareResult(
+                self,
+                task,
+                budget,
+                budget,
+                self.satisfiable,
+                self.certificate,
+                )
 
 def add_fake_foo_run(session, recyclable_trial_row, task_row, satisfiable):
     """

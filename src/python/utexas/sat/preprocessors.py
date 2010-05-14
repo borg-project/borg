@@ -183,7 +183,6 @@ class SatELiteOutput(SAT_PreprocessorOutput):
             raise RuntimeError("extend() on SatELite output that has no CNF")
 
         # write the certificate to a file
-        from os       import fsync
         from tempfile import NamedTemporaryFile
 
         with NamedTemporaryFile("w", prefix = "sat_certificate.") as certificate_file:
@@ -191,8 +190,6 @@ class SatELiteOutput(SAT_PreprocessorOutput):
             certificate_file.write(" ".join(str(l) for l in certificate))
             certificate_file.write("\n")
             certificate_file.flush()
-
-            fsync(certificate_file.fileno())
 
             with mkdtemp_scoped(prefix = "tmp.satelite.") as tmpdir:
                 # run the solver

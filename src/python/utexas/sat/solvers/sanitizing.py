@@ -26,7 +26,6 @@ class SAT_SanitizingSolver(SAT_Solver):
         Attempt to solve the specified instance; return the outcome.
         """
 
-        from os       import fsync
         from os.path  import join
         from cargo.io import mkdtemp_scoped
 
@@ -45,8 +44,8 @@ class SAT_SanitizingSolver(SAT_Solver):
             with open(task.path) as task_file:
                 with open(sanitized_path, "w") as sanitized_file:
                     write_sanitized_cnf(task_file, sanitized_file)
+
                     sanitized_file.flush()
-                    fsync(sanitized_file.fileno())
 
             log.info("sanitized task file is %s", sanitized_path)
 

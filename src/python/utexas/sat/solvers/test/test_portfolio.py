@@ -2,38 +2,8 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from nose.tools         import assert_equal
-from utexas.sat.solvers import SAT_Solver
-
-class FixedSolver(SAT_Solver):
-    """
-    A fake, fixed-result solver.
-    """
-
-    def __init__(self, satisfiable, certificate):
-        """
-        Initialize.
-        """
-
-        self.satisfiable = satisfiable
-        self.certificate = certificate
-
-    def solve(self, task, budget, random, environment):
-        """
-        Pretend to solve the task.
-        """
-
-        from utexas.sat.solvers import SAT_BareResult
-
-        return \
-            SAT_BareResult(
-                self,
-                task,
-                budget,
-                budget,
-                self.satisfiable,
-                self.certificate,
-                )
+from nose.tools                      import assert_equal
+from utexas.sat.solvers.test.support import FixedSolver
 
 def test_sat_portfolio_solver():
     """

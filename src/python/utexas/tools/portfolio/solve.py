@@ -1,7 +1,5 @@
 # vim: set fileencoding=UTF-8 :
 """
-Solve a task using a portfolio.
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
@@ -148,32 +146,7 @@ def main((input_path,)):
         import cPickle as pickle
 
         with open(flags.model) as file:
-            model = pickle.load(file)
-
-        r              = flags.calibration / 2.1 # hardcoded rhavan score
-        map_action     = lambda (s, c): SAT_WorldAction(named_solvers[s], TimeDelta(seconds = c.as_s * r))
-        actions        = map(map_action, model._actions)
-        model._actions = actions
-        planner        = HardMyopicActionPlanner(1.0 - 2e-3)
-    else:
-        # hardcoded random portfolio
-        solver_names = [
-            "sat/2009/CirCUs",
-            "sat/2009/clasp",
-            "sat/2009/glucose",
-            "sat/2009/LySAT_i",
-            "sat/2009/minisat_09z",
-            "sat/2009/minisat_cumr_p",
-            "sat/2009/mxc_09",
-            "sat/2009/precosat",
-            "sat/2009/rsat_09",
-            "sat/2009/SApperloT",
-            ]
-        solvers = map(named_solvers.__getitem__, solver_names)
-        cutoffs = [TimeDelta(seconds = c) for c in r_[10.0:800.0:6j]]
-        actions = [SAT_WorldAction(*a) for a in product(solvers, cutoffs)]
-        model   = RandomActionModel(random)
-        planner = HardMyopicActionPlanner(1.0)
+            solver = pickle.load(file)
 
     strategy = \
         ModelingSelectionStrategy(
@@ -193,7 +166,7 @@ def main((input_path,)):
     from utexas.sat.tasks import SAT_FileTask
 
     task   = SAT_FileTask(input_path)
-    result = solver.solve(task, TimeDelta(seconds = 1e6), seed = random)
+    result = solver.solve(task, TimeDelta(seconds = 1e6), random, environment)
 
     # tell the world
     if result.satisfiable is True:

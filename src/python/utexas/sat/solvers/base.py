@@ -168,6 +168,8 @@ class SAT_BareResult(SAT_Result):
         Initialize.
         """
 
+        SAT_Result.__init__(self)
+
         self._solver      = solver
         self._task        = task
         self._budget      = budget
@@ -229,6 +231,76 @@ class SAT_BareResult(SAT_Result):
         """
 
         return self._certificate
+
+class SAT_WrappedResult(SAT_Result):
+    """
+    A result from an inner solver.
+    """
+
+    def __init__(self, solver, inner_result):
+        """
+        Initialize.
+        """
+
+        SAT_Result.__init__(self)
+
+        self._solver       = solver
+        self._inner_result = inner_result
+
+    def to_orm(self):
+        """
+        Return a database description of this result.
+        """
+
+        return self._inner_result.to_orm()
+
+    @abstractproperty
+    def solver(self):
+        """
+        The solver which obtained this result.
+        """
+
+        return self._solver
+
+    @abstractproperty
+    def task(self):
+        """
+        The task on which this result was obtained.
+        """
+
+        return self._inner_result.task
+
+    @abstractproperty
+    def budget(self):
+        """
+        The budget provided to the solver to obtain this result.
+        """
+
+        return self._inner_result.budget
+
+    @abstractproperty
+    def cost(self):
+        """
+        The cost of obtaining this result.
+        """
+
+        return self._inner_result.cost
+
+    @property
+    def satisfiable(self):
+        """
+        Did the solver report the instance satisfiable?
+        """
+
+        return self._inner_result.satisfiable
+
+    @property
+    def certificate(self):
+        """
+        Certificate of satisfiability, if any.
+        """
+
+        return self._inner_result.certificate
 
 class SAT_Solver(ABC):
     """

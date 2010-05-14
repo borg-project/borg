@@ -26,12 +26,8 @@ def test_sat_sanitizing_solver():
 
     with NamedTemporaryFile(suffix = ".cnf.gz") as named_file:
         # write the unsanitized CNF
-        from os import fsync
-
         named_file.write(sanitized_cnf)
         named_file.flush()
-
-        fsync(named_file.fileno())
 
         # test the solver
         from utexas.sat.tasks   import SAT_FileTask

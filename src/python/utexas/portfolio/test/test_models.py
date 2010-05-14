@@ -53,5 +53,5 @@ def test_random_action_model():
         total  = sum(m[action] for m in maps)
         total /= len(maps)
 
-        assert_true(numpy.sum(numpy.abs(total - mean)) < 0.025)
+        assert_true(numpy.sum(numpy.abs(total - mean)) < 0.05)
 

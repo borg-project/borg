@@ -42,15 +42,12 @@ while True: pass
         Test the SAT competition-binary solver.
         """
 
-        from os       import fsync
         from tempfile import NamedTemporaryFile
 
         with NamedTemporaryFile(suffix = ".py") as code_file:
             # write the fake solver
             code_file.write(solver_code)
             code_file.flush()
-
-            fsync(code_file.fileno())
 
             # build the solver interface
             from cargo.temporal     import TimeDelta

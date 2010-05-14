@@ -7,6 +7,7 @@ utexas/sat/solvers/__init__.py
 # FIXME are relative imports truly necessary here?
 
 from base               import *
+from lookup             import *
 from sanitizing         import *
 from uncompressing      import *
 from preprocessing      import *
