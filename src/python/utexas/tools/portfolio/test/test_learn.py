@@ -9,15 +9,6 @@ def test_tools_portfolio_learn():
     Test the portfolio solver construction script.
     """
 
-    def set_up_environment():
-        """
-        Set up the process environment for the forked script.
-        """
-
-        from os import unsetenv
-
-        unsetenv("CARGO_FLAGS_EXTRA_FILE")
-
     # fork; build a random-model solver
     from os.path    import join
     from subprocess import check_call
@@ -25,6 +16,8 @@ def test_tools_portfolio_learn():
 
     with mkdtemp_scoped() as sandbox_path:
         # invoke the script
+        from utexas.tools.portfolio.test.support import clean_up_environment
+
         solver_pickle_path = join(sandbox_path, "solver.pickle")
 
         check_call(
@@ -37,7 +30,7 @@ def test_tools_portfolio_learn():
                 "none",
                 solver_pickle_path,
                 ],
-            preexec_fn = set_up_environment,
+            preexec_fn = clean_up_environment,
             )
 
         # and load the solver file

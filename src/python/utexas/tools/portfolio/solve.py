@@ -8,6 +8,8 @@ if __name__ == "__main__":
 
     raise SystemExit(main())
 
+import utexas.sat.solvers
+
 from logging                    import Formatter
 from cargo.log                  import get_logger
 from cargo.flags                import (
@@ -22,26 +24,12 @@ module_flags = \
     Flags(
         "Solver Execution Options",
         Flag(
-            "-s",
-            "--seed",
-            type    = int,
-            default = 43,
-            metavar = "INT",
-            help    = "use INT to seed the internal PRNG [%default]",
-            ),
-        Flag(
             "-c",
             "--calibration",
             type    = float,
             default = 5.59,
             metavar = "FLOAT",
             help    = "assume machine speed FLOAT [%default]",
-            ),
-        Flag(
-            "-m",
-            "--model",
-            metavar = "PATH",
-            help    = "read model from PATH [%default]",
             ),
         Flag(
             "-v",
@@ -85,15 +73,11 @@ class CompetitionFormatter(Formatter):
 
         return "\n".join(yield_lines())
 
-@with_flags_parsed(
-    usage = "usage: %prog [options] <task>",
-    )
-def main((input_path,)):
+def enable_output():
     """
-    Main.
+    Set up competition-compliant output.
     """
 
-    # set up competition logging
     import sys
     import logging
 
@@ -109,6 +93,17 @@ def main((input_path,)):
 
     logging.root.addHandler(handler)
 
+@with_flags_parsed(
+    usage = "usage: %prog [options] <task>",
+    )
+def main((solver_path, input_path, seed_string)):
+    """
+    Main.
+    """
+
+    # allow some logging output
+    enable_output()
+
     # basic flag handling
     flags = module_flags.given
 
@@ -119,26 +114,29 @@ def main((input_path,)):
         get_logger("utexas.tools.sat.run_solvers", level = "NOTSET")
         get_logger("utexas.portfolio.models",      level = "NOTSET")
 
-    # solvers to use
+    # build our PRNG
+    from numpy.random import RandomState
+
+    random = RandomState(int(seed_string))
+
+    # instantiate the strategy
+    import cPickle as pickle
+
+    with open(solver_path) as file:
+        solver = pickle.load(file)
+
+    # build the solver environment
     from utexas.sat.solvers import (
+        SAT_Environment,
         get_named_solvers,
         )
 
-    named_solvers = get_named_solvers()
+    environment = \
+        SAT_Environment(
+            named_solvers = get_named_solvers(),
+            )
 
-    # instantiate the strategy
-    from numpy.random import RandomState
-
-    random = RandomState(flags.seed)
-
-    if flags.model is not None:
-        # configurable model-based portfolio
-        import cPickle as pickle
-
-        with open(flags.model) as file:
-            solver = pickle.load(file)
-
-    # run it
+    # solve
     from cargo.temporal   import TimeDelta
     from utexas.sat.tasks import SAT_FileTask
 
