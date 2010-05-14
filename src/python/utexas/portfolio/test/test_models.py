@@ -19,7 +19,7 @@ def test_fixed_action_model():
     from utexas.portfolio.models               import FixedActionModel
 
     actions     = [FakeAction(i) for i in xrange(4)]
-    predictions = dict((a, numpy.array([0.25, 0.75])) for a in actions)
+    predictions = dict((a, numpy.array([0.25, 0.125, 0.125, 0.50])) for a in actions)
     model       = FixedActionModel(predictions)
 
     assert_equal(model.predict(None, []), predictions)

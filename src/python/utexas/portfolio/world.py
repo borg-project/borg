@@ -20,10 +20,18 @@ class Action(ABC):
         A human-readable description of this action.
         """
 
+        raise NotImplementedError()
+
     @abstractproperty
     def cost(self):
         """
         The typical cost of taking this action.
+        """
+
+    @abstractproperty
+    def outcomes(self):
+        """
+        The possible outcomes of this action.
         """
 
 class Outcome(ABC):
@@ -31,5 +39,9 @@ class Outcome(ABC):
     An outcome of an action in the world.
     """
 
-    pass
+    @abstractproperty
+    def utility(self):
+        """
+        The utility of this outcome.
+        """
 

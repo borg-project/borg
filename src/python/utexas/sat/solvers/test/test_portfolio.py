@@ -12,7 +12,10 @@ def test_sat_portfolio_solver():
 
     # set up the portfolio solver
     from cargo.temporal              import TimeDelta
-    from utexas.sat.solvers          import SAT_PortfolioSolver
+    from utexas.sat.solvers          import (
+        SAT_Environment,
+        SAT_PortfolioSolver,
+        )
     from utexas.portfolio.sat_world  import SAT_WorldAction
     from utexas.portfolio.strategies import SequenceSelectionStrategy
 
@@ -23,6 +26,7 @@ def test_sat_portfolio_solver():
         FixedSolver(False, None),
         ]
     actions     = [SAT_WorldAction(s, TimeDelta(seconds = 16.0)) for s in subsolvers]
+    environment = SAT_Environment()
 
     # each test is similar
     def test_now(seconds, satisfiable, certificate, clean_record):
@@ -37,7 +41,7 @@ def test_sat_portfolio_solver():
         strategy = SequenceSelectionStrategy(actions)
         solver   = SAT_PortfolioSolver(strategy)
         task     = SAT_FileTask("/tmp/arbitrary_path.cnf")
-        result   = solver.solve(task, TimeDelta(seconds = seconds), numpy.random, None)
+        result   = solver.solve(task, TimeDelta(seconds = seconds), numpy.random, environment)
 
         assert_equal(result.satisfiable, satisfiable)
         assert_equal(result.certificate, certificate)

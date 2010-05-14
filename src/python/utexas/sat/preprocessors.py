@@ -122,6 +122,27 @@ class SAT_UncompressingPreprocessor(SAT_Preprocessor):
             # then preprocess it
             return self.prepreocessor.preprocess(uncompressed_path, output_dir, cutoff)
 
+class SAT_LookupPreprocessor(SAT_Preprocessor):
+    """
+    Use a named SAT preprocessor.
+    """
+
+    def __init__(self, name):
+        """
+        Initialize.
+        """
+
+        SAT_Preprocessor.__init__(self)
+
+        self.name = name
+
+    def preprocess(self, input_path, output_dir, cutoff = None):
+        """
+        Preprocess an instance.
+        """
+
+        raise NotImplementedError()
+
 class SatELiteOutput(SAT_PreprocessorOutput):
     """
     Result of the SatELite preprocessor.

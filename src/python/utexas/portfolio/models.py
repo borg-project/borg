@@ -18,6 +18,17 @@ from cargo.statistics._statistics import (
 
 log = get_logger(__name__)
 
+def assert_sane_predictions(predictions):
+    """
+    Assert the a predictions map makes superficial sense.
+    """
+
+    for (action, prediction) in predictions.iteritems():
+        if len(action.outcomes) != len(prediction):
+            raise ValueError("prediction count does not match outcome count")
+        if numpy.sum(prediction) != 1.0:
+            raise ValueError("non-normalized probability vector")
+
 class ActionModel(ABC):
     """
     A model of action outcomes.
@@ -40,9 +51,7 @@ class FixedActionModel(ActionModel):
         """
 
         # argument sanity
-        for (_, p) in predictions.items():
-            if numpy.sum(p) != 1.0:
-                raise ValueError("non-normalized probability vector")
+        assert_sane_predictions(predictions)
 
         # members
         self._predictions = predictions

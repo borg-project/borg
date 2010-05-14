@@ -18,7 +18,7 @@ class FakeAction(Action):
         """
 
         self.value     = value
-        self._outcomes = [FakeOutcome()] * 4
+        self._outcomes = map(FakeOutcome, [0.0, 1.0, 2.0, 3.0])
 
     @property
     def cost(self):
@@ -40,4 +40,19 @@ class FakeOutcome(Outcome):
     """
     An outcome strictly for testing.
     """
+
+    def __init__(self, utility):
+        """
+        Initialize.
+        """
+
+        self._utility = utility
+
+    @property
+    def utility(self):
+        """
+        The utility of this outcome.
+        """
+
+        return self._utility
 

@@ -121,23 +121,13 @@ def main((input_path,)):
 
     # solvers to use
     from utexas.sat.solvers import (
-        SAT_UncompressingSolver,
-        SAT_PreprocessingSolver,
         get_named_solvers,
         )
 
     named_solvers = get_named_solvers()
 
     # instantiate the strategy
-    from itertools                   import product
-    from numpy                       import r_
-    from numpy.random                import RandomState
-    from cargo.temporal              import TimeDelta
-    from utexas.sat.preprocessors    import SatELitePreprocessor
-    from utexas.portfolio.models     import RandomActionModel
-    from utexas.portfolio.planners   import HardMyopicActionPlanner
-    from utexas.portfolio.sat_world  import SAT_WorldAction
-    from utexas.portfolio.strategies import ModelingSelectionStrategy
+    from numpy.random import RandomState
 
     random = RandomState(flags.seed)
 
@@ -148,21 +138,8 @@ def main((input_path,)):
         with open(flags.model) as file:
             solver = pickle.load(file)
 
-    strategy = \
-        ModelingSelectionStrategy(
-            model,
-            planner,
-            actions,
-            )
-    solver   = \
-        SAT_UncompressingSolver(
-            SAT_PreprocessingSolver(
-                SatELitePreprocessor(),
-                SAT_PortfolioSolver(strategy),
-                ),
-            )
-
     # run it
+    from cargo.temporal   import TimeDelta
     from utexas.sat.tasks import SAT_FileTask
 
     task   = SAT_FileTask(input_path)

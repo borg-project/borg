@@ -151,7 +151,18 @@ def make_dcm_mixture_model(training, ncomponents, nrestarts):
     return model
 
 def make_random_model():
-    # hardcoded random portfolio
+    """
+    Build a random portfolio model.
+    """
+
+    from numpy                      import r_
+    from numpy.random               import RandomState
+    from itertools                  import product
+    from cargo.temporal             import TimeDelta
+    from utexas.sat.solvers         import SAT_LookupSolver
+    from utexas.portfolio.models    import RandomActionModel
+    from utexas.portfolio.sat_world import SAT_WorldAction
+
     solver_names = [
         "sat/2009/CirCUs",
         "sat/2009/clasp",
@@ -164,11 +175,12 @@ def make_random_model():
         "sat/2009/rsat_09",
         "sat/2009/SApperloT",
         ]
-    solvers = map(named_solvers.__getitem__, solver_names)
+    solvers = [SAT_LookupSolver(n) for n in solver_names]
     cutoffs = [TimeDelta(seconds = c) for c in r_[10.0:800.0:6j]]
     actions = [SAT_WorldAction(*a) for a in product(solvers, cutoffs)]
-    model   = RandomActionModel(random)
-    planner = HardMyopicActionPlanner(1.0)
+    model   = RandomActionModel(actions, RandomState()) # FIXME needs to respect seed
+
+    return model
 
 def main():
     """
@@ -190,51 +202,56 @@ def main():
 
     get_logger("cargo.statistics.mixture", level = "DETAIL")
 
-    # load samples
+    # build the model
     import cPickle as pickle
 
-    with open(samples_path) as file:
-        samples = pickle.load(file)
+    model_type = module_flags.given.model_type
 
-    # FIXME write the samples this way
-    samples = dict((k, numpy.array(v)) for (k, v) in samples.items())
+    if model_type == "random":
+        model = make_random_model()
+    else:
+        # load samples
+        with open(samples_path) as file:
+            raw_samples = pickle.load(file)
 
-    # run inference and build model
-    model_type  = module_flags.given.model_type
-    ncomponents = module_flags.given.components
-    nrestarts   = module_flags.given.restarts
+        samples = dict((k, numpy.array(v)) for (k, v) in raw_samples.items())
 
-    if model_type == "dcm":
-        model = make_dcm_mixture_model(samples, ncomponents, nrestarts)
-    elif model_type == "multinomial":
-        model = make_mult_mixture_model(samples, ncomponents, nrestarts)
-    elif model_type == "random":
-        model = make_random_model(samples)
+        # run inference and build model
+        ncomponents = module_flags.given.components
+        nrestarts   = module_flags.given.restarts
 
-    with open(model_path, "w") as file:
-        pickle.dump(model, file, -1)
+        if model_type == "dcm":
+            model = make_dcm_mixture_model(samples, ncomponents, nrestarts)
+        elif model_type == "multinomial":
+            model = make_mult_mixture_model(samples, ncomponents, nrestarts)
+        else:
+            raise ValueError("unrecognized model type")
 
     # build the entire solver
-    r              = flags.calibration / 2.1 # hardcoded rhavan score
-    map_action     = lambda (s, c): SAT_WorldAction(named_solvers[s], TimeDelta(seconds = c.as_s * r))
-    actions        = map(map_action, model._actions)
-    model._actions = actions
-    planner        = HardMyopicActionPlanner(1.0 - 2e-3)
-    strategy       = \
+    from utexas.sat.solvers          import (
+        SAT_PortfolioSolver,
+        SAT_UncompressingSolver,
+        SAT_PreprocessingSolver,
+        )
+    from utexas.sat.preprocessors    import SatELitePreprocessor
+    from utexas.portfolio.planners   import HardMyopicActionPlanner
+    from utexas.portfolio.strategies import ModelingSelectionStrategy
+
+    planner  = HardMyopicActionPlanner(1.0 - 2e-3)
+    strategy = \
         ModelingSelectionStrategy(
             model,
             planner,
-            actions,
             )
-    solver         = \
+    solver   = \
         SAT_UncompressingSolver(
-            SAT_PreprocessingSolver(
-                SatELitePreprocessor(),
+#             SAT_PreprocessingSolver(
+#                 SatELitePreprocessor(),
                 SAT_PortfolioSolver(strategy),
-                ),
+#                 ),
             )
 
     # write it to disk
     with open(solver_path, "w") as file:
-        pickle.dump(file, solver)
+        pickle.dump(solver, file, -1)
 

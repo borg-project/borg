@@ -60,3 +60,31 @@ def test_fixed_selection_strategy():
     for i in xrange(4):
         assert_equal(getter().value, 42)
 
+def test_modeling_selection_strategy():
+    """
+    Test the modeling selection strategy.
+    """
+
+    import numpy
+
+    from utexas.portfolio.models     import FixedActionModel
+    from utexas.portfolio.planners   import HardMyopicActionPlanner
+    from utexas.portfolio.strategies import ModelingSelectionStrategy
+
+    # set up the strategy
+    actions    = [FakeAction(i) for i in xrange(4)]
+    prediction = dict(zip(actions, numpy.eye(4)))
+    model      = FixedActionModel(prediction)
+    planner    = HardMyopicActionPlanner(1.0)
+    strategy   = ModelingSelectionStrategy(model, planner)
+
+    # does it select the expected action?
+    selected = get_action(strategy, None, 42.0, None)
+
+    assert_equal(selected, actions[-1])
+
+    # does it pay attention to feasibility?
+    selected = get_action(strategy, None, 1.0, None)
+
+    assert_equal(selected, None)
+

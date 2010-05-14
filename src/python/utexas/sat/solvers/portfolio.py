@@ -77,7 +77,7 @@ class SAT_PortfolioSolver(SAT_Solver):
             if action is None:
                 break
             else:
-                remaining -= action.cost
+                remaining = TimeDelta.from_timedelta(remaining - action.budget)
 
                 record.append((action.solver, result))
 
@@ -92,19 +92,21 @@ class SAT_PortfolioSolver(SAT_Solver):
         """
 
         # select an action
-        action_generator = self.strategy.select(task, budget)
+        action_generator = self.strategy.select(task, budget.as_s)
         action           = action_generator.send(None)
 
         if action is None:
             return (None, None)
-        if action.cost > budget:
+        if action.budget > budget:
             raise RuntimeError("strategy selected an infeasible action")
 
         # take it, and provide the outcome
+        from cargo.temporal             import TimeDelta
         from utexas.portfolio.sat_world import SAT_WorldOutcome
 
-        result  = action.solver.solve(task, budget, random, environment)
-        outcome = SAT_WorldOutcome.from_result(result)
+        calibrated = TimeDelta(seconds = action.cost * environment.time_ratio)
+        result     = action.solver.solve(task, calibrated, random, environment)
+        outcome    = SAT_WorldOutcome.from_result(result)
 
         try:
             action_generator.send(outcome)

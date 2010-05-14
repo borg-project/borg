@@ -26,8 +26,6 @@ class SequenceSelectionStrategy(SelectionStrategy):
     A strategy the follows an iterable sequence.
     """
 
-    name = "sequence"
-
     def __init__(self, actions):
         """
         Initialize.
@@ -52,8 +50,6 @@ class FixedSelectionStrategy(SequenceSelectionStrategy):
     A strategy that repeats a fixed action.
     """
 
-    name = "fixed"
-
     def __init__(self, action):
         """
         Initialize.
@@ -68,20 +64,14 @@ class ModelingSelectionStrategy(SelectionStrategy):
     A strategy that employs a model of its actions.
     """
 
-    name = "modeling"
-
-    def __init__(self, model, planner, actions):
+    def __init__(self, model, planner):
         """
         Initialize.
         """
 
         self.model   = model
         self.planner = planner
-        self.actions = actions
         self.history = []
-
-        from utexas.portfolio.sat_world import SAT_WorldOutcome
-        self.utilities = numpy.array([o.utility for o in SAT_WorldOutcome.BY_INDEX])
 
     def select(self, task, budget):
         """
@@ -89,21 +79,11 @@ class ModelingSelectionStrategy(SelectionStrategy):
         """
 
         # predict, then make a selection
-        if budget is None:
-            feasible = self.actions
-        else:
-            feasible  = [a for a in self.actions if a.cost <= budget]
-
-        predicted = self.model.predict(task, self.history, feasible)
-        selected  = self.planner.select(predicted, self.utilities) # FIXME
+        predicted = self.model.predict(task, self.history)
+        selected  = self.planner.select(predicted, budget)
         outcome   = yield selected
 
         # remember its result
-        self.history.append((task, selected, outcome))
-
-# assign strategy names
-names = {
-    FixedSelectionStrategy.name    : FixedSelectionStrategy,
-    ModelingSelectionStrategy.name : ModelingSelectionStrategy,
-    }
+        if outcome is not None:
+            self.history.append((task, selected, outcome))
 

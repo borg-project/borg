@@ -18,8 +18,7 @@ class SAT_WorldAction(Action):
         """
 
         self._solver = solver
-        self._cost   = budget
-#         self._outcomes = SAT_WorldOutcome.BY_INDEX
+        self._budget = budget
 
     @property
     def description(self):
@@ -30,20 +29,36 @@ class SAT_WorldAction(Action):
         return "%s_%ims" % (self.solver.name, int(self.cost.as_s * 1000))
 
     @property
+    def cost(self):
+        """
+        The typical cost of taking this action.
+        """
+
+        return self._budget.as_s
+
+    @property
+    def budget(self):
+        """
+        The time-valued cost of taking this action.
+        """
+
+        return self._budget
+
+    @property
+    def outcomes(self):
+        """
+        The possible outcomes of this action.
+        """
+
+        return SAT_WorldOutcome.BY_INDEX
+
+    @property
     def solver(self):
         """
         The solver associated with this SAT action.
         """
 
         return self._solver
-
-    @property
-    def cost(self):
-        """
-        The typical cost of taking this action.
-        """
-
-        return self._cost
 
 class SAT_WorldOutcome(Outcome):
     """
@@ -55,15 +70,23 @@ class SAT_WorldOutcome(Outcome):
         Initialize.
         """
 
-        self.n       = n
-        self.utility = utility
+        self.n        = n
+        self._utility = utility
 
     def __str__(self):
         """
         Return a human-readable description of this outcome.
         """
 
-        return str(self.utility)
+        return str(self._utility)
+
+    @property
+    def utility(self):
+        """
+        The utility of this outcome.
+        """
+
+        return self._utility
 
     @staticmethod
     def from_result(result):

@@ -85,17 +85,26 @@ class SolverError(RuntimeError):
 
 class SAT_Environment(object):
     """
-    Support SAT solver execution.
+    Execution-specific properties of SAT solver execution.
     """
 
-    def __init__(self, named_solvers = None, MainSession = None, CacheSession = None):
+    def __init__(
+        self,
+        time_ratio          = 1.0,
+        named_solvers       = None,
+        named_preprocessors = None,
+        MainSession         = None,
+        CacheSession        = None,
+        ):
         """
         Initialize.
         """
 
-        self.named_solvers = named_solvers
-        self.MainSession   = MainSession
-        self.CacheSession  = CacheSession
+        self.time_ratio          = time_ratio
+        self.named_solvers       = named_solvers
+        self.named_preprocessors = named_preprocessors
+        self.MainSession         = MainSession
+        self.CacheSession        = CacheSession
 
 class SAT_Result(object):
     """

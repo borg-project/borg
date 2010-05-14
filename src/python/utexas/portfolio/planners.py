@@ -23,7 +23,7 @@ class ActionPlanner(ABC):
     """
 
     @abstractmethod
-    def select(self, predicted, actions):
+    def select(self, predicted, budget):
         """
         Select an action given the probabilities of outcomes.
         """
@@ -42,38 +42,23 @@ class HardMyopicActionPlanner(ActionPlanner):
 
         self.discount = discount
 
-    def select(self, predicted, utilities):
+    def select(self, predicted, budget):
         """
         Select an action given the probabilities of outcomes.
         """
 
-        # FIXME don't do this debugging work always
-#         from collections import defaultdict
-#         from utexas.portfolio.sat_world import SAT_Outcome
-#         map = defaultdict(list)
+        feasible = [(a, ps) for (a, ps) in predicted.iteritems() if a.cost <= budget]
 
-#         for (n, p) in enumerate(predicted):
-#             a = self.world.actions[n]
+        if feasible:
+            (selected, _) = \
+                max(
+                    feasible,
+                    key = lambda (a, ps): sum(p*o.utility*self.discount**a.cost for (p, o) in zip(ps, a.outcomes)),
+                    )
 
-#             map[a.solver.name].append((a.cutoff, p[SAT_Outcome.SOLVED.n]))
-
-#         rows = []
-
-#         for (s, m) in map.items():
-#             rows.append((s, [p for (c, p) in sorted(m, key = lambda (c, p): c)]))
-
-#         rows  = sorted(rows, key = lambda (s, r): s)
-#         lines = "\n".join("% 32s: %s" % (s, " ".join("%.2f" % p for p in r)) for (s, r) in rows)
-
-#         log.detail("predicted probabilities of success:\n%s", lines)
-
-        (selected, _) = \
-            max(
-                predicted.iteritems(),
-                key = lambda (a, ps): sum(p*u*self.discount**a.cutoff.as_s for (p, u) in zip(ps, utilities)),
-                )
-
-        return selected
+            return selected
+        else:
+            return None
 
 class SoftMyopicActionPlanner(ActionPlanner):
     """
