@@ -9,23 +9,6 @@ Actions, tasks, outcomes, and other pieces of the world.
 from abc         import abstractproperty
 from cargo.sugar import ABC
 
-# class Task(ABC):
-#     """
-#     A task in the world.
-#     """
-
-#     def __init__(self, ntask, path):
-#         """
-#         Initialize.
-#         """
-
-#         self.world = world
-#         self.ntask = ntask
-#         self.path = path
-
-#     def sample_action(self, action):
-#         return self.world.sample_action(self, action)
-
 class Action(ABC):
     """
     An action in the world.
@@ -43,7 +26,7 @@ class Action(ABC):
         The typical cost of taking this action.
         """
 
-class Outcome(object):
+class Outcome(ABC):
     """
     An outcome of an action in the world.
     """

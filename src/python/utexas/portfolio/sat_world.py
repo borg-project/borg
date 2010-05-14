@@ -2,38 +2,10 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-# import numpy
-
-# from utexas.sat.solvers      import get_random_seed
 from utexas.portfolio.world  import (
     Action,
     Outcome,
     )
-
-# class SAT_WorldTask(Task):
-#     """
-#     A task in the world.
-#     """
-
-#     def __init__(self, path, name = None):
-#         """
-#         Initialize.
-
-#         @param task: SAT task description.
-#         """
-
-#         self.path = path
-#         self.name = name
-
-#     def __str__(self):
-#         """
-#         Return a human-readable description of this task.
-#         """
-
-#         if self.name is None:
-#             return self.path
-#         else:
-#             return self.name
 
 class SAT_WorldAction(Action):
     """
@@ -72,21 +44,6 @@ class SAT_WorldAction(Action):
         """
 
         return self._cost
-
-#     def take(self, task, random = numpy.random):
-#         """
-#         Take the action.
-#         """
-
-#         if self.solver.seeded:
-#             seed = get_random_seed(random)
-#         else:
-#             seed = None
-
-#         result  = self.solver.solve(task.path, self.cutoff, seed = seed)
-#         outcome = SAT_WorldOutcome.from_result(result)
-
-#         return (outcome, result)
 
 class SAT_WorldOutcome(Outcome):
     """

@@ -4,11 +4,12 @@
 
 import numpy
 
-from cargo.log import get_logger
+from abc         import abstractmethod
+from cargo.log   import get_logger
+from cargo.sugar import ABC
 # from cargo.statistics.dcm import DirichletCompoundMultinomial
 # from cargo.statistics.mixture import FiniteMixture
 # from utexas.portfolio.world import get_positive_counts
-from utexas.portfolio.strategies  import ActionModel
 from cargo.statistics._statistics import (
     dcm_post_pi_K,
     dcm_model_predict,
@@ -27,6 +28,61 @@ class ActionModel(ABC):
         """
         Return a map between actions and (normalized) predicted probabilities.
         """
+
+class FixedActionModel(ActionModel):
+    """
+    Stick to one prediction.
+    """
+
+    def __init__(self, predictions):
+        """
+        Initialize.
+        """
+
+        # argument sanity
+        for (_, p) in predictions.items():
+            if numpy.sum(p) != 1.0:
+                raise ValueError("non-normalized probability vector")
+
+        # members
+        self._predictions = predictions
+
+    def predict(self, task, history):
+        """
+        Return the fixed map.
+        """
+
+        return self._predictions
+
+class RandomActionModel(ActionModel):
+    """
+    Make random predictions.
+    """
+
+    def __init__(self, actions, random = numpy.random):
+        """
+        Initialize.
+        """
+
+        self.actions = actions
+        self.random  = random
+
+    def _random_prediction(self, action):
+        """
+        Return a random prediction.
+        """
+
+        predictions  = self.random.rand(len(action.outcomes))
+        predictions /= numpy.sum(predictions)
+
+        return predictions
+
+    def predict(self, task, history):
+        """
+        Return the predicted probability of each outcome, given history.
+        """
+
+        return dict((a, self._random_prediction(a)) for a in self.actions)
 
 class MultinomialMixtureActionModel(ActionModel):
     """
@@ -168,7 +224,6 @@ class DCM_MixtureActionModel(ActionModel):
 
         return post_pi_K
 
-#     def predict(self, task, history, out = None):
     def predict(self, task, history, feasible):
 
         # mise en place
@@ -260,32 +315,4 @@ class OracleActionModel(ActionModel):
             out[:] = ps
 
         return out
-
-class RandomActionModel(ActionModel):
-    """
-    Know nothing.
-    """
-
-    def __init__(self, random):
-        """
-        Initialize.
-        """
-
-        self.random = random
-
-    def predict(self, task, history, actions):
-        """
-        Return the predicted probability of each outcome given history.
-        """
-
-#         if out is None:
-#             out = self.random((self.world.nactions, self.world.noutcomes))
-#         else:
-#             out[:] = self.random((self.world.nactions, self.world.noutcomes))
-
-#         out /= numpy.sum(out, 1)[:, numpy.newaxis]
-
-#         return out
-
-        return dict((a, self.random.rand(2)) for a in actions) # FIXME
 

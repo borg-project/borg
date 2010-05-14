@@ -2,28 +2,8 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from nose.tools             import assert_equal
-from utexas.portfolio.world import Action
-
-class FakeAction(Action):
-    """
-    An action strictly for testing.
-    """
-
-    def __init__(self, value):
-        """
-        Initialize.
-        """
-
-        self.value = value
-
-    @property
-    def cost(self):
-        """
-        An arbitrary fixed cost.
-        """
-
-        return 16.0
+from nose.tools                    import assert_equal
+from utexas.portfolio.test.support import FakeAction
 
 def get_action(strategy, task, budget, outcome):
     """
