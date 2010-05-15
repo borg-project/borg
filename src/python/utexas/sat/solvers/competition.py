@@ -93,7 +93,6 @@ class SAT_CompetitionSolver(SAT_Solver):
         command,
         memlimit     = None,
         solvers_home = ".",
-        name         = None,
         ):
         """
         Initialize this solver.
@@ -110,7 +109,6 @@ class SAT_CompetitionSolver(SAT_Solver):
         self.command      = copy(command)
         self.memlimit     = memlimit
         self.solvers_home = solvers_home
-        self.name         = name
 
     def solve(self, task, budget, random, environment):
         """
@@ -235,10 +233,7 @@ class SAT_CompetitionSolver(SAT_Solver):
         Return a database description of this solver.
         """
 
-        if self.name is None:
-            raise RuntimeError("an anonymous solver has no database twin")
-        else:
-            return SAT_SolverRow(name = self.name)
+        raise RuntimeError("an anonymous solver has no database twin")
 
     @property
     def seeded(self):

@@ -5,7 +5,8 @@
 from uuid               import uuid4
 from utexas.sat.solvers import SAT_Solver
 
-task_uuids = [uuid4() for i in xrange(5)]
+task_uuids     = [uuid4() for i in xrange(3)]
+baz_task_uuids = [uuid4() for i in xrange(3)]
 
 class FixedSolver(SAT_Solver):
     """
@@ -112,28 +113,35 @@ def add_fake_runs(session):
     PTR = PreprocessedTaskRow
 
     task_rows     = [SAT_TaskRow(uuid = u) for u in task_uuids]
-    baz_task_rows = [PTR(input_task = t, preprocessor_name = "baz") for t in task_rows]
+    baz_task_rows = [
+        PTR(uuid = u, input_task = t, preprocessor_name = "baz")
+        for (u, t) in zip(baz_task_uuids, task_rows)
+        ]
 
-    # add fake runs
+    # behavior of foo on raw tasks
     add_solver_run("foo", task_rows[0], True)
     add_solver_run("foo", task_rows[1], False)
     add_solver_run("foo", task_rows[2], None)
 
+    # behavior of fob on raw tasks
     add_solver_run("fob", task_rows[0], None)
     add_solver_run("fob", task_rows[1], None)
     add_solver_run("fob", task_rows[2], None)
 
+    # bar yields no preprocessed tasks
     add_preprocessor_run("bar", task_rows[0], task_rows[0], None)
-    add_preprocessor_run("bar", task_rows[1], task_rows[1], True)
-    add_preprocessor_run("bar", task_rows[2], task_rows[2], False)
+    add_preprocessor_run("bar", task_rows[1], task_rows[1], False)
+    add_preprocessor_run("bar", task_rows[2], task_rows[2], True)
 
+    # baz successfully preprocesses tasks
     add_preprocessor_run("baz", task_rows[0], baz_task_rows[0], None)
     add_preprocessor_run("baz", task_rows[1], baz_task_rows[1], None)
     add_preprocessor_run("baz", task_rows[2], baz_task_rows[2], None)
 
+    # behavior of fob on preprocessed tasks
     add_solver_run("fob", baz_task_rows[0], True)
     add_solver_run("fob", baz_task_rows[1], False)
-    add_solver_run("fob", baz_task_rows[2], True)
+    add_solver_run("fob", baz_task_rows[2], None)
 
     session.commit()
 
@@ -150,7 +158,7 @@ class FakeSolverData(object):
         from sqlalchemy        import create_engine
         from cargo.sql.alchemy import make_session
 
-        self.engine  = create_engine("sqlite:///:memory:")
+        self.engine  = create_engine("sqlite:///:memory:", echo = True)
         self.Session = make_session(bind = self.engine)
         self.session = self.Session()
 

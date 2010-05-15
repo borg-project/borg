@@ -81,36 +81,42 @@ class SAT_MockCompetitionSolver(SAT_Solver):
         Execute the solver and return its outcome, given a concrete input path.
         """
 
+        # argument sanity
+        from utexas.sat.tasks         import SAT_MockTask
+
+        if not isinstance(task, SAT_MockTask):
+            raise TypeError("mock solvers require mock tasks")
+
         # mise en place
         from sqlalchemy               import (
             and_,
-            select,
             )
         from sqlalchemy.sql.functions import random as sql_random
-        from utexas.sat.tasks         import SAT_MockTask
         from utexas.data              import (
+            SAT_TrialRow      as ST,
             SAT_AttemptRow    as SA,
             SAT_RunAttemptRow as SRA,
             )
 
-        # argument sanity
-        if not isinstance(task, SAT_MockTask):
-            raise TypeError("mock solvers require mock tasks")
-
-        # select an appropriate attempt to recycle
+        # generate a recycled result
         with environment.CacheSession() as session:
-            attempt_row =                                    \
+            # select an appropriate attempt to recycle
+            attempt_row          =                           \
                 session                                      \
                 .query(SRA)                                  \
                 .filter(
                     and_(
-                        SRA.task_uuid   == task.task_uuid,
-                        SRA.budget      >= budget,
-                        SRA.solver_name == self.solver_name,
+                        SRA.task_uuid        == task.task_uuid,
+                        SRA.budget           >= budget,
+                        SRA.solver_name      == self.solver_name,
+                        SRA.trials.contains(ST.get_recyclable(session)),
                         )
                     )                                        \
                 .order_by(sql_random())                      \
                 .first()
+
+            if attempt_row is None:
+                raise RuntimeError("database does not contain a matching recyclable run")
 
             # interpret the attempt
             if attempt_row.cost <= budget:

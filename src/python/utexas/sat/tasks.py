@@ -81,23 +81,23 @@ class SAT_MockTask(SAT_Task):
     An non-real task with an associated database row.
     """
 
-    def __init__(self, task_row):
+    def __init__(self, task_uuid):
         """
         Initialize.
         """
 
         SAT_Task.__init__(self)
 
-        self._task_uuid = task_row.uuid
+        self._task_uuid = task_uuid
 
     def to_orm(self, session):
         """
         Return a database description of this task.
         """
 
-        from utexas.data import SAT_TaskRow
+        from utexas.data import TaskRow
 
-        return session.query(SAT_TaskRow).get(self._task_uuid)
+        return session.query(TaskRow).get(self._task_uuid)
 
     @property
     def name(self):

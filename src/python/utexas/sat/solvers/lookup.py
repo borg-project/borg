@@ -28,3 +28,10 @@ class SAT_LookupSolver(SAT_Solver):
 
         return SAT_WrappedResult(self, inner_result)
 
+    def to_orm(self):
+        """
+        Return a database description of this solver.
+        """
+
+        return SAT_SolverRow(name = self.name)
+
