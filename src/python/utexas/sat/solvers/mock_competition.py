@@ -81,57 +81,58 @@ class SAT_MockCompetitionSolver(SAT_Solver):
         Execute the solver and return its outcome, given a concrete input path.
         """
 
-        # build the query
-        from sqlalchemy              import (
+        # mise en place
+        from sqlalchemy               import (
             and_,
             select,
             )
         from sqlalchemy.sql.functions import random as sql_random
+        from utexas.sat.tasks         import SAT_MockTask
         from utexas.data              import (
             SAT_AttemptRow    as SA,
             SAT_RunAttemptRow as SRA,
             )
 
-        from_ = task.select_attempts().alias()
-        query = \
-            select(
-                [
-                    from_.c.cost,
-                    from_.c.satisfiable,
-                    from_.c.certificate,
-                    SRA.seed,
-                    ],
-                and_(
-                    from_.c.budget   >= budget,
-                    from_.c.uuid     == SRA.__table__.c.uuid,
-                    SRA.solver_name  == self.solver_name,
-                    ),
-                order_by = sql_random(),
-                limit    = 1,
-                )
+        # argument sanity
+        if not isinstance(task, SAT_MockTask):
+            raise TypeError("mock solvers require mock tasks")
 
-        # execute the query
+        # select an appropriate attempt to recycle
         with environment.CacheSession() as session:
-            # unpack the result row, if any
-            row = session.execute(query).first()
+            attempt_row =                                    \
+                session                                      \
+                .query(SRA)                                  \
+                .filter(
+                    and_(
+                        SRA.task_uuid   == task.task_uuid,
+                        SRA.budget      >= budget,
+                        SRA.solver_name == self.solver_name,
+                        )
+                    )                                        \
+                .order_by(sql_random())                      \
+                .first()
 
-            if row is None:
-                raise RuntimeError("no matching attempt row in database")
-            else:
-                (cost, satisfiable, certificate_blob, seed) = row
-
-            # interpret the result row
-            if cost <= budget:
-                if certificate_blob is None:
+            # interpret the attempt
+            if attempt_row.cost <= budget:
+                if attempt_row.answer is None:
+                    satisfiable = None
                     certificate = None
-                elif satisfiable:
-                    certificate = SA.unpack_certificate(certificate_blob)
                 else:
-                    raise RuntimeError("non-sat row has non-null certificate")
+                    satisfiable = attempt_row.answer.satisfiable
+                    certificate = attempt_row.answer.get_certificate()
 
-                return SAT_MockCompetitionResult(self, task, budget, cost, satisfiable, certificate, seed)
+                return \
+                    SAT_MockCompetitionResult(
+                        self,
+                        task,
+                        budget,
+                        attempt_row.cost,
+                        satisfiable,
+                        certificate,
+                        attempt_row.seed,
+                        )
             else:
-                return SAT_MockCompetitionResult(self, task, budget, cost, None, None, seed)
+                return SAT_MockCompetitionResult(self, task, budget, budget, None, None, attempt_row.seed)
 
     def to_orm(self, session):
         """
@@ -140,5 +141,5 @@ class SAT_MockCompetitionSolver(SAT_Solver):
 
         from utexas.data import SAT_SolverRow
 
-        return session.query(SAT_SolverRow).filter_by(name = self.solver_name).first()
+        return session.query(SAT_SolverRow).get(self.solver_name)
 

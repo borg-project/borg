@@ -15,6 +15,19 @@ from cargo.sugar import ABC
 
 log = get_logger(__name__)
 
+# class SAT_Answer(object):
+#     """
+#     An answer (or lack thereof) to a SAT instance.
+#     """
+
+#     def __init__(self, satisfiable = None, certificate = None):
+#         """
+#         Initialize.
+#         """
+
+#         self.satisfiable = satisfiable
+#         self.certificate = certificate
+
 class SAT_Task(ABC):
     """
     A satisfiability task.
@@ -65,12 +78,7 @@ class SAT_FileTask(SAT_Task):
 
 class SAT_MockTask(SAT_Task):
     """
-    An abstract task.
-    """
-
-class SAT_MockFileTask(SAT_MockTask):
-    """
-    An abstract file task.
+    An non-real task with an associated database row.
     """
 
     def __init__(self, task_row):
@@ -78,9 +86,9 @@ class SAT_MockFileTask(SAT_MockTask):
         Initialize.
         """
 
-        SAT_MockTask.__init__(self)
+        SAT_Task.__init__(self)
 
-        self.task_uuid = task_row.uuid
+        self._task_uuid = task_row.uuid
 
     def to_orm(self, session):
         """
@@ -89,7 +97,7 @@ class SAT_MockFileTask(SAT_MockTask):
 
         from utexas.data import SAT_TaskRow
 
-        return session.query(SAT_TaskRow).get(self.task_uuid)
+        return session.query(SAT_TaskRow).get(self._task_uuid)
 
     @property
     def name(self):
@@ -97,78 +105,13 @@ class SAT_MockFileTask(SAT_MockTask):
         An arbitrary printable name for the task.
         """
 
-        return self.task_row.uuid
-
-    def select_attempts(self):
-        """
-        Return a query selecting attempts on this task.
-        """
-
-        from sqlalchemy  import (
-            and_,
-            select,
-            )
-        from utexas.data import (
-            SAT_TrialRow,
-            SAT_AttemptRow,
-            sat_attempts_trials_table as satt,
-            )
-
-        query    = \
-            select(
-                SAT_AttemptRow.__table__.columns,
-                and_(
-                    SAT_AttemptRow.task_uuid == self.task_uuid,
-                    SAT_AttemptRow.uuid      == satt.c.attempt_uuid,
-                    satt.c.trial_uuid        == SAT_TrialRow.RECYCLABLE_UUID,
-                    ),
-                )
-
-        return query
-
-class SAT_MockPreprocessedTask(SAT_MockTask):
-    """
-    An abstract preprocessed task.
-    """
-
-    def __init__(self, preprocessor_name, inner_task, from_):
-        """
-        Initialize.
-        """
-
-        SAT_MockTask.__init__(self)
-
-        self.preprocessor_name = preprocessor_name
-        self.inner_task        = inner_task
-        self.from_             = from_.alias()
+        return self._task_uuid
 
     @property
-    def name(self):
+    def task_uuid(self):
         """
-        An arbitrary printable name for the task.
-        """
-
-        return "%s:%s" % (self.preprocessor_name, self.inner_task.name)
-
-    def select_attempts(self):
-        """
-        Return a query selecting attempts on this task.
+        The UUID of the associated database row.
         """
 
-        from sqlalchemy  import (
-            and_,
-            select,
-            )
-        from utexas.data import SAT_AttemptRow
-
-        query = \
-            select(
-                SAT_AttemptRow.__table__.columns,
-                and_(
-                    SAT_AttemptRow.uuid == self.from_.c.inner_attempt_uuid,
-                    SAT_AttemptRow.task == None,
-                    )
-                )
-
-        return query
+        return self._task_uuid
 

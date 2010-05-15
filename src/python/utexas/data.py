@@ -21,9 +21,9 @@ from sqlalchemy                 import (
     Boolean,
     ForeignKey,
     LargeBinary,
+    CheckConstraint,
     )
 from sqlalchemy.orm             import (
-    sessionmaker,
     relationship,
     )
 from sqlalchemy.ext.declarative import declarative_base
@@ -40,10 +40,9 @@ from cargo.flags                import (
     Flags,
     )
 
-log             = get_logger(__name__)
-DatumBase       = declarative_base()
-ResearchSession = sessionmaker()
-module_flags    = \
+log          = get_logger(__name__)
+DatumBase    = declarative_base()
+module_flags = \
     Flags(
         "Research Data Storage",
         Flag(
@@ -139,45 +138,6 @@ class CPU_LimitedRunRow(DatumBase):
 
         self.stderr = xzed(stderr)
 
-class TaskRow(DatumBase):
-    """
-    One task.
-    """
-
-    __tablename__ = "tasks"
-
-    uuid = Column(SQL_UUID, primary_key = True)
-    type = Column(String)
-
-    __mapper_args__ = {"polymorphic_on": type}
-
-class SAT_TaskRow(TaskRow):
-    """
-    One satisfiability task in DIMACS CNF format.
-    """
-
-    TASK_NAMESPACE = UUID("8e67a81a-717c-4206-8831-6007bc8f111f")
-
-    __tablename__   = "sat_tasks"
-    __mapper_args__ = {"polymorphic_identity": "cnf_sat"}
-
-    uuid = Column(SQL_UUID, ForeignKey(TaskRow.uuid), primary_key = True)
-    hash = Column(LargeBinary(length = 64))
-
-class TaskNameRow(DatumBase):
-    """
-    Place a task in the context of a collection.
-    """
-
-    __tablename__ = "task_names"
-
-    uuid       = Column(SQL_UUID, primary_key = True, default = uuid4)
-    task_uuid  = Column(SQL_UUID, ForeignKey("tasks.uuid"), nullable = False)
-    name       = Column(String)
-    collection = Column(String)
-
-    task = relationship(TaskRow)
-
 class SAT_SolverRow(DatumBase):
     """
     Some solver for some domain.
@@ -190,7 +150,7 @@ class SAT_SolverRow(DatumBase):
 
 class SAT_PreprocessorRow(DatumBase):
     """
-    Some solver for some domain.
+    Some preprocessor.
     """
 
     __tablename__ = "sat_preprocessors"
@@ -222,6 +182,179 @@ class SAT_TrialRow(DatumBase):
             .filter(SAT_TrialRow.uuid == SAT_TrialRow.RECYCLABLE_UUID) \
             .one()
 
+class TaskRow(DatumBase):
+    """
+    One task.
+    """
+
+    __tablename__ = "tasks"
+    task_type     = \
+        Enum(
+            "cnf_sat",
+            "preprocessed",
+            name = "task_type",
+            )
+
+    uuid = Column(SQL_UUID, primary_key = True, default = uuid4)
+    type = Column(task_type)
+
+    __mapper_args__ = {"polymorphic_on": type}
+
+class SAT_TaskRow(TaskRow):
+    """
+    One satisfiability task in DIMACS CNF format.
+    """
+
+    TASK_NAMESPACE = UUID("8e67a81a-717c-4206-8831-6007bc8f111f")
+
+    __tablename__   = "sat_tasks"
+    __mapper_args__ = {"polymorphic_identity" : "cnf_sat"}
+
+    uuid = Column(SQL_UUID, ForeignKey(TaskRow.uuid), primary_key = True)
+    hash = Column(LargeBinary(length = 64))
+
+class PreprocessedTaskRow(TaskRow):
+    """
+    One task after preprocessing.
+    """
+
+    __tablename__ = "preprocessed_tasks"
+
+    uuid              = Column(SQL_UUID, ForeignKey(TaskRow.uuid), primary_key = True)
+    input_task_uuid   = Column(SQL_UUID, ForeignKey("tasks.uuid"), nullable = False)
+    preprocessor_name = Column(String, ForeignKey("sat_preprocessors.name"), nullable = False)
+    seed              = Column(Integer)
+
+    __mapper_args__ = {
+        "polymorphic_identity" : "preprocessed",
+        "inherit_condition"    : uuid == TaskRow.uuid,
+        }
+
+    input_task = \
+        relationship(
+            TaskRow,
+            primaryjoin = (input_task_uuid == TaskRow.uuid),
+            )
+
+class TaskNameRow(DatumBase):
+    """
+    Place a task in the context of a collection.
+    """
+
+    __tablename__ = "task_names"
+
+    uuid       = Column(SQL_UUID, primary_key = True, default = uuid4)
+    task_uuid  = Column(SQL_UUID, ForeignKey("tasks.uuid"), nullable = False)
+    name       = Column(String)
+    collection = Column(String)
+
+    task = relationship(TaskRow)
+
+class SAT_AnswerRow(DatumBase):
+    """
+    Answer to a SAT instance.
+    """
+
+    __tablename__ = "sat_answers"
+
+    uuid           = Column(SQL_UUID, primary_key = True, default = uuid4)
+    satisfiable    = Column(Boolean)
+    certificate_xz = Column(LargeBinary)
+
+    def __init__(self, satisfiable = None, certificate = None, certificate_xz = None):
+        """
+        Initialize.
+        """
+
+        # argument sanity
+        if certificate is not None and certificate_xz is not None:
+            raise ValueError("cannot specify both certificate and certificate blob")
+
+        # members
+        self.satisfiable = satisfiable
+
+        if certificate is not None:
+            self.set_certificate(certificate)
+        elif certificate_xz is not None:
+            self.certificate_xz = certificate_xz
+
+    def get_certificate(self):
+        """
+        Get the certificate array, uncompressed.
+        """
+
+        if self.certificate_xz is None:
+            return None
+        else:
+            return SAT_AnswerRow.unpack_certificate(self.certificate_xz)
+
+    def set_certificate(self, certificate):
+        """
+        Set (and compress) the certificate array.
+        """
+
+        import json
+
+        from cargo.io import xzed
+
+        self.certificate_xz = xzed(json.dumps(certificate))
+
+    @staticmethod
+    def unpack_certificate(blob):
+        """
+        Uncompress and interpret a certificate array.
+        """
+
+        import json
+
+        from cargo.io import unxzed
+
+        return json.loads(unxzed(blob))
+
+preprocessor_runs_trials_table = \
+    Table(
+        "preprocessor_runs_trials",
+        DatumBase.metadata,
+        Column("preprocessor_run_uuid", SQL_UUID, ForeignKey("preprocessor_runs.uuid")),
+        Column("trial_uuid", SQL_UUID, ForeignKey("sat_trials.uuid")),
+        )
+
+class PreprocessorRunRow(DatumBase):
+    """
+    Execution of a preprocessor on a task.
+    """
+
+    __tablename__ = "preprocessor_runs"
+
+    uuid              = Column(SQL_UUID, primary_key = True, default = uuid4)
+    preprocessor_name = Column(String, ForeignKey("sat_preprocessors.name"), nullable = False)
+    input_task_uuid   = Column(SQL_UUID, ForeignKey("tasks.uuid"), nullable = False)
+    output_task_uuid  = Column(SQL_UUID, ForeignKey("tasks.uuid"), nullable = False)
+    run_uuid          = Column(SQL_UUID, ForeignKey("cpu_limited_runs.uuid"), nullable = False)
+    answer_uuid       = Column(SQL_UUID, ForeignKey("sat_answers.uuid"))
+    seed              = Column(Integer)
+    budget            = Column(SQL_TimeDelta)
+    cost              = Column(SQL_TimeDelta)
+
+    input_task  = \
+        relationship(
+            TaskRow,
+            primaryjoin = (input_task_uuid == TaskRow.uuid),
+            )
+    output_task = \
+        relationship(
+            TaskRow,
+            primaryjoin  = (output_task_uuid == TaskRow.uuid),
+            )
+    run         = relationship(CPU_LimitedRunRow)
+    answer      = relationship(SAT_AnswerRow)
+    trials      = \
+        relationship(
+            SAT_TrialRow,
+            secondary = preprocessor_runs_trials_table,
+            backref   = "preprocessor_runs",
+            )
+
 sat_attempts_trials_table = \
     Table(
         "sat_attempts_trials",
@@ -239,58 +372,27 @@ class SAT_AttemptRow(DatumBase):
     attempt_type  =\
         Enum(
             "run",
-            "preprocessing",
             "portfolio",
             name = "sat_attempt_type",
             )
 
     uuid        = Column(SQL_UUID, primary_key = True, default = uuid4)
     type        = Column(attempt_type)
-    task_uuid   = Column(SQL_UUID, ForeignKey("sat_tasks.uuid"))
+    task_uuid   = Column(SQL_UUID, ForeignKey("tasks.uuid"))
+    answer_uuid = Column(SQL_UUID, ForeignKey("sat_answers.uuid"))
     budget      = Column(SQL_TimeDelta)
     cost        = Column(SQL_TimeDelta)
-    satisfiable = Column(Boolean)
-    certificate = Column(LargeBinary)
 
-    task   = relationship(SAT_TaskRow)
+    __mapper_args__ = {"polymorphic_on": type}
+
+    task   = relationship(TaskRow)
+    answer = relationship(SAT_AnswerRow)
     trials = \
         relationship(
             SAT_TrialRow,
             secondary = sat_attempts_trials_table,
-            backref = "sat_attempts",
+            backref   = "sat_attempts",
             )
-
-    __mapper_args__ = {"polymorphic_on": type}
-
-    def get_certificate(self):
-        """
-        Get the certificate array, uncompressed.
-        """
-
-        return SAT_AttemptRow.unpack_certificate(self.certificate)
-
-    def set_certificate(self, certificate):
-        """
-        Set (and compress) the certificate array.
-        """
-
-        import json
-
-        from cargo.io import xzed
-
-        self.certificate = xzed(json.dumps(certificate))
-
-    @staticmethod
-    def unpack_certificate(blob):
-        """
-        Uncompress and interpret a certificate array.
-        """
-
-        import json
-
-        from cargo.io import unxzed
-
-        return json.loads(unxzed(blob))
 
 class SAT_RunAttemptRow(SAT_AttemptRow):
     """
@@ -307,32 +409,6 @@ class SAT_RunAttemptRow(SAT_AttemptRow):
 
     run    = relationship(CPU_LimitedRunRow)
     solver = relationship(SAT_SolverRow)
-
-class SAT_PreprocessingAttemptRow(SAT_AttemptRow):
-    """
-    An attempt to solve a task with a preprocessor-solver pair.
-    """
-
-    __tablename__  = "sat_preprocessing_attempts"
-
-    uuid               = Column(SQL_UUID, ForeignKey("sat_attempts.uuid"), primary_key = True)
-    run_uuid           = Column(SQL_UUID, ForeignKey("cpu_limited_runs.uuid"), nullable = False)
-    preprocessor_name  = Column(String, ForeignKey("sat_preprocessors.name"), nullable = False)
-    inner_attempt_uuid = Column(SQL_UUID, ForeignKey("sat_attempts.uuid"))
-    preprocessed       = Column(Boolean)
-
-    __mapper_args__ = {
-        "polymorphic_identity" : "preprocessing",
-        "inherit_condition"    : uuid == SAT_AttemptRow.uuid,
-        }
-
-    run           = relationship(CPU_LimitedRunRow)
-    preprocessor  = relationship(SAT_PreprocessorRow)
-    inner_attempt = \
-        relationship(
-            SAT_AttemptRow,
-            primaryjoin = (inner_attempt_uuid == SAT_AttemptRow.uuid),
-            )
 
 class SAT_PortfolioAttemptRow(SAT_AttemptRow):
     """
