@@ -76,6 +76,20 @@ class SAT_FileTask(SAT_Task):
 
         return self._path
 
+class SAT_PreprocessedTask(SAT_Task):
+    """
+    A task backed by a .cnf file and associated preprocessor information.
+    """
+
+    @abstractmethod
+    def extend(self, certificate):
+        """
+        Extend the specified certificate.
+
+        Translates a solution to the preprocessed CNF expression back into a
+        solution to the unprocessed CNF expression.
+        """
+
 class SAT_MockTask(SAT_Task):
     """
     An non-real task with an associated database row.

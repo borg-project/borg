@@ -38,13 +38,8 @@ def test_mock_preprocessing_simple():
         environment  = SAT_Environment(CacheSession = fake_data.Session)
         result       = outer_solver.solve(task, TimeDelta(seconds = seconds), None, environment)
 
-        if satisfiable:
-            certificate = [42]
-        else:
-            certificate = None
-
         assert_equal(result.satisfiable, satisfiable)
-        assert_equal(result.certificate, certificate)
+        assert_equal(result.certificate, None)
 
     # test the bar-foo combination on fake data
     from utexas.sat.solvers.test.support import task_uuids

@@ -117,19 +117,19 @@ class SAT_Result(object):
         Return an ORM-mapped description of this result.
         """
 
-    def update_orm(self, session, attempt):
+    def update_orm(self, session, row):
         """
         Set the properties of an ORM-mapped description.
         """
 
-        attempt.budget      = self.budget
-        attempt.cost        = self.cost
-        attempt.satisfiable = self.satisfiable
-        attempt.task        = self.task.to_orm(session)
+        row.budget      = self.budget
+        row.cost        = self.cost
+        row.satisfiable = self.satisfiable
+        row.task        = self.task.to_orm(session)
 
-        attempt.set_certificate(self.certificate)
+        row.set_certificate(self.certificate)
 
-        return attempt
+        return row
 
     @abstractproperty
     def solver(self):

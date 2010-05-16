@@ -5,8 +5,46 @@
 from uuid               import uuid4
 from utexas.sat.solvers import SAT_Solver
 
-task_uuids     = [uuid4() for i in xrange(3)]
-baz_task_uuids = [uuid4() for i in xrange(3)]
+task_uuids      = [uuid4() for i in xrange(3)]
+baz_task_uuids  = [uuid4() for i in xrange(3)]
+unsanitized_cnf = \
+"""c comment
+c foo
+p cnf 2 6
+ -1 2 3 0
+-4 -5 6 0
+%
+0
+"""
+sanitized_cnf   = \
+"""p cnf 2 6
+-1 2 3 0
+-4 -5 6 0
+"""
+
+class TaskVerifyingSolver(SAT_Solver):
+    """
+    Solver that merely verifies the contents of the task.
+    """
+
+    def __init__(self, correct_cnf):
+        """
+        Initialize.
+        """
+
+        self.correct_cnf = correct_cnf
+
+    def solve(self, task, budget, random, environment):
+        """
+        Verify behavior.
+        """
+
+        from utexas.sat.solvers import SAT_BareResult
+
+        with open(task.path) as task_file:
+            assert_equal(task_file.read(), self.correct_cnf)
+
+        return SAT_BareResult(self, task, budget, budget, None, None)
 
 class FixedSolver(SAT_Solver):
     """

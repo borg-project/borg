@@ -12,24 +12,26 @@ def test_sat_competition_solver():
     Test the SAT competition-binary solver.
     """
 
-    # set up the test
-    finds_sat_solver = \
+    # define various fake solvers
+    finds_sat_solver     = \
 """
 print "c comment"
 print "s SATISFIABLE"
 print "v 1 2 3 4"
 print "v 5 6 7 8 0"
+raise SystemExit(10)
 """
-    finds_unsat_solver = \
+    finds_unsat_solver   = \
 """
 print "c comment"
 print "s UNSATISFIABLE"
+raise SystemExit(20)
 """
     finds_unknown_solver = \
 """
 print "c comment"
 """
-    times_out_solver = \
+    times_out_solver     = \
 """
 print "c comment"
 while True: pass

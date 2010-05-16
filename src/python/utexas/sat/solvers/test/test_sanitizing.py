@@ -9,24 +9,16 @@ def test_sat_sanitizing_solver():
     Test the sanitizing SAT solver wrapper.
     """
 
-    # fake data
-    from utexas.sat.solvers.test.test_uncompressing import (
+    from tempfile                        import NamedTemporaryFile
+    from utexas.sat.solvers.test.support import (
         TaskVerifyingSolver,
-        raw_cnf,
+        sanitized_cnf,
+        unsanitized_cnf,
         )
 
-    sanitized_cnf = \
-"""p cnf 2 6
--1 2 3 0
--4 -5 6 0
-"""
-
-    # test
-    from tempfile import NamedTemporaryFile
-
-    with NamedTemporaryFile(suffix = ".cnf.gz") as named_file:
+    with NamedTemporaryFile(suffix = ".cnf") as named_file:
         # write the unsanitized CNF
-        named_file.write(sanitized_cnf)
+        named_file.write(raw_unsanitized_cnf)
         named_file.flush()
 
         # test the solver
