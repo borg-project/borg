@@ -2,8 +2,11 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+from cargo.log                import get_logger
 from utexas.sat.tasks         import AbstractPreprocessedFileTask
 from utexas.sat.preprocessors import SAT_Preprocessor
+
+log = get_logger(__name__)
 
 class SatELitePreprocessor(SAT_Preprocessor):
     """
@@ -71,7 +74,7 @@ class SatELitePreprocessor(SAT_Preprocessor):
         else:
             return BarePreprocessorRunResult(self, task, task, None, run)
 
-    def extend(self, task, answer):
+    def extend(self, task, answer, environment):
         """
         Extend an answer to a preprocessed task to its parent task.
         """
