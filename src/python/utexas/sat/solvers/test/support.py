@@ -3,6 +3,7 @@
 """
 
 from uuid               import uuid4
+from nose.tools         import assert_equal
 from utexas.sat.solvers import SAT_Solver
 
 task_uuids      = [uuid4() for i in xrange(3)]
@@ -11,13 +12,15 @@ unsanitized_cnf = \
 """c comment
 c foo
 p cnf 2 6
- -1 2 3 0
--4 -5 6 0
+ -1 2 3 0   
+-4 -5   6 0
 %
 0
 """
 sanitized_cnf   = \
-"""p cnf 2 6
+"""c comment
+c foo
+p cnf 2 6
 -1 2 3 0
 -4 -5 6 0
 """
@@ -196,7 +199,7 @@ class FakeSolverData(object):
         from sqlalchemy        import create_engine
         from cargo.sql.alchemy import make_session
 
-        self.engine  = create_engine("sqlite:///:memory:", echo = True)
+        self.engine  = create_engine("sqlite:///:memory:", echo = False)
         self.Session = make_session(bind = self.engine)
         self.session = self.Session()
 

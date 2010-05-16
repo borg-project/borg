@@ -2,143 +2,8 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from utexas.sat.preprocessors import (
-    SAT_Preprocessor,
-    PreprocessorResult,
-    )
-
-class SatELiteOutput(PreprocessorResult):
-    """
-    Result of the SatELite preprocessor.
-    """
-
-    def __init__(self, run, binary_path, output_dir, solver_result):
-        """
-        Initialize.
-        """
-
-        SAT_PreprocessorOutput.__init__(self)
-
-        self.run            = run
-        self.binary_path    = binary_path
-        self.output_dir     = output_dir
-        self._solver_result = solver_result
-
-    @property
-    def preprocessed(self):
-        """
-        Did the preprocessor sucessfully preprocess the instance?
-        """
-
-        return bool(self.cnf_path)
-
-    @property
-    def elapsed(self):
-        """
-        Time elapsed in preprocessor execution.
-        """
-
-        return self.run.proc_elapsed
-
-    @property
-    def cnf_path(self):
-        """
-        The path to the preprocessed CNF.
-        """
-
-        from os.path import join
-
-        if self.output_dir is None:
-            return None
-        else:
-            return join(self.output_dir, "preprocessed.cnf")
-
-    @property
-    def solver_result(self):
-        """
-        The result of the integrated solver, if any.
-        """
-
-        return self._solver_result
-
-    def extend(self, certificate):
-        """
-        Extend the specified certificate.
-        """
-
-        from cargo.errors import Raised
-
-        # sanity
-        if self.cnf_path is None:
-            raise RuntimeError("extend() on SatELite output that has no CNF")
-
-        # write the certificate to a file
-        from tempfile import NamedTemporaryFile
-        from cargo.io import mkdtemp_scoped
-
-        with NamedTemporaryFile("w", prefix = "sat_certificate.") as certificate_file:
-            certificate_file.write("SAT\n")
-            certificate_file.write(" ".join(str(l) for l in certificate))
-            certificate_file.write("\n")
-            certificate_file.flush()
-
-            with mkdtemp_scoped(prefix = "tmp.satelite.") as tmpdir:
-                # run the solver
-                from os.path import join
-
-                command = [
-                    self.binary_path,
-                    "+ext",
-                    self.cnf_path,
-                    certificate_file.name,
-                    join(self.output_dir, "variable_map"),
-                    join(self.output_dir, "eliminated_clauses"),
-                    ]
-
-                log.note("extending model certificate with %s", command)
-
-                popened = None
-
-                try:
-                    # launch SatELite
-                    import subprocess
-
-                    from os         import putenv
-                    from subprocess import Popen
-
-                    popened = \
-                        Popen(
-                            command,
-                            stdin      = None,
-                            stdout     = subprocess.PIPE,
-                            stderr     = subprocess.STDOUT,
-                            preexec_fn = lambda: putenv("TMPDIR", tmpdir),
-                            )
-
-                    # parse the extended certificate from its output
-                    from utexas.sat.solvers import scan_competition_output
-
-                    (_, certificate) = scan_competition_output(popened.stdout)
-
-                    # wait for its natural death
-                    popened.wait()
-                except:
-                    # something went wrong; make sure it's dead
-                    raised = Raised()
-
-                    if popened is not None and popened.poll() is None:
-                        try:
-                            popened.kill()
-                            popened.wait()
-                        except:
-                            Raised().print_ignored()
-
-                    raised.re_raise()
-                else:
-                    if popened.returncode != 10:
-                        raise SAT_PreprocessorError("model extension failed")
-
-                    return extended
+from utexas.sat.tasks         import AbstractPreprocessedFileTask
+from utexas.sat.preprocessors import SAT_Preprocessor
 
 class SatELitePreprocessor(SAT_Preprocessor):
     """
@@ -160,9 +25,9 @@ class SatELitePreprocessor(SAT_Preprocessor):
         """
 
         # argument sanity
-        from utexas.sat import SAT_FileTask
+        from utexas.sat import AbstractFileTask
 
-        if not isinstance(task, SAT_FileTask):
+        if not isinstance(task, AbstractFileTask):
             raise TypeError("SatELite requires a file-backed task")
 
         # preprocess the task
@@ -205,4 +70,145 @@ class SatELitePreprocessor(SAT_Preprocessor):
             return BarePreprocessorRunResult(self, task, "FIXME", None, run)
         else:
             return BarePreprocessorRunResult(self, task, task, None, run)
+
+    def extend(self, task, answer):
+        """
+        Extend an answer to a preprocessed task to its parent task.
+        """
+
+        # sanity
+        if not isinstance(task, SatELitePreprocessedTask):
+            raise TypeError("SatELite can extend only tasks it preprocessed")
+
+        # trivial cases
+        if answer.certificate is None:
+            return answer
+
+        # typical case
+        from tempfile     import NamedTemporaryFile
+        from cargo.errors import Raised
+
+        with NamedTemporaryFile("w", prefix = "sat_certificate.") as certificate_file:
+            # write the certificate to a file
+            certificate_file.write("SAT\n")
+            certificate_file.write(" ".join(str(l) for l in answer.certificate))
+            certificate_file.write("\n")
+            certificate_file.flush()
+
+            # prepare to invoke the solver
+            from cargo.io import mkdtemp_scoped
+
+            with mkdtemp_scoped(prefix = "tmp.satelite.") as tmpdir:
+                # run the solver
+                from os.path import join
+
+                arguments = [
+                    "+ext",
+                    task.path,
+                    certificate_file.name,
+                    join(task.output_path, "variable_map"),
+                    join(task.output_path, "eliminated_clauses"),
+                    ]
+
+                log.note("model extension arguments are %s", arguments)
+
+                popened = None
+
+                try:
+                    # launch SatELite
+                    import subprocess
+
+                    from os         import putenv
+                    from subprocess import Popen
+
+                    popened = \
+                        Popen(
+                            self._command + arguments,
+                            stdin      = None,
+                            stdout     = subprocess.PIPE,
+                            stderr     = subprocess.STDOUT,
+                            preexec_fn = lambda: putenv("TMPDIR", tmpdir),
+                            )
+
+                    # parse the extended certificate from its output
+                    from utexas.sat         import SAT_Answer
+                    from utexas.sat.solvers import scan_competition_output
+
+                    (_, extended)   = scan_competition_output(popened.stdout)
+                    extended_answer = SAT_Answer(answer.satisfiable, extended)
+
+                    # wait for its natural death
+                    popened.wait()
+                except:
+                    # something went wrong; make sure it's dead
+                    raised = Raised()
+
+                    if popened is not None and popened.poll() is None:
+                        try:
+                            popened.kill()
+                            popened.wait()
+                        except:
+                            Raised().print_ignored()
+
+                    raised.re_raise()
+                else:
+                    if popened.returncode != 10:
+                        raise SAT_PreprocessorError("model extension failed")
+
+                    return extended_answer
+
+class SatELitePreprocessedTask(AbstractPreprocessedFileTask):
+    """
+    A task preprocessed by SatELite.
+    """
+
+    def __init__(self, preprocessor, seed, input_task, output_path):
+        """
+        Initialize.
+        """
+
+        self._preprocessor = preprocessor
+        self._seed         = seed
+        self._input_task   = input_task
+        self._output_path  = output_path
+
+    @property
+    def preprocessor(self):
+        """
+        The preprocessor that yielded this task.
+        """
+
+        return self._preprocessor
+
+    @property
+    def seed(self):
+        """
+        The preprocessor seed on the run that yielded this task.
+        """
+
+    @property
+    def input_task(self):
+        """
+        The preprocessor input task that yielded this task.
+        """
+
+        return self._input_task
+
+    @property
+    def path(self):
+        """
+        The path to the associated task file.
+        """
+
+        from os.path import join
+
+        return join(self._output_path, "preprocessed.cnf")
+
+    @property
+    def output_path(self):
+        """
+        The path to the directory of preprocessor output files.
+        """
+
+        return self._output_path
 

@@ -27,9 +27,9 @@ class SAT_UncompressingPreprocessor(SAT_Preprocessor):
         """
 
         # argument sanity
-        from utexas.sat.tasks import SAT_FileTask
+        from utexas.sat.tasks import AbstractFileTask
 
-        if not isinstance(task, SAT_FileTask):
+        if not isinstance(task, AbstractFileTask):
             raise TypeError("uncompressing preprocessor requires a file-backed task")
 
         # preprocess
@@ -51,7 +51,16 @@ class SAT_UncompressingPreprocessor(SAT_Preprocessor):
             log.info("uncompressed task is %s", uncompressed_path)
 
             # then pass it along
-            inner_task = SAT_FileTask(uncompressed_path)
+            from utexas.sat.tasks import FileTask
+
+            inner_task = FileTask(uncompressed_path)
 
             return self._inner.preprocess(inner_task, budget, output_dir, random, environment)
+
+    def extend(self, task, answer):
+        """
+        Pretend to extend an answer.
+        """
+
+        return self._inner.extend(task, answer)
 

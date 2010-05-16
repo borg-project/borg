@@ -15,22 +15,9 @@ from cargo.sugar import ABC
 
 log = get_logger(__name__)
 
-# class SAT_Answer(object):
-#     """
-#     An answer (or lack thereof) to a SAT instance.
-#     """
-
-#     def __init__(self, satisfiable = None, certificate = None):
-#         """
-#         Initialize.
-#         """
-
-#         self.satisfiable = satisfiable
-#         self.certificate = certificate
-
-class SAT_Task(ABC):
+class AbstractTask(ABC):
     """
-    A satisfiability task.
+    A task.
     """
 
     def to_orm(self, session):
@@ -46,9 +33,73 @@ class SAT_Task(ABC):
         An arbitrary printable name for the task.
         """
 
-class SAT_FileTask(SAT_Task):
+class AbstractFileTask(AbstractTask):
     """
-    A task backed by a .cnf file.
+    A task backed by a file.
+    """
+
+    @property
+    def name(self):
+        """
+        A printable name for the task.
+        """
+
+        return self._path
+
+    @abstractproperty
+    def path(self):
+        """
+        The path to the associated task file.
+        """
+
+class AbstractPreprocessedTask(AbstractTask):
+    """
+    A preprocessed task.
+    """
+
+    @property
+    def name(self):
+        """
+        A printable name for the task.
+        """
+
+        if self.seed is None:
+            return "%s:%s" % (self.preprocessor, self.path)
+        else:
+            return "%s(%i):%s" % (self.preprocessor, self.seed, self.path)
+
+    @abstractproperty
+    def preprocessor(self):
+        """
+        The preprocessor that yielded this task.
+        """
+
+    @abstractproperty
+    def seed(self):
+        """
+        The preprocessor seed on the run that yielded this task.
+        """
+
+    @abstractproperty
+    def input_task(self):
+        """
+        The preprocessor input task that yielded this task.
+        """
+
+class AbstractPreprocessedFileTask(AbstractPreprocessedTask, AbstractFileTask):
+    """
+    A preprocessed task backed by a file.
+    """
+
+    @abstractproperty
+    def output_path(self):
+        """
+        The path to the directory of preprocessor output files.
+        """
+
+class FileTask(AbstractFileTask):
+    """
+    A task backed by a file.
     """
 
     def __init__(self, path):
@@ -56,17 +107,7 @@ class SAT_FileTask(SAT_Task):
         Initialize.
         """
 
-        SAT_Task.__init__(self)
-
         self._path = path
-
-    @property
-    def name(self):
-        """
-        An arbitrary printable name for the task.
-        """
-
-        return self._path
 
     @property
     def path(self):
@@ -76,21 +117,7 @@ class SAT_FileTask(SAT_Task):
 
         return self._path
 
-class SAT_PreprocessedTask(SAT_Task):
-    """
-    A task backed by a .cnf file and associated preprocessor information.
-    """
-
-    @abstractmethod
-    def extend(self, certificate):
-        """
-        Extend the specified certificate.
-
-        Translates a solution to the preprocessed CNF expression back into a
-        solution to the unprocessed CNF expression.
-        """
-
-class SAT_MockTask(SAT_Task):
+class MockTask(AbstractTask):
     """
     An non-real task with an associated database row.
     """
@@ -99,8 +126,6 @@ class SAT_MockTask(SAT_Task):
         """
         Initialize.
         """
-
-        SAT_Task.__init__(self)
 
         self._task_uuid = task_uuid
 

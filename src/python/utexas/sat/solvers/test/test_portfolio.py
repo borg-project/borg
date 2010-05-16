@@ -36,11 +36,11 @@ def test_sat_portfolio_solver():
 
         import numpy
 
-        from utexas.sat.tasks import SAT_FileTask
+        from utexas.sat.tasks import FileTask
 
         strategy = SequenceSelectionStrategy(actions)
         solver   = SAT_PortfolioSolver(strategy)
-        task     = SAT_FileTask("/tmp/arbitrary_path.cnf")
+        task     = FileTask("/tmp/arbitrary_path.cnf")
         result   = solver.solve(task, TimeDelta(seconds = seconds), numpy.random, environment)
 
         assert_equal(result.satisfiable, satisfiable)

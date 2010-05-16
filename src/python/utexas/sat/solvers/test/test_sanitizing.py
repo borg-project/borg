@@ -18,16 +18,16 @@ def test_sat_sanitizing_solver():
 
     with NamedTemporaryFile(suffix = ".cnf") as named_file:
         # write the unsanitized CNF
-        named_file.write(raw_unsanitized_cnf)
+        named_file.write(unsanitized_cnf)
         named_file.flush()
 
         # test the solver
-        from utexas.sat.tasks   import SAT_FileTask
+        from utexas.sat.tasks   import FileTask
         from utexas.sat.solvers import SAT_SanitizingSolver
 
         inner_solver = TaskVerifyingSolver(sanitized_cnf)
         solver       = SAT_SanitizingSolver(inner_solver)
-        task         = SAT_FileTask(named_file.name)
+        task         = FileTask(named_file.name)
 
         solver.solve(task, None, None, None)
 

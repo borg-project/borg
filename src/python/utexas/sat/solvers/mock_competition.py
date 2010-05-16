@@ -82,9 +82,9 @@ class SAT_MockCompetitionSolver(SAT_Solver):
         """
 
         # argument sanity
-        from utexas.sat.tasks         import SAT_MockTask
+        from utexas.sat.tasks import MockTask
 
-        if not isinstance(task, SAT_MockTask):
+        if not isinstance(task, MockTask):
             raise TypeError("mock solvers require mock tasks")
 
         # mise en place

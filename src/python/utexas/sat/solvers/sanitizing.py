@@ -30,9 +30,9 @@ class SAT_SanitizingSolver(SAT_Solver):
         from cargo.io import mkdtemp_scoped
 
         # argument sanity
-        from utexas.sat.tasks import SAT_FileTask
+        from utexas.sat.tasks import AbstractFileTask
 
-        if not isinstance(task, SAT_FileTask):
+        if not isinstance(task, AbstractFileTask):
             raise TypeError("sanitizing solver requires a file-backed task")
 
         with mkdtemp_scoped(prefix = "sanitized.") as sandbox_path:
@@ -50,7 +50,9 @@ class SAT_SanitizingSolver(SAT_Solver):
             log.info("sanitized task file is %s", sanitized_path)
 
             # execute the next solver in the chain
-            sanitized_task = SAT_FileTask(sanitized_path)
+            from utexas.sat.tasks import FileTask
+
+            sanitized_task = FileTask(sanitized_path)
 
             return self.solver.solve(sanitized_task, budget, random, environment)
 

@@ -33,9 +33,9 @@ class SAT_MockPreprocessingSolver(SAT_Solver):
         """
 
         # argument sanity
-        from utexas.sat.tasks import SAT_MockTask
+        from utexas.sat.tasks import MockTask
 
-        if not isinstance(task, SAT_MockTask):
+        if not isinstance(task, MockTask):
             raise TypeError("mock solver requires a mock task")
 
         # mise en place
@@ -88,10 +88,9 @@ class SAT_MockPreprocessingSolver(SAT_Solver):
                 preprocessor_output_task_uuid = run_row.output_task_uuid
 
         # not solved by the preprocessor; try the inner solver
-        inner_task   = SAT_MockTask(preprocessor_output_task_uuid)
         inner_result = \
             self.inner_solver.solve(
-                inner_task,
+                MockTask(preprocessor_output_task_uuid),
                 budget - preprocessor_run_cost,
                 random,
                 environment,
@@ -104,6 +103,6 @@ class SAT_MockPreprocessingSolver(SAT_Solver):
                 budget,
                 inner_result.cost + preprocessor_run_cost,
                 inner_result.satisfiable,
-                inner_result.certificate,
+                None,
                 )
 

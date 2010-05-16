@@ -29,6 +29,13 @@ class TaskVerifyingPreprocessor(SAT_Preprocessor):
 
         return BarePreprocessorResult(self, task, task, budget, budget, None)
 
+    def extend(self, task, answer):
+        """
+        Pretend to extend an answer.
+        """
+
+        raise NotImplementedError()
+
 def test_uncompressiong_preprocessor():
     """
     Test the uncompressing preprocessor wrapper.
@@ -49,12 +56,12 @@ def test_uncompressiong_preprocessor():
         named_file.flush()
 
         # test the solver
-        from utexas.sat.tasks         import SAT_FileTask
+        from utexas.sat.tasks         import FileTask
         from utexas.sat.preprocessors import SAT_UncompressingPreprocessor
 
         task_verifying = TaskVerifyingPreprocessor(sanitized_cnf)
         uncompressing  = SAT_UncompressingPreprocessor(task_verifying)
-        task           = SAT_FileTask(named_file.name)
+        task           = FileTask(named_file.name)
 
         uncompressing.preprocess(task, None, None, None, None)
 

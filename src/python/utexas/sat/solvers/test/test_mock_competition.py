@@ -13,7 +13,7 @@ def test_mock_competition_simple():
     """
 
     from utexas.data                     import TaskRow
-    from utexas.sat.tasks                import SAT_MockTask
+    from utexas.sat.tasks                import MockTask
     from utexas.sat.solvers              import (
         SAT_Environment,
         SAT_MockCompetitionSolver,
@@ -33,7 +33,7 @@ def test_mock_competition_simple():
         Test SAT_MockCompetitionSolver behavior.
         """
 
-        task        = SAT_MockTask(task_uuid)
+        task        = MockTask(task_uuid)
         solver      = SAT_MockCompetitionSolver(solver_name)
         environment = SAT_Environment(CacheSession = fake_data.Session)
         result      = solver.solve(task, TimeDelta(seconds = seconds), None, environment)

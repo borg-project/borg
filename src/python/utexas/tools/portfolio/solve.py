@@ -138,9 +138,9 @@ def main((solver_path, input_path, seed_string)):
 
     # solve
     from cargo.temporal   import TimeDelta
-    from utexas.sat.tasks import SAT_FileTask
+    from utexas.sat.tasks import FileTask
 
-    task   = SAT_FileTask(input_path)
+    task   = FileTask(input_path)
     result = solver.solve(task, TimeDelta(seconds = 1e6), random, environment)
 
     # tell the world

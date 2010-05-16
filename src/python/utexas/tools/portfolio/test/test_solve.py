@@ -42,7 +42,7 @@ def test_tools_portfolio_solve():
             import numpy
 
             from cargo.temporal     import TimeDelta
-            from utexas.sat.tasks   import SAT_FileTask
+            from utexas.sat.tasks   import FileTask
             from utexas.sat.solvers import (
                 SAT_Environment,
                 SAT_CompetitionSolver,
@@ -59,7 +59,7 @@ def test_tools_portfolio_solve():
                         "42",
                         ],
                     )
-            task          = SAT_FileTask(cnf_file.name)
+            task          = FileTask(cnf_file.name)
             environment   = SAT_Environment()
             budget        = TimeDelta(seconds = 16.0)
             result        = script_solver.solve(task, budget, numpy.random, environment)

@@ -26,12 +26,12 @@ def test_uncompressing_solver():
         named_file.flush()
 
         # test the solver
-        from utexas.sat.tasks   import SAT_FileTask
+        from utexas.sat.tasks   import FileTask
         from utexas.sat.solvers import SAT_UncompressingSolver
 
         inner_solver = TaskVerifyingSolver(unsanitized_cnf)
         solver       = SAT_UncompressingSolver(inner_solver)
-        task         = SAT_FileTask(named_file.name)
+        task         = FileTask(named_file.name)
 
         solver.solve(task, None, None, None)
 

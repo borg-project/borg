@@ -43,12 +43,12 @@ def test_lookup_preprocessor():
 
     # each test
     from utexas.sat import (
+        FileTask,
         SAT_Answer,
-        SAT_FileTask,
         )
 
-    input_task  = SAT_FileTask("/tmp/arbitrary_path.cnf")
-    output_task = SAT_FileTask("/tmp/arbitrary_path2.cnf")
+    input_task  = FileTask("/tmp/arbitrary_path.cnf")
+    output_task = FileTask("/tmp/arbitrary_path2.cnf")
     answer      = SAT_Answer(True, [42])
 
     yield (test_preprocessor, input_task, input_task, answer)

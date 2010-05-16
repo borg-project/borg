@@ -56,13 +56,13 @@ while True: pass
 
             # build the preprocessor
             from cargo.temporal           import TimeDelta
-            from utexas.sat.tasks         import SAT_FileTask
+            from utexas.sat.tasks         import FileTask
             from utexas.sat.preprocessors import SatELitePreprocessor
 
             satelite = SatELitePreprocessor(["python", code_file.name])
 
             # run the preprocessor
-            task   = SAT_FileTask("/tmp/path_irrelevant.cnf")
+            task   = FileTask("/tmp/path_irrelevant.cnf")
             budget = TimeDelta(seconds = 8.0)
             result = satelite.preprocess(task, budget, "/tmp/arbitrary", None, None)
 

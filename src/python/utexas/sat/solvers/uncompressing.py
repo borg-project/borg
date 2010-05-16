@@ -34,11 +34,12 @@ class SAT_UncompressingSolver(SAT_Solver):
             )
 
         # argument sanity
-        from utexas.sat.tasks import SAT_FileTask
+        from utexas.sat.tasks import AbstractFileTask
 
-        if not isinstance(task, SAT_FileTask):
+        if not isinstance(task, AbstractFileTask):
             raise TypeError("uncompressing solver requires a file-backed task")
 
+        # solver body
         with mkdtemp_scoped(prefix = "solver_input.") as sandbox_path:
             # decompress the instance, if necessary
             sandboxed_path    = join(sandbox_path, "uncompressed.cnf")
@@ -47,7 +48,9 @@ class SAT_UncompressingSolver(SAT_Solver):
             log.info("uncompressed task file is %s", uncompressed_path)
 
             # execute the next solver in the chain
-            uncompressed_task = SAT_FileTask(uncompressed_path)
+            from utexas.sat.tasks import FileTask
+
+            uncompressed_task = FileTask(uncompressed_path)
 
             return self.solver.solve(uncompressed_task, budget, random, environment)
 

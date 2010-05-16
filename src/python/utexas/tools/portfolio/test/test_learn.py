@@ -43,7 +43,7 @@ def test_tools_portfolio_learn():
     import numpy
 
     from cargo.temporal                  import TimeDelta
-    from utexas.sat.tasks                import SAT_FileTask
+    from utexas.sat.tasks                import FileTask
     from utexas.sat.solvers              import SAT_Environment
     from utexas.sat.solvers.test.support import FixedSolver
 
@@ -61,7 +61,7 @@ def test_tools_portfolio_learn():
         "sat/2009/SApperloT"      : fixed_solver,
         }
     environment   = SAT_Environment(named_solvers = named_solvers)
-    task          = SAT_FileTask("/tmp/arbitrary_path.cnf")
+    task          = FileTask("/tmp/arbitrary_path.cnf")
     result        = solver.solve(task, TimeDelta(seconds = 1e6), numpy.random, environment)
 
     assert_equal(result.satisfiable, fixed_solver.satisfiable)

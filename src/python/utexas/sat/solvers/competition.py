@@ -118,9 +118,9 @@ class SAT_CompetitionSolver(SAT_Solver):
         from utexas.sat.solvers import SolverError
 
         # argument sanity
-        from utexas.sat.tasks import SAT_FileTask
+        from utexas.sat.tasks import AbstractFileTask
 
-        if not isinstance(task, SAT_FileTask):
+        if not isinstance(task, AbstractFileTask):
             raise TypeError("competition solver requires a file-backed task")
 
         def expand(strings, variable, value):

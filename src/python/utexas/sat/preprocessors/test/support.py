@@ -34,3 +34,10 @@ class FixedPreprocessor(SAT_Preprocessor):
                 self._answer,
                 )
 
+    def extend(self, task, answer):
+        """
+        Pretend to extend an answer.
+        """
+
+        raise NotImplementedError()
+

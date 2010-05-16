@@ -221,9 +221,9 @@ class PreprocessedTaskRow(TaskRow):
     __tablename__ = "preprocessed_tasks"
 
     uuid              = Column(SQL_UUID, ForeignKey(TaskRow.uuid), primary_key = True)
-    input_task_uuid   = Column(SQL_UUID, ForeignKey("tasks.uuid"), nullable = False)
     preprocessor_name = Column(String, ForeignKey("sat_preprocessors.name"), nullable = False)
     seed              = Column(Integer)
+    input_task_uuid   = Column(SQL_UUID, ForeignKey("tasks.uuid"), nullable = False)
 
     __mapper_args__ = {
         "polymorphic_identity" : "preprocessed",

@@ -19,6 +19,12 @@ class SAT_Preprocessor(ABC):
         Preprocess an instance.
         """
 
+    @abstractmethod
+    def extend(self, task, answer, environment):
+        """
+        Extend an answer to a preprocessed task back to its parent task.
+        """
+
     def to_orm(self, session):
         """
         Return the corresponding database description.

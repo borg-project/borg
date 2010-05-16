@@ -25,8 +25,22 @@ class LookupPreprocessor(SAT_Preprocessor):
 
         from utexas.sat.preprocessors import WrappedPreprocessorResult
 
-        inner        = environment.named_preprocessors[self._name]
+        inner        = self.look_up(environment)
         inner_result = inner.preprocess(task, budget, output_dir, random, environment)
 
         return WrappedPreprocessorResult(self, inner_result)
+
+    def extend(self, task, answer, environment):
+        """
+        Pretend to extend an answer.
+        """
+
+        return self.look_up(environment).extend(task, answer, environment)
+
+    def look_up(self, environment):
+        """
+        Look up the named preprocessor.
+        """
+
+        return environment.named_preprocessors[self._name]
 
