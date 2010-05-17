@@ -34,7 +34,7 @@ class SatELitePreprocessor(SAT_Preprocessor):
             raise TypeError("SatELite requires a file-backed task")
 
         # preprocess the task
-        from cargo.io           import mkdtemp_scoped
+        from cargo.io import mkdtemp_scoped
 
         with mkdtemp_scoped(prefix = "tmp.satelite.") as tmpdir:
             # run the solver
@@ -80,8 +80,10 @@ class SatELitePreprocessor(SAT_Preprocessor):
         """
 
         # sanity
-        if not isinstance(task, SatELitePreprocessedTask):
-            raise TypeError("SatELite can extend only tasks it preprocessed")
+        from utexas.sat.tasks import AbstractPreprocessedFileTask
+
+        if not isinstance(task, AbstractPreprocessedFileTask):
+            raise TypeError("tasks to extend must be preprocessed file-backed tasks")
 
         # trivial cases
         if answer.certificate is None:
@@ -160,20 +162,47 @@ class SatELitePreprocessor(SAT_Preprocessor):
 
                     return extended_answer
 
-class SatELitePreprocessedTask(AbstractPreprocessedFileTask):
+class SatELitePreprocessedTask(Rowed, AbstractPreprocessedFileTask):
     """
     A task preprocessed by SatELite.
     """
 
-    def __init__(self, preprocessor, seed, input_task, output_path):
+    def __init__(self, preprocessor, seed, input_task, output_path, row = None):
         """
         Initialize.
         """
+
+        Rowed.__init__(self, row)
 
         self._preprocessor = preprocessor
         self._seed         = seed
         self._input_task   = input_task
         self._output_path  = output_path
+
+    def get_row(self, session):
+        """
+        Get or create the ORM row associated with this object.
+        """
+
+        from utexas.rowed import NoRowError
+
+        try:
+            return super(self).get_row(session)
+        except NoRowError:
+            from utexas.data import PreprocessedTaskRow
+
+            row = \
+                PreprocessedTaskRow(
+                    preprocessor = self.preprocessor.get_row(session),
+                    seed         = seld.seed,
+                    input_task   = self.input_task.get_row(session),
+                    )
+
+            self.set_row(row)
+
+            session.add(row)
+
+            return row
 
     @property
     def preprocessor(self):

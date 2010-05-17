@@ -18,7 +18,7 @@ class LookupPreprocessor(SAT_Preprocessor):
 
         self._name = name
 
-    def preprocess(self, task, budget, output_dir, random, environment):
+    def preprocess(self, task, budget, output_path, random, environment):
         """
         Preprocess an instance.
         """
@@ -26,7 +26,7 @@ class LookupPreprocessor(SAT_Preprocessor):
         from utexas.sat.preprocessors import WrappedPreprocessorResult
 
         inner        = self.look_up(environment)
-        inner_result = inner.preprocess(task, budget, output_dir, random, environment)
+        inner_result = inner.preprocess(task, budget, output_path, random, environment)
 
         return WrappedPreprocessorResult(self, inner_result)
 

@@ -6,26 +6,22 @@ Satisfiability task types.
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from abc         import (
+from abc          import (
     abstractmethod,
     abstractproperty,
     )
-from cargo.log   import get_logger
-from cargo.sugar import ABC
+from cargo.log    import get_logger
+from utexas.rowed import (
+    Rowed,
+    AbstractRowed,
+    )
 
 log = get_logger(__name__)
 
-class AbstractTask(ABC):
+class AbstractTask(AbstractRowed):
     """
     A task.
     """
-
-    def to_orm(self, session):
-        """
-        Return a database description of this task.
-        """
-
-        raise RuntimeError("task has no database twin")
 
     @abstractproperty
     def name(self):
@@ -97,15 +93,17 @@ class AbstractPreprocessedFileTask(AbstractPreprocessedTask, AbstractFileTask):
         The path to the directory of preprocessor output files.
         """
 
-class FileTask(AbstractFileTask):
+class FileTask(AbstractFileTask, Rowed):
     """
     A task backed by a file.
     """
 
-    def __init__(self, path):
+    def __init__(self, path, row = None):
         """
         Initialize.
         """
+
+        Rowed.__init__(self, row)
 
         self._path = path
 
@@ -117,9 +115,9 @@ class FileTask(AbstractFileTask):
 
         return self._path
 
-class MockTask(AbstractTask):
+class MockTask(Rowed, AbstractTask):
     """
-    An non-real task with an associated database row.
+    A task not backed by a file.
     """
 
     def __init__(self, task_uuid):
@@ -129,14 +127,29 @@ class MockTask(AbstractTask):
 
         self._task_uuid = task_uuid
 
-    def to_orm(self, session):
+    def get_row(self, session):
         """
-        Return a database description of this task.
+        Get the ORM row associated with this object, if any.
         """
 
-        from utexas.data import TaskRow
+        from utexas.rowed import NoRowError
 
-        return session.query(TaskRow).get(self._task_uuid)
+        try:
+            return super(self).get_row(session)
+        except NoRowError:
+            from utexas.data import TaskRow
+
+            row = session.query(TaskRow).get(self._task_uuid)
+
+            if row is None:
+                raise NoRowError()
+            else:
+                return row
+
+    def add_row(self, session):
+        """
+        Create an ORM row for this object, if one does not already exist.
+        """
 
     @property
     def name(self):

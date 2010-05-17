@@ -1,8 +1,4 @@
 """
-utexas/data.py
-
-Storage and retrieval of research data.
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
@@ -230,7 +226,8 @@ class PreprocessedTaskRow(TaskRow):
         "inherit_condition"    : uuid == TaskRow.uuid,
         }
 
-    input_task = \
+    preprocessor = relationship(SAT_PreprocessorRow)
+    input_task   = \
         relationship(
             TaskRow,
             primaryjoin = (input_task_uuid == TaskRow.uuid),

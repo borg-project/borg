@@ -32,6 +32,8 @@ def yield_sanitized_cnf(source):
 
         if stripped == "%":
             break
+        elif stripped.startswith("c "):
+            continue
         else:
             yield __condense_spaces_re.sub(" ", stripped)
             yield "\n"

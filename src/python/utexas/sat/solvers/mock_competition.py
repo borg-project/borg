@@ -1,6 +1,4 @@
 """
-utexas/sat/solvers/mock_competition.py
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 

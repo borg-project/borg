@@ -6,7 +6,63 @@ from abc         import (
     abstractmethod,
     abstractproperty,
     )
+from cargo.log   import get_logger
 from cargo.sugar import ABC
+from cargo.flags import (
+    Flag,
+    Flags,
+    )
+
+log          = get_logger(__name__)
+module_flags = \
+    Flags(
+        "SAT Solver Configuration",
+        Flag(
+            "--solvers-file",
+            default = [],
+            action  = "append",
+            metavar = "FILE",
+            help    = "read solver descriptions from FILE [%default]",
+            ),
+        )
+
+def get_named_solvers(paths = [], flags = {}):
+    """
+    Retrieve a list of named solvers.
+    """
+
+    flags = module_flags.merged(flags)
+
+    def yield_preprocessors_from(raw_path):
+        """
+        (Recursively) yield configured preprocessors.
+        """
+
+        import json
+
+        from os.path  import dirname
+        from cargo.io import expandpath
+
+        path     = expandpath(raw_path)
+        relative = dirname(path)
+
+        with open(path) as file:
+            loaded = json.load(file)
+
+        log.note("read named-preprocessors file: %s", raw_path)
+
+        for (name, attributes) in loaded.get("preprocessors", {}).items():
+            if name == "sat/SatELite":
+                from utexas.sat.preprocessors import SatELitePreprocessor
+
+                yield (name, SatELitePreprocessor(attributes["command"]))
+            else:
+                raise RuntimeError("unknown preprocessor name \"%s\"" % name)
+
+    # build the solvers dictionary
+    from itertools import chain
+
+    return dict(chain(*(yield_preprocessors_from(p) for p in chain(paths, flags.solvers_file))))
 
 class SAT_Preprocessor(ABC):
     """

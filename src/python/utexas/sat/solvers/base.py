@@ -59,6 +59,8 @@ def get_named_solvers(paths = [], flags = {}):
         with open(path) as file:
             loaded = json.load(file)
 
+        log.note("read named-solvers file: %s", raw_path)
+
         for (name, attributes) in loaded.get("solvers", {}).items():
             yield (
                 name,
