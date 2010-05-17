@@ -140,7 +140,7 @@ def main():
 
     from cargo.flags import parse_given
 
-    (tasks_path, relative_to) = parse_given()
+    (tasks_path, relative_to) = parse_given(usage = "%prog <tasks> <relative> [options]")
 
     # set up logging
     from cargo.log import enable_default_logging
@@ -154,6 +154,7 @@ def main():
         )
 
     with SQL_Engines.default:
+        from os.path     import abspath
         from utexas.data import research_connect
 
         ResearchSession = make_session(bind = research_connect())
@@ -163,8 +164,8 @@ def main():
                 list(
                     yield_get_task_jobs(
                         session,
-                        tasks_path,
-                        relative_to,
+                        abspath(tasks_path),
+                        abspath(relative_to),
                         module_flags.given.collection,
                         ))
 
