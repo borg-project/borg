@@ -3,6 +3,7 @@
 """
 
 from cargo.log                import get_logger
+from utexas.rowed             import Rowed
 from utexas.sat.tasks         import AbstractPreprocessedFileTask
 from utexas.sat.preprocessors import SAT_Preprocessor
 
