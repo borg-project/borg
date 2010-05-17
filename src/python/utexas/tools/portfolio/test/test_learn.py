@@ -11,27 +11,30 @@ def test_tools_portfolio_learn():
 
     # fork; build a random-model solver
     from os.path    import join
-    from subprocess import check_call
     from cargo.io   import mkdtemp_scoped
 
     with mkdtemp_scoped() as sandbox_path:
         # invoke the script
+        from subprocess                          import check_call
         from utexas.tools.portfolio.test.support import clean_up_environment
 
         solver_pickle_path = join(sandbox_path, "solver.pickle")
 
-        check_call(
-            [
-                "python",
-                "-m",
-                "utexas.tools.portfolio.learn",
-                "-m",
-                "random",
-                "none",
-                solver_pickle_path,
-                ],
-            preexec_fn = clean_up_environment,
-            )
+        with open("/dev/null", "w") as null_file:
+            check_call(
+                [
+                    "python",
+                    "-m",
+                    "utexas.tools.portfolio.learn",
+                    "-m",
+                    "random",
+                    "none",
+                    solver_pickle_path,
+                    ],
+                stdout     = null_file,
+                stderr     = null_file,
+                preexec_fn = clean_up_environment,
+                )
 
         # and load the solver file
         import cPickle as pickle

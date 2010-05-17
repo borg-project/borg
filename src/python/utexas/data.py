@@ -47,6 +47,11 @@ module_flags = \
             metavar = "DATABASE",
             help    = "use research DATABASE by default [%default]",
             ),
+        Flag(
+            "--create-research-schema",
+            action  = "store_true",
+            help    = "create the research data schema, if necessary",
+            ),
         )
 
 def research_connect(engines = SQL_Engines.default, flags = module_flags.given):
@@ -54,9 +59,13 @@ def research_connect(engines = SQL_Engines.default, flags = module_flags.given):
     Connect to research data storage.
     """
 
-    flags = module_flags.merged(flags)
+    flags  = module_flags.merged(flags)
+    engine = engines.get(flags.research_database)
 
-    return engines.get(flags.research_database)
+    if flags.create_research_schema:
+        DatumBase.metadata.create_all(engine)
+
+    return engine
 
 class CPU_LimitedRunRow(DatumBase):
     """
@@ -186,7 +195,7 @@ class TaskRow(DatumBase):
     __tablename__ = "tasks"
     task_type     = \
         Enum(
-            "cnf_sat",
+            "sat",
             "preprocessed",
             name = "task_type",
             )
@@ -196,18 +205,26 @@ class TaskRow(DatumBase):
 
     __mapper_args__ = {"polymorphic_on": type}
 
-class SAT_TaskRow(TaskRow):
+class FileTaskRow(TaskRow):
+    """
+    Tasks backed by files.
+    """
+
+    __tablename__   = "file_tasks"
+#     __mapper_args__ = {"polymorphic_identity" : "cnf_sat"}
+
+    uuid = Column(SQL_UUID, ForeignKey("tasks.uuid"), primary_key = True)
+    hash = Column(LargeBinary(length = 64), unique = True)
+
+class SAT_TaskRow(FileTaskRow):
     """
     One satisfiability task in DIMACS CNF format.
     """
 
-    TASK_NAMESPACE = UUID("8e67a81a-717c-4206-8831-6007bc8f111f")
+    __tablename__   = "sat_file_tasks"
+    __mapper_args__ = {"polymorphic_identity" : "sat"}
 
-    __tablename__   = "sat_tasks"
-    __mapper_args__ = {"polymorphic_identity" : "cnf_sat"}
-
-    uuid = Column(SQL_UUID, ForeignKey(TaskRow.uuid), primary_key = True)
-    hash = Column(LargeBinary(length = 64))
+    uuid = Column(SQL_UUID, ForeignKey("file_tasks.uuid"), primary_key = True)
 
 class PreprocessedTaskRow(TaskRow):
     """
