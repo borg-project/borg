@@ -2,15 +2,14 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from cargo.log                import get_logger
-from utexas.rowed             import Rowed
-from utexas.sat.tasks         import AbstractPreprocessedFileTask
-from utexas.sat.preprocessors import SAT_Preprocessor
-from utexas.rowed             import Rowed
+from cargo.log    import get_logger
+from borg.rowed   import Rowed
+from borg.tasks   import AbstractPreprocessedTask
+from borg.solvers import AbstractPreprocessor
 
 log = get_logger(__name__)
 
-class SatELitePreprocessor(Rowed, SAT_Preprocessor):
+class SatELitePreprocessor(Rowed, AbstractPreprocessor):
     """
     The standard SatELite preprocessor.
     """
@@ -24,13 +23,26 @@ class SatELitePreprocessor(Rowed, SAT_Preprocessor):
 
         self._command = [s.replace("$HERE", relative_to) for s in command]
 
+    def solve(self, task, budget, random, environment):
+        """
+        Attempt to solve the specified instance.
+        """
+
+        from cargo.io              import mkdtemp_scoped
+        from borg.solvers.attempts import RunAttempt
+
+        with mkdtemp_scoped() as output_path:
+            attempt = self.preprocess(task, budget, output_path, random, environment)
+
+        return RunAttempt(self, task, attempt.answer, attempt.seed, attempt.run)
+
     def preprocess(self, task, budget, output_path, random, environment):
         """
         Preprocess the instance.
         """
 
         # argument sanity
-        from utexas.sat import AbstractFileTask
+        from borg.tasks import AbstractFileTask
 
         if not isinstance(task, AbstractFileTask):
             raise TypeError("SatELite requires a file-backed task")
@@ -63,23 +75,23 @@ class SatELitePreprocessor(Rowed, SAT_Preprocessor):
                     )
 
         # interpret its behavior
-        from utexas.sat.preprocessors import BarePreprocessorRunResult
+        from borg.solvers.attempts import PreprocessingAttempt
 
         if run.exit_status in (10, 20):
-            from utexas.sat         import SAT_Answer
-            from utexas.sat.solvers import scan_competition_output
+            from borg.sat                 import SAT_Answer
+            from borg.solvers.competition import scan_competition_output
 
             out_lines                  = "".join(c for (t, c) in run.out_chunks).split("\n")
             (satisfiable, certificate) = scan_competition_output(out_lines)
             answer                     = SAT_Answer(satisfiable, certificate)
 
-            return BarePreprocessorRunResult(self, None, task, task, answer, run)
+            return PreprocessingAttempt(self, task, answer, None, run, task)
         elif run.exit_status == 0:
             output_task = SatELitePreprocessedTask(self, None, task, output_path)
 
-            return BarePreprocessorRunResult(self, None, task, output_task, None, run)
+            return PreprocessingAttempt(self, task, None, None, run, output_task)
         else:
-            return BarePreprocessorRunResult(self, None, task, task, None, run)
+            return PreprocessingAttempt(self, task, None, None, run, task)
 
     def extend(self, task, answer, environment):
         """
@@ -87,7 +99,7 @@ class SatELitePreprocessor(Rowed, SAT_Preprocessor):
         """
 
         # sanity
-        from utexas.sat.tasks import AbstractPreprocessedFileTask
+        from borg.tasks import AbstractPreprocessedFileTask
 
         if not isinstance(task, AbstractPreprocessedFileTask):
             raise TypeError("tasks to extend must be preprocessed file-backed tasks")
@@ -143,8 +155,8 @@ class SatELitePreprocessor(Rowed, SAT_Preprocessor):
                             )
 
                     # parse the extended certificate from its output
-                    from utexas.sat         import SAT_Answer
-                    from utexas.sat.solvers import scan_competition_output
+                    from borg.sat                 import SAT_Answer
+                    from borg.solvers.competition import scan_competition_output
 
                     (_, extended)   = scan_competition_output(popened.stdout)
                     extended_answer = SAT_Answer(answer.satisfiable, extended)
@@ -174,7 +186,7 @@ class SatELitePreprocessor(Rowed, SAT_Preprocessor):
         Construct an appropriate preprocessed task from its output directory.
         """
 
-        from utexas.sat.preprocessors import PreprocessedDirectoryTask
+        from borg.tasks import PreprocessedDirectoryTask
 
         return PreprocessedDirectoryTask(self, seed, input_task, output_path, "preprocessed.cnf")
 

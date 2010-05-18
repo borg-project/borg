@@ -8,9 +8,7 @@ from uuid                       import (
     )
 from sqlalchemy                 import (
     Enum,
-    Text,
     Table,
-    Float,
     Column,
     String,
     Integer,
@@ -25,7 +23,6 @@ from sqlalchemy.ext.declarative import declarative_base
 from cargo.log                  import get_logger
 from cargo.sql.alchemy          import (
     SQL_UUID,
-    SQL_List,
     SQL_Engines,
     UTC_DateTime,
     SQL_TimeDelta,
@@ -157,27 +154,9 @@ class SolverRow(DatumBase):
         Get the solver associated with this solver row.
         """
 
-        from utexas.sat.solvers import SAT_LookupSolver
+        from utexas.sat.solvers import LookupSolver
 
-        return SAT_LookupSolver(self.name)
-
-class PreprocessorRow(DatumBase):
-    """
-    Some preprocessor.
-    """
-
-    __tablename__ = "preprocessors"
-
-    name = Column(String, primary_key = True)
-
-    def get_preprocessor(self):
-        """
-        Get the preprocessor associated with this preprocessor row.
-        """
-
-        from utexas.sat.preprocessors import LookupPreprocessor
-
-        return LookupPreprocessor(self.name)
+        return LookupSolver(self.name)
 
 class TrialRow(DatumBase):
     """
@@ -198,10 +177,10 @@ class TrialRow(DatumBase):
         Retrieve the core "recyclable" trial.
         """
 
-        return                                                         \
-            session                                                    \
-            .query(SAT_TrialRow)                                       \
-            .filter(SAT_TrialRow.uuid == SAT_TrialRow.RECYCLABLE_UUID) \
+        return                                                 \
+            session                                            \
+            .query(TrialRow)                                   \
+            .filter(TrialRow.uuid == TrialRow.RECYCLABLE_UUID) \
             .one()
 
 class TaskRow(DatumBase):
@@ -287,7 +266,7 @@ class PreprocessedTaskRow(TaskRow):
     __tablename__ = "preprocessed_tasks"
 
     uuid              = Column(SQL_UUID, ForeignKey(TaskRow.uuid), primary_key = True)
-    preprocessor_name = Column(String, ForeignKey("preprocessors.name"), nullable = False)
+    preprocessor_name = Column(String, ForeignKey("solvers.name"), nullable = False)
     seed              = Column(Integer)
     input_task_uuid   = Column(SQL_UUID, ForeignKey("tasks.uuid"), nullable = False)
 
@@ -318,7 +297,7 @@ class PreprocessedTaskRow(TaskRow):
             raise RuntimeError("no corresponding directory exists for task")
 
         # build and return the task
-        preprocessor = self.preprocessor.get_preprocessor()
+        preprocessor = self.preprocessor.get_solver()
         input_task   = self.input_task.get_task(environment)
 
         return preprocessor.make_task(self.seed, input_task, output_path, environment, self)
@@ -427,54 +406,9 @@ class SAT_AnswerRow(AnswerRow):
 
         return json.loads(unxzed(blob))
 
-preprocessor_runs_trials_table = \
+attempts_trials_table = \
     Table(
-        "preprocessor_runs_trials",
-        DatumBase.metadata,
-        Column("preprocessor_run_uuid", SQL_UUID, ForeignKey("preprocessor_runs.uuid")),
-        Column("trial_uuid", SQL_UUID, ForeignKey("trials.uuid")),
-        )
-
-class PreprocessorRunRow(DatumBase):
-    """
-    Execution of a preprocessor on a task.
-    """
-
-    __tablename__ = "preprocessor_runs"
-
-    uuid              = Column(SQL_UUID, primary_key = True, default = uuid4)
-    preprocessor_name = Column(String, ForeignKey("preprocessors.name"), nullable = False)
-    input_task_uuid   = Column(SQL_UUID, ForeignKey("tasks.uuid"), nullable = False)
-    output_task_uuid  = Column(SQL_UUID, ForeignKey("tasks.uuid"), nullable = False)
-    run_uuid          = Column(SQL_UUID, ForeignKey("cpu_limited_runs.uuid"), nullable = False)
-    answer_uuid       = Column(SQL_UUID, ForeignKey("sat_answers.uuid"))
-    seed              = Column(Integer)
-    budget            = Column(SQL_TimeDelta)
-    cost              = Column(SQL_TimeDelta)
-
-    preprocessor = relationship(PreprocessorRow)
-    input_task   = \
-        relationship(
-            TaskRow,
-            primaryjoin = (input_task_uuid == TaskRow.uuid),
-            )
-    output_task  = \
-        relationship(
-            TaskRow,
-            primaryjoin  = (output_task_uuid == TaskRow.uuid),
-            )
-    run          = relationship(CPU_LimitedRunRow)
-    answer       = relationship(SAT_AnswerRow)
-    trials       = \
-        relationship(
-            SAT_TrialRow,
-            secondary = preprocessor_runs_trials_table,
-            backref   = "preprocessor_runs",
-            )
-
-sat_attempts_trials_table = \
-    Table(
-        "sat_attempts_trials",
+        "attempts_trials",
         DatumBase.metadata,
         Column("attempt_uuid", SQL_UUID, ForeignKey("attempts.uuid")),
         Column("trial_uuid", SQL_UUID, ForeignKey("trials.uuid")),
@@ -495,19 +429,19 @@ class AttemptRow(DatumBase):
 
     uuid        = Column(SQL_UUID, primary_key = True, default = uuid4)
     type        = Column(attempt_type)
-    task_uuid   = Column(SQL_UUID, ForeignKey("tasks.uuid"))
-    answer_uuid = Column(SQL_UUID, ForeignKey("answers.uuid"))
     budget      = Column(SQL_TimeDelta)
     cost        = Column(SQL_TimeDelta)
+    task_uuid   = Column(SQL_UUID, ForeignKey("tasks.uuid"))
+    answer_uuid = Column(SQL_UUID, ForeignKey("answers.uuid"))
 
     __mapper_args__ = {"polymorphic_on": type}
 
     task   = relationship(TaskRow)
-    answer = relationship(SAT_AnswerRow)
+    answer = relationship(AnswerRow)
     trials = \
         relationship(
-            SAT_TrialRow,
-            secondary = sat_attempts_trials_table,
+            TrialRow,
+            secondary = attempts_trials_table,
             backref   = "attempts",
             )
 
@@ -520,12 +454,12 @@ class RunAttemptRow(AttemptRow):
     __mapper_args__ = {"polymorphic_identity": "run"}
 
     uuid        = Column(SQL_UUID, ForeignKey("attempts.uuid"), primary_key = True)
-    run_uuid    = Column(SQL_UUID, ForeignKey("cpu_limited_runs.uuid"), nullable = False)
     solver_name = Column(String, ForeignKey("solvers.name"), nullable = False)
     seed        = Column(Integer)
+    run_uuid    = Column(SQL_UUID, ForeignKey("cpu_limited_runs.uuid"), nullable = False)
 
     run    = relationship(CPU_LimitedRunRow)
-    solver = relationship(SAT_SolverRow)
+    solver = relationship(SolverRow)
 
 class PreprocessingAttemptRow(RunAttemptRow):
     """
@@ -538,9 +472,9 @@ class PreprocessingAttemptRow(RunAttemptRow):
     uuid              = Column(SQL_UUID, ForeignKey("run_attempts.uuid"), primary_key = True, default = uuid4)
     output_task_uuid  = Column(SQL_UUID, ForeignKey("tasks.uuid"), nullable = False)
 
-    output_task  = \
+    output_task = \
         relationship(
             TaskRow,
-            primaryjoin = (output_task_uuid == TaskRow.uuid),
+            primaryjoin = (TaskRow.uuid == output_task_uuid),
             )
 

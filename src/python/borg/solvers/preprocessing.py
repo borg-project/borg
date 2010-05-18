@@ -1,13 +1,11 @@
 """
-utexas/sat/solvers/preprocessing.py
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from cargo.log               import get_logger
-from cargo.temporal          import TimeDelta
-from utexas.sat.solvers.base import (
-    SAT_Solver,
+from cargo.log         import get_logger
+from cargo.temporal    import TimeDelta
+from borg.solvers.base import (
+    AbstractSolver,
     SAT_BareResult,
     )
 

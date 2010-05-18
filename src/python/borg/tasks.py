@@ -1,17 +1,13 @@
 """
-utexas/sat/tasks.py
-
-Satisfiability task types.
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from abc          import (
+from abc        import (
     abstractmethod,
     abstractproperty,
     )
-from cargo.log    import get_logger
-from utexas.rowed import (
+from cargo.log  import get_logger
+from borg.rowed import (
     Rowed,
     AbstractRowed,
     )
@@ -23,103 +19,21 @@ class AbstractTask(AbstractRowed):
     Interface for a task.
     """
 
-    @abstractproperty
-    def name(self):
-        """
-        An arbitrary printable name for the task.
-        """
-
-class MockTask(Rowed, AbstractTask):
-    """
-    A task not backed by a file.
-    """
-
-    def __init__(self, task_uuid):
-        """
-        Initialize.
-        """
-
-        self._task_uuid = task_uuid
-
-    def get_new_row(self, session):
-        """
-        Create or obtain an ORM row for this object.
-        """
-
-        return session.query(TaskRow).get(self._task_uuid)
-
-    @property
-    def name(self):
-        """
-        An arbitrary printable name for the task.
-        """
-
-        return self._task_uuid
-
-    @property
-    def task_uuid(self):
-        """
-        The UUID of the associated database row.
-        """
-
-        return self._task_uuid
-
 class AbstractFileTask(AbstractTask):
     """
     Interface for a task backed by a file.
     """
 
-    @property
-    def name(self):
-        """
-        A printable name for the task.
-        """
-
-        return self._path
-
     @abstractproperty
     def path(self):
         """
         The path to the associated task file.
         """
 
-class FileTask(Rowed, AbstractFileTask):
-    """
-    A task backed by a file.
-    """
-
-    def __init__(self, path, row = None):
-        """
-        Initialize.
-        """
-
-        Rowed.__init__(self, row)
-
-        self._path = path
-
-    @property
-    def path(self):
-        """
-        The path to the associated task file.
-        """
-
-        return self._path
-
 class AbstractPreprocessedTask(AbstractTask):
     """
     Interface for a preprocessed task.
     """
-
-    @property
-    def name(self):
-        """
-        A printable name for the task.
-        """
-
-        if self.seed is None:
-            return "%s:%s" % (self.preprocessor, self.path)
-        else:
-            return "%s(%i):%s" % (self.preprocessor, self.seed, self.path)
 
     @abstractproperty
     def preprocessor(self):
@@ -150,6 +64,201 @@ class AbstractPreprocessedDirectoryTask(AbstractPreprocessedTask, AbstractFileTa
         The path to the directory of preprocessor output files.
         """
 
+class MockTask(Rowed, AbstractTask):
+    """
+    A task not (necessarily) backed by a file.
+    """
+
+    def __init__(self, task_uuid):
+        """
+        Initialize.
+        """
+
+        self._task_uuid = task_uuid
+
+    def get_new_row(self, session):
+        """
+        Create or obtain an ORM row for this object.
+        """
+
+        return session.query(TaskRow).get(self._task_uuid)
+
+    @property
+    def task_uuid(self):
+        """
+        The UUID of the associated database row.
+        """
+
+        return self._task_uuid
+
+class WrappedTask(Rowed, AbstractTask):
+    """
+    A wrapped task.
+    """
+
+    def __init__(self, inner, row = None):
+        """
+        Initialize.
+        """
+
+        assert isinstance(inner, AbstractTask)
+
+        Rowed.__init__(self, row)
+
+        self._inner = inner
+
+    def get_new_row(self, session):
+        """
+        Create or obtain an ORM row for this object.
+        """
+
+        return self._inner.get_row(session)
+
+class FileTask(Rowed, AbstractFileTask):
+    """
+    A task backed by a file.
+    """
+
+    def __init__(self, path, row = None):
+        """
+        Initialize.
+        """
+
+        Rowed.__init__(self, row)
+
+        self._path = path
+
+    @property
+    def path(self):
+        """
+        The path to the associated task file.
+        """
+
+        return self._path
+
+class UncompressedFileTask(AbstractFileTask):
+    """
+    An uncompressed view of a file-backed task.
+    """
+
+    def __init__(self, path, compressed):
+        """
+        Initialize.
+        """
+
+        assert isinstance(compressed, AbstractFileTask)
+
+        self._path       = path
+        self._compressed = compressed
+
+    @property
+    def path(self):
+        """
+        The path to the associated task file.
+        """
+
+        return self._path
+
+    def get_row(self, session):
+        """
+        Create or obtain an ORM row for this object.
+        """
+
+        return self._compressed.get_row(session)
+
+    def set_row(self, row):
+        """
+        Set the ORM row associated with this object.
+        """
+
+        return self._compressed.set_row(row)
+
+class WrappedFileTask(WrappedTask, AbstractFileTask):
+    """
+    A wrapped task.
+    """
+
+    @property
+    def path(self):
+        """
+        The path to the associated task file.
+        """
+
+        return self._inner.path
+
+class WrappedPreprocessedTask(WrappedFileTask, AbstractPreprocessedTask):
+    """
+    A wrapped task.
+    """
+
+    def __init__(self, preprocessor, inner):
+        """
+        Initialize.
+        """
+
+        assert isinstance(preprocessor, AbstractPreprocessor)
+        assert isinstance(inner, AbstractPreprocessedTask)
+
+        WrappedFileTask.__init__(self, inner)
+
+        self._preprocessor = preprocessor
+
+    def get_new_row(self, session, preprocessor_row = None):
+        """
+        Create or obtain an ORM row for this object.
+        """
+
+        if preprocessor_row is None:
+            preprocessor_row = self._preprocessor.get_row(session)
+
+        return self._inner.get_row(session, preprocessor_row = preprocessor_row)
+
+    @property
+    def preprocessor(self):
+        """
+        The preprocessor that yielded this task.
+        """
+
+        return self._preprocessor
+
+    @property
+    def seed(self):
+        """
+        The preprocessor seed on the run that yielded this task.
+        """
+
+        return self._inner.seed
+
+    @property
+    def input_task(self):
+        """
+        The preprocessor input task that yielded this task.
+        """
+
+        return self._inner.input_task
+
+class WrappedPreprocessedDirectoryTask(WrappedPreprocessedTask, AbstractPreprocessedDirectoryTask):
+    """
+    A wrapped preprocessed task backed by a directory.
+    """
+
+    def __init__(self, preprocessor, inner):
+        """
+        Initialize.
+        """
+
+        assert isinstance(inner, AbstractPreprocessedDirectoryTask)
+
+        WrappedPreprocessedTask.__init__(self, preprocessor, inner)
+
+    @property
+    def output_path(self):
+        """
+        The path to the directory of preprocessor output files.
+        """
+
+        return self._inner.output_path
+
 class PreprocessedDirectoryTask(Rowed, AbstractPreprocessedDirectoryTask):
     """
     A preprocessed task backed by a directory.
@@ -170,14 +279,14 @@ class PreprocessedDirectoryTask(Rowed, AbstractPreprocessedDirectoryTask):
 
     def get_new_row(self, session, preprocessor_row = None, **kwargs):
         """
-        Get or create the ORM row associated with this object.
+        Create or obtain an ORM row for this object.
         """
 
-        from sqlalchemy  import and_
-        from utexas.data import PreprocessedTaskRow as PT
+        from sqlalchemy import and_
+        from borg.data  import PreprocessedTaskRow as PT
 
         if preprocessor_row is None:
-            preprocessor_row = self.preprocessor.get_row(session)
+            preprocessor_row = self._preprocessor.get_row(session)
 
         input_task_row         = self.input_task.get_row(session)
         preprocessed_task_row  =                         \

@@ -46,43 +46,6 @@ def scan_competition_output(lines):
 
     return (satisfiable, certificate)
 
-class SAT_RunResult(SAT_BareResult):
-    """
-    Outcome of an external SAT solver binary.
-    """
-
-    def __init__(self, solver, task, satisfiable, certificate, run, seed):
-        """
-        Initialize.
-        """
-
-        SAT_BareResult.__init__(
-            self,
-            solver,
-            task,
-            run.limit,
-            run.proc_elapsed,
-            satisfiable,
-            certificate,
-            )
-
-        self.run  = run
-        self.seed = seed
-
-    def to_orm(self):
-        """
-        Return a database description of this result.
-        """
-
-        attempt_row = \
-            SAT_RunAttemptRow(
-                run    = CPU_LimitedRunRow.from_run(self.run),
-                solver = self.solver.to_orm(),
-                seed   = self.seed,
-                )
-
-        return self.update_orm(attempt_row)
-
 class SAT_CompetitionSolver(SAT_Solver):
     """
     A solver for SAT that uses the circa-2009 competition interface.
@@ -222,9 +185,9 @@ class SAT_CompetitionSolver(SAT_Solver):
         # crazy solver?
         if satisfiable is True:
             if certificate is None:
-                raise SolverError("solver reported sat but did not provide certificate")
+                raise SolverError("solver reported sat but did not provide a certificate")
         elif certificate is not None:
-            raise SolverError("solver did not report sat but provided certificate")
+            raise SolverError("solver did not report sat but provided a certificate")
 
         return SAT_RunResult(self, task, satisfiable, certificate, run, seed)
 
