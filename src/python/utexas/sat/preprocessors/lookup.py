@@ -3,8 +3,9 @@
 """
 
 from utexas.sat.preprocessors import SAT_Preprocessor
+from utexas.rowed             import Rowed
 
-class LookupPreprocessor(SAT_Preprocessor):
+class LookupPreprocessor(Rowed, SAT_Preprocessor):
     """
     Use a named preprocessor.
     """
@@ -14,7 +15,7 @@ class LookupPreprocessor(SAT_Preprocessor):
         Initialize.
         """
 
-        SAT_Preprocessor.__init__(self)
+        Rowed.__init__(self)
 
         self._name = name
 
@@ -43,4 +44,13 @@ class LookupPreprocessor(SAT_Preprocessor):
         """
 
         return environment.named_preprocessors[self._name]
+
+    def get_new_row(self, session):
+        """
+        Create or obtain an ORM row for this object.
+        """
+
+        from utexas.data import PreprocessorRow
+
+        return session.query(PreprocessorRow).get(self._name)
 

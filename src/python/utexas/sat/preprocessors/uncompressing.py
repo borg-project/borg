@@ -3,11 +3,13 @@
 """
 
 from cargo.log                import get_logger
+from utexas.sat.tasks         import AbstractFileTask
 from utexas.sat.preprocessors import SAT_Preprocessor
+from utexas.rowed             import Rowed
 
 log = get_logger(__name__)
 
-class SAT_UncompressingPreprocessor(SAT_Preprocessor):
+class UncompressingPreprocessor(Rowed, SAT_Preprocessor):
     """
     Uncompress and then preprocess SAT instances.
     """
@@ -17,7 +19,7 @@ class SAT_UncompressingPreprocessor(SAT_Preprocessor):
         Initialize.
         """
 
-        SAT_Preprocessor.__init__(self)
+        Rowed.__init__(self)
 
         self._inner = preprocessor
 
@@ -51,9 +53,7 @@ class SAT_UncompressingPreprocessor(SAT_Preprocessor):
             log.info("uncompressed task is %s", uncompressed_path)
 
             # then pass it along
-            from utexas.sat.tasks import FileTask
-
-            inner_task = FileTask(uncompressed_path)
+            inner_task = UncompressedFileTask(uncompressed_path, task)
 
             return self._inner.preprocess(inner_task, budget, output_dir, random, environment)
 
@@ -63,4 +63,46 @@ class SAT_UncompressingPreprocessor(SAT_Preprocessor):
         """
 
         return self._inner.extend(task, answer)
+
+    def get_new_row(self, session, **kwargs):
+        """
+        Create or obtain an ORM row for this object.
+        """
+
+        return self._inner.get_new_row(session, **kwargs)
+
+class UncompressedFileTask(AbstractFileTask):
+    """
+    An uncompressed view of a task backed by a file.
+    """
+
+    def __init__(self, uncompressed_path, compressed_task):
+        """
+        Initialize.
+        """
+
+        self._uncompressed_path = uncompressed_path
+        self._compressed_task   = compressed_task
+
+    @property
+    def path(self):
+        """
+        The path to the associated uncompressed task file.
+        """
+
+        return self._uncompressed_path
+
+    def get_row(self, session, **kwargs):
+        """
+        Get the ORM row associated with this object, if any.
+        """
+
+        return self._compressed_task.get_row(session, **kwargs)
+
+    def set_row(self, row):
+        """
+        Set the ORM row associated with this object.
+        """
+
+        self._compressed_task.set_row(row)
 

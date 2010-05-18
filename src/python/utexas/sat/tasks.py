@@ -93,7 +93,7 @@ class AbstractPreprocessedFileTask(AbstractPreprocessedTask, AbstractFileTask):
         The path to the directory of preprocessor output files.
         """
 
-class FileTask(AbstractFileTask, Rowed):
+class FileTask(Rowed, AbstractFileTask):
     """
     A task backed by a file.
     """
@@ -110,7 +110,7 @@ class FileTask(AbstractFileTask, Rowed):
     @property
     def path(self):
         """
-        The path of the associated task file.
+        The path to the associated task file.
         """
 
         return self._path
@@ -127,29 +127,12 @@ class MockTask(Rowed, AbstractTask):
 
         self._task_uuid = task_uuid
 
-    def get_row(self, session):
+    def get_new_row(self, session):
         """
-        Get the ORM row associated with this object, if any.
+        Create or obtain an ORM row for this object.
         """
 
-        from utexas.rowed import NoRowError
-
-        try:
-            return super(self).get_row(session)
-        except NoRowError:
-            from utexas.data import TaskRow
-
-            row = session.query(TaskRow).get(self._task_uuid)
-
-            if row is None:
-                raise NoRowError()
-            else:
-                return row
-
-    def add_row(self, session):
-        """
-        Create an ORM row for this object, if one does not already exist.
-        """
+        return session.query(TaskRow).get(self._task_uuid)
 
     @property
     def name(self):

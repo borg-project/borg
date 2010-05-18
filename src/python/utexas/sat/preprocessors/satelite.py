@@ -6,24 +6,25 @@ from cargo.log                import get_logger
 from utexas.rowed             import Rowed
 from utexas.sat.tasks         import AbstractPreprocessedFileTask
 from utexas.sat.preprocessors import SAT_Preprocessor
+from utexas.rowed             import Rowed
 
 log = get_logger(__name__)
 
-class SatELitePreprocessor(SAT_Preprocessor):
+class SatELitePreprocessor(Rowed, SAT_Preprocessor):
     """
     The standard SatELite preprocessor.
     """
 
-    def __init__(self, command):
+    def __init__(self, command, relative_to):
         """
         Initialize.
         """
 
         SAT_Preprocessor.__init__(self)
 
-        self._command = command
+        self._command = [s.replace("$HERE", relative_to) for s in command]
 
-    def preprocess(self, task, budget, output_dir, random, environment):
+    def preprocess(self, task, budget, output_path, random, environment):
         """
         Preprocess the instance.
         """
@@ -44,11 +45,14 @@ class SatELitePreprocessor(SAT_Preprocessor):
 
             arguments = [
                 task.path,
-                join(output_dir, "preprocessed.cnf"),
-                join(output_dir, "variables_map"),
-                join(output_dir, "eliminated_clauses"),
+                join(output_path, "preprocessed.cnf"),
+                join(output_path, "variables_map"),
+                join(output_path, "eliminated_clauses"),
                 ]
-            run       = \
+
+            log.debug("SatELite arguments are %s", arguments)
+
+            run = \
                 run_cpu_limited(
                     self._command + arguments,
                     budget,
@@ -69,11 +73,13 @@ class SatELitePreprocessor(SAT_Preprocessor):
             (satisfiable, certificate) = scan_competition_output(out_lines)
             answer                     = SAT_Answer(satisfiable, certificate)
 
-            return BarePreprocessorRunResult(self, task, task, answer, run)
+            return BarePreprocessorRunResult(self, None, task, task, answer, run)
         elif run.exit_status == 0:
-            return BarePreprocessorRunResult(self, task, "FIXME", None, run)
+            output_task = SatELitePreprocessedTask(self, None, task, output_path)
+
+            return BarePreprocessorRunResult(self, None, task, output_task, None, run)
         else:
-            return BarePreprocessorRunResult(self, task, task, None, run)
+            return BarePreprocessorRunResult(self, None, task, task, None, run)
 
     def extend(self, task, answer, environment):
         """
@@ -180,30 +186,41 @@ class SatELitePreprocessedTask(Rowed, AbstractPreprocessedFileTask):
         self._input_task   = input_task
         self._output_path  = output_path
 
-    def get_row(self, session):
+    def get_new_row(self, session, preprocessor_row = None, **kwargs):
         """
         Get or create the ORM row associated with this object.
         """
 
-        from utexas.rowed import NoRowError
+        from sqlalchemy  import and_
+        from utexas.data import PreprocessedTaskRow as PT
 
-        try:
-            return super(self).get_row(session)
-        except NoRowError:
-            from utexas.data import PreprocessedTaskRow
+        if preprocessor_row is None:
+            preprocessor_row = self.preprocessor.get_row(session)
 
-            row = \
-                PreprocessedTaskRow(
-                    preprocessor = self.preprocessor.get_row(session),
-                    seed         = seld.seed,
-                    input_task   = self.input_task.get_row(session),
+        input_task_row         = self.input_task.get_row(session)
+        preprocessed_task_row  =                         \
+            session                                      \
+            .query(PT)                                   \
+            .filter(
+                and_(
+                    PT.preprocessor == preprocessor_row,
+                    PT.seed         == self.seed,
+                    PT.input_task   == input_task_row,
+                ),
+            )                                            \
+            .first()
+
+        if preprocessed_task_row is None:
+            preprocessed_task_row = \
+                PT(
+                    preprocessor = preprocessor_row,
+                    seed         = self.seed,
+                    input_task   = input_task_row,
                     )
 
-            self.set_row(row)
+            session.add(preprocessed_task_row)
 
-            session.add(row)
-
-            return row
+        return preprocessed_task_row
 
     @property
     def preprocessor(self):
@@ -218,6 +235,8 @@ class SatELitePreprocessedTask(Rowed, AbstractPreprocessedFileTask):
         """
         The preprocessor seed on the run that yielded this task.
         """
+
+        return self._seed
 
     @property
     def input_task(self):

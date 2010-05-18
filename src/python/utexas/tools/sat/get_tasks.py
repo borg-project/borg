@@ -35,6 +35,11 @@ def get_task(
     Add a task.
     """
 
+    # make sure that we're logging
+    from cargo.log import enable_default_logging
+
+    enable_default_logging()
+
     # connect to the research database
     from cargo.sql.alchemy import (
         SQL_Engines,
@@ -87,7 +92,10 @@ def get_task(
                 (_, file_hash) = hash_yielded_bytes(yield_sanitized_cnf(file), "sha512")
 
         # find or create the task row
-        from utexas.data import SAT_TaskRow as ST
+        from cargo.sql.alchemy import lock_table
+        from utexas.data       import SAT_TaskRow as ST
+
+        lock_table(session.connection().engine, ST.__tablename__)
 
         task_row = session.query(ST).filter(ST.hash == buffer(file_hash)).first()
 
@@ -96,14 +104,12 @@ def get_task(
 
             session.add(task_row)
 
+        session.commit()
+
         # create the task name row
         task_name_row = TN(task = task_row, name = name, collection = collection)
 
         session.add(task_name_row)
-
-        # and we're done
-        log.note("stored row for %s", name)
-
         session.commit()
 
 def yield_get_task_jobs(session, tasks_path, relative_to, collection):
@@ -173,5 +179,5 @@ def main():
         from cargo.labor.storage import outsource_or_run
         from cargo.temporal      import utc_now
 
-        outsource_or_run(jobs, "making preprocessor runs at %s" % utc_now())
+        outsource_or_run(jobs, "adding task rows (at %s)" % utc_now())
 

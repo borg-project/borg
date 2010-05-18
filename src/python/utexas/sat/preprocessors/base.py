@@ -12,21 +12,25 @@ from cargo.flags import (
     Flag,
     Flags,
     )
+from utexas.rowed import (
+    Rowed,
+    AbstractRowed,
+    )
 
 log          = get_logger(__name__)
 module_flags = \
     Flags(
-        "SAT Solver Configuration",
+        "SAT Preprocessors Configuration",
         Flag(
-            "--solvers-file",
+            "--preprocessors-file",
             default = [],
             action  = "append",
             metavar = "FILE",
-            help    = "read solver descriptions from FILE [%default]",
+            help    = "read preprocessors from FILE [%default]",
             ),
         )
 
-def get_named_solvers(paths = [], flags = {}):
+def get_named_preprocessors(paths = [], flags = {}):
     """
     Retrieve a list of named solvers.
     """
@@ -43,28 +47,27 @@ def get_named_solvers(paths = [], flags = {}):
         from os.path  import dirname
         from cargo.io import expandpath
 
-        path     = expandpath(raw_path)
-        relative = dirname(path)
+        path = expandpath(raw_path)
 
         with open(path) as file:
             loaded = json.load(file)
 
-        log.note("read named-preprocessors file: %s", raw_path)
+        log.note("read named-preprocessors file: %s", path)
 
         for (name, attributes) in loaded.get("preprocessors", {}).items():
             if name == "sat/SatELite":
                 from utexas.sat.preprocessors import SatELitePreprocessor
 
-                yield (name, SatELitePreprocessor(attributes["command"]))
+                yield (name, SatELitePreprocessor(attributes["command"], dirname(path)))
             else:
                 raise RuntimeError("unknown preprocessor name \"%s\"" % name)
 
     # build the solvers dictionary
     from itertools import chain
 
-    return dict(chain(*(yield_preprocessors_from(p) for p in chain(paths, flags.solvers_file))))
+    return dict(chain(*(yield_preprocessors_from(p) for p in chain(paths, flags.preprocessors_file))))
 
-class SAT_Preprocessor(ABC):
+class SAT_Preprocessor(AbstractRowed):
     """
     Preprocess SAT instances.
     """
@@ -81,40 +84,21 @@ class SAT_Preprocessor(ABC):
         Extend an answer to a preprocessed task back to its parent task.
         """
 
-    def to_orm(self, session):
-        """
-        Return the corresponding database description.
-        """
-
-        raise RuntimeError("no corresponding database description")
-
-class PreprocessorResult(ABC):
+class PreprocessorResult(AbstractRowed):
     """
     The result of running a preprocessor.
     """
-
-    @abstractmethod
-    def to_orm(self):
-        """
-        Return an ORM-mapped description of this result.
-        """
-
-    def update_orm(self, session, row):
-        """
-        Set the properties of an ORM-mapped result.
-        """
-
-        row.preprocessor = self.preprocessor.to_orm(session)
-        row.input_task   = self.input_task.to_orm(session)
-        row.output_task  = self.output_task.to_orm(session)
-        row.budget       = self.budget
-        row.cost         = self.cost
-        row.answer       = self.answer.to_orm(session)
 
     @abstractproperty
     def preprocessor(self):
         """
         The preprocessor that generated this result.
+        """
+
+    @abstractproperty
+    def seed(self):
+        """
+        The seed for the preprocessor run that generated this result.
         """
 
     @abstractproperty
@@ -158,31 +142,25 @@ class PreprocessorRunResult(PreprocessorResult):
         The details of the associated run.
         """
 
-class BarePreprocessorResult(PreprocessorResult):
+class BarePreprocessorResult(Rowed, PreprocessorResult):
     """
     A typical preprocessor result implementation.
     """
 
-    def __init__(self, preprocessor, input_task, output_task, budget, cost, answer):
+    def __init__(self, preprocessor, seed, input_task, output_task, budget, cost, answer):
         """
         Initialize.
         """
 
-        PreprocessorResult.__init__(self)
+        Rowed.__init__(self)
 
         self._preprocessor = preprocessor
+        self._seed         = seed
         self._input_task   = input_task
         self._output_task  = output_task
         self._budget       = budget
         self._cost         = cost
         self._answer       = answer
-
-    def to_orm(self):
-        """
-        Return an ORM-mapped description of this result.
-        """
-
-        raise NotImplementedError()
 
     @property
     def preprocessor(self):
@@ -191,6 +169,14 @@ class BarePreprocessorResult(PreprocessorResult):
         """
 
         return self._preprocessor
+
+    @property
+    def seed(self):
+        """
+        The seed for the preprocessor run that generated this result.
+        """
+
+        return self._seed
 
     @property
     def input_task(self):
@@ -237,7 +223,7 @@ class BarePreprocessorRunResult(BarePreprocessorResult, PreprocessorRunResult):
     A typical preprocessor run result implementation.
     """
 
-    def __init__(self, preprocessor, input_task, output_task, answer, run):
+    def __init__(self, preprocessor, seed, input_task, output_task, answer, run):
         """
         Initialize.
         """
@@ -245,6 +231,7 @@ class BarePreprocessorRunResult(BarePreprocessorResult, PreprocessorRunResult):
         BarePreprocessorResult.__init__(
             self,
             preprocessor,
+            seed,
             input_task,
             output_task,
             run.limit,
@@ -254,6 +241,52 @@ class BarePreprocessorRunResult(BarePreprocessorResult, PreprocessorRunResult):
 
         self._run = run
 
+    def get_new_row(self, session, preprocessor_row = None):
+        """
+        Create or obtain an ORM row for this object.
+        """
+
+        from uuid        import uuid4
+        from utexas.data import (
+            SAT_AnswerRow,
+            CPU_LimitedRunRow,
+            PreprocessorRunRow,
+            )
+
+        if preprocessor_row is None:
+            preprocessor_row = self.preprocessor.get_row(session)
+
+        if self.answer is None:
+            answer_row = None
+        else:
+            answer_row = \
+                SAT_AnswerRow(
+                    satisfiable = answer.satisfiable,
+                    certificate = answer.certificate,
+                    )
+
+        output_task_row      = \
+            self.output_task.get_row(
+                session,
+                preprocessor_row = preprocessor_row,
+                )
+        preprocessor_run_row = \
+            PreprocessorRunRow(
+                uuid         = uuid4(),
+                preprocessor = preprocessor_row,
+                input_task   = self.input_task.get_row(session),
+                output_task  = output_task_row,
+                run          = CPU_LimitedRunRow.from_run(self._run),
+                answer       = answer_row,
+                seed         = self.seed,
+                budget       = self.budget,
+                cost         = self.cost,
+                )
+
+        session.add(preprocessor_run_row)
+
+        return preprocessor_run_row
+
     @property
     def run(self):
         """
@@ -262,7 +295,7 @@ class BarePreprocessorRunResult(BarePreprocessorResult, PreprocessorRunResult):
 
         return self._run
 
-class WrappedPreprocessorResult(PreprocessorResult):
+class WrappedPreprocessorResult(Rowed, PreprocessorResult):
     """
     The result of a wrapped preprocessor.
     """
@@ -272,15 +305,20 @@ class WrappedPreprocessorResult(PreprocessorResult):
         Initialize.
         """
 
+        Rowed.__init__(self)
+
         self._preprocessor = preprocessor
         self._inner        = inner_result
 
-    def to_orm(self):
+    def get_new_row(self, session, preprocessor_row = None):
         """
-        Return an ORM-mapped description of this result.
+        Create or obtain an ORM row for this object.
         """
 
-        raise NotImplementedError()
+        if preprocessor_row is None:
+            preprocessor_row = self._preprocessor.get_row(session)
+
+        return self._inner.get_row(session, preprocessor_row = preprocessor_row)
 
     @property
     def preprocessor(self):
@@ -289,6 +327,14 @@ class WrappedPreprocessorResult(PreprocessorResult):
         """
 
         return self._preprocessor
+
+    @property
+    def seed(self):
+        """
+        The preprocessor that generated this result.
+        """
+
+        return self._inner.seed
 
     @property
     def input_task(self):

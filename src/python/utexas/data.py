@@ -17,7 +17,6 @@ from sqlalchemy                 import (
     Boolean,
     ForeignKey,
     LargeBinary,
-    CheckConstraint,
     )
 from sqlalchemy.orm             import (
     relationship,
@@ -153,12 +152,12 @@ class SAT_SolverRow(DatumBase):
     name = Column(String, primary_key = True)
     type = Column(String)
 
-class SAT_PreprocessorRow(DatumBase):
+class PreprocessorRow(DatumBase):
     """
     Some preprocessor.
     """
 
-    __tablename__ = "sat_preprocessors"
+    __tablename__ = "preprocessors"
 
     name = Column(String, primary_key = True)
 
@@ -205,6 +204,28 @@ class TaskRow(DatumBase):
 
     __mapper_args__ = {"polymorphic_on": type}
 
+#     names = relationship("task_names", backref = "task_names")
+
+    @staticmethod
+    def with_prefix(session, prefix, collection = "default"):
+        """
+        Select tasks with names matching a prefix.
+        """
+
+        from sqlalchemy import and_
+
+        return                                            \
+            session                                       \
+            .query(TaskRow)                               \
+            .join(TaskRow.names)                          \
+            .filter(
+                and_(
+                    TaskNameRow.name.startswith(prefix),
+                    TaskNameRow.collection == collection,
+                    ),
+                )                                         \
+            .all()
+
 class FileTaskRow(TaskRow):
     """
     Tasks backed by files.
@@ -234,7 +255,7 @@ class PreprocessedTaskRow(TaskRow):
     __tablename__ = "preprocessed_tasks"
 
     uuid              = Column(SQL_UUID, ForeignKey(TaskRow.uuid), primary_key = True)
-    preprocessor_name = Column(String, ForeignKey("sat_preprocessors.name"), nullable = False)
+    preprocessor_name = Column(String, ForeignKey("preprocessors.name"), nullable = False)
     seed              = Column(Integer)
     input_task_uuid   = Column(SQL_UUID, ForeignKey("tasks.uuid"), nullable = False)
 
@@ -243,7 +264,7 @@ class PreprocessedTaskRow(TaskRow):
         "inherit_condition"    : uuid == TaskRow.uuid,
         }
 
-    preprocessor = relationship(SAT_PreprocessorRow)
+    preprocessor = relationship(PreprocessorRow)
     input_task   = \
         relationship(
             TaskRow,
@@ -262,7 +283,7 @@ class TaskNameRow(DatumBase):
     name       = Column(String)
     collection = Column(String)
 
-    task = relationship(TaskRow)
+    task = relationship(TaskRow, backref = "names")
 
 class SAT_AnswerRow(DatumBase):
     """
@@ -341,7 +362,7 @@ class PreprocessorRunRow(DatumBase):
     __tablename__ = "preprocessor_runs"
 
     uuid              = Column(SQL_UUID, primary_key = True, default = uuid4)
-    preprocessor_name = Column(String, ForeignKey("sat_preprocessors.name"), nullable = False)
+    preprocessor_name = Column(String, ForeignKey("preprocessors.name"), nullable = False)
     input_task_uuid   = Column(SQL_UUID, ForeignKey("tasks.uuid"), nullable = False)
     output_task_uuid  = Column(SQL_UUID, ForeignKey("tasks.uuid"), nullable = False)
     run_uuid          = Column(SQL_UUID, ForeignKey("cpu_limited_runs.uuid"), nullable = False)
@@ -350,19 +371,20 @@ class PreprocessorRunRow(DatumBase):
     budget            = Column(SQL_TimeDelta)
     cost              = Column(SQL_TimeDelta)
 
-    input_task  = \
+    preprocessor = relationship(PreprocessorRow)
+    input_task   = \
         relationship(
             TaskRow,
             primaryjoin = (input_task_uuid == TaskRow.uuid),
             )
-    output_task = \
+    output_task  = \
         relationship(
             TaskRow,
             primaryjoin  = (output_task_uuid == TaskRow.uuid),
             )
-    run         = relationship(CPU_LimitedRunRow)
-    answer      = relationship(SAT_AnswerRow)
-    trials      = \
+    run          = relationship(CPU_LimitedRunRow)
+    answer       = relationship(SAT_AnswerRow)
+    trials       = \
         relationship(
             SAT_TrialRow,
             secondary = preprocessor_runs_trials_table,

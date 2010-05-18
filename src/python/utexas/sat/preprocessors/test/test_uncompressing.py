@@ -57,10 +57,10 @@ def test_uncompressiong_preprocessor():
 
         # test the solver
         from utexas.sat.tasks         import FileTask
-        from utexas.sat.preprocessors import SAT_UncompressingPreprocessor
+        from utexas.sat.preprocessors import UncompressingPreprocessor
 
         task_verifying = TaskVerifyingPreprocessor(sanitized_cnf)
-        uncompressing  = SAT_UncompressingPreprocessor(task_verifying)
+        uncompressing  = UncompressingPreprocessor(task_verifying)
         task           = FileTask(named_file.name)
 
         uncompressing.preprocess(task, None, None, None, None)
