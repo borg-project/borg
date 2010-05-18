@@ -80,10 +80,16 @@ def get_named_solvers(paths = [], flags = {}):
 
     return dict(chain(*(yield_solvers_from(p) for p in chain(paths, flags.solvers_file))))
 
-class SolverError(RuntimeError):
+class AbstractSolver(AbstractRowed):
     """
-    The solver failed in an unexpected way.
+    A solver for SAT.
     """
+
+    @abstractmethod
+    def solve(self, task, budget, random, environment):
+        """
+        Attempt to solve the specified instance; return the outcome.
+        """
 
 class SAT_Environment(object):
     """
@@ -95,6 +101,7 @@ class SAT_Environment(object):
         time_ratio          = 1.0,
         named_solvers       = None,
         named_preprocessors = None,
+        collections         = {},
         MainSession         = None,
         CacheSession        = None,
         ):
@@ -105,10 +112,11 @@ class SAT_Environment(object):
         self.time_ratio          = time_ratio
         self.named_solvers       = named_solvers
         self.named_preprocessors = named_preprocessors
+        self.collections         = collections
         self.MainSession         = MainSession
         self.CacheSession        = CacheSession
 
-class SAT_Result(object):
+class AbstractAttempt(object):
     """
     Outcome of a SAT solver.
     """
@@ -136,7 +144,7 @@ class SAT_Result(object):
     @abstractproperty
     def solver(self):
         """
-        The solver which obtained this result.
+        The solver that obtained this result.
         """
 
     @abstractproperty
@@ -313,21 +321,8 @@ class SAT_WrappedResult(SAT_Result):
 
         return self._inner_result.certificate
 
-class SAT_Solver(ABC):
+class SolverError(RuntimeError):
     """
-    A solver for SAT.
+    The solver failed in an unexpected way.
     """
-
-    @abstractmethod
-    def solve(self, task, budget, random, environment):
-        """
-        Attempt to solve the specified instance; return the outcome.
-        """
-
-    def to_orm(self):
-        """
-        Return a database description of this solver.
-        """
-
-        raise RuntimeError("solver has no database analogue")
 

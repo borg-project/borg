@@ -228,13 +228,6 @@ class SAT_CompetitionSolver(SAT_Solver):
 
         return SAT_RunResult(self, task, satisfiable, certificate, run, seed)
 
-    def to_orm(self):
-        """
-        Return a database description of this solver.
-        """
-
-        raise RuntimeError("an anonymous solver has no database twin")
-
     @property
     def seeded(self):
         """

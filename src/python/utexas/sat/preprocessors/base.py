@@ -73,7 +73,7 @@ class SAT_Preprocessor(AbstractRowed):
     """
 
     @abstractmethod
-    def preprocess(self, task, budget, output_dir, random, environment):
+    def preprocess(self, task, budget, output_path, random, environment):
         """
         Preprocess an instance.
         """
@@ -82,6 +82,12 @@ class SAT_Preprocessor(AbstractRowed):
     def extend(self, task, answer, environment):
         """
         Extend an answer to a preprocessed task back to its parent task.
+        """
+
+    @abstractmethod
+    def make_task(self, seed, input_task, output_path, environment, row = None):
+        """
+        Construct an appropriate preprocessed task from its output directory.
         """
 
 class PreprocessorResult(AbstractRowed):
@@ -261,8 +267,8 @@ class BarePreprocessorRunResult(BarePreprocessorResult, PreprocessorRunResult):
         else:
             answer_row = \
                 SAT_AnswerRow(
-                    satisfiable = answer.satisfiable,
-                    certificate = answer.certificate,
+                    satisfiable = self.answer.satisfiable,
+                    certificate = self.answer.certificate,
                     )
 
         output_task_row      = \

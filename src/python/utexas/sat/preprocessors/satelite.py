@@ -169,98 +169,12 @@ class SatELitePreprocessor(Rowed, SAT_Preprocessor):
 
                     return extended_answer
 
-class SatELitePreprocessedTask(Rowed, AbstractPreprocessedFileTask):
-    """
-    A task preprocessed by SatELite.
-    """
-
-    def __init__(self, preprocessor, seed, input_task, output_path, row = None):
+    def make_task(self, seed, input_task, output_path, environment, row = None):
         """
-        Initialize.
+        Construct an appropriate preprocessed task from its output directory.
         """
 
-        Rowed.__init__(self, row)
+        from utexas.sat.preprocessors import PreprocessedDirectoryTask
 
-        self._preprocessor = preprocessor
-        self._seed         = seed
-        self._input_task   = input_task
-        self._output_path  = output_path
-
-    def get_new_row(self, session, preprocessor_row = None, **kwargs):
-        """
-        Get or create the ORM row associated with this object.
-        """
-
-        from sqlalchemy  import and_
-        from utexas.data import PreprocessedTaskRow as PT
-
-        if preprocessor_row is None:
-            preprocessor_row = self.preprocessor.get_row(session)
-
-        input_task_row         = self.input_task.get_row(session)
-        preprocessed_task_row  =                         \
-            session                                      \
-            .query(PT)                                   \
-            .filter(
-                and_(
-                    PT.preprocessor == preprocessor_row,
-                    PT.seed         == self.seed,
-                    PT.input_task   == input_task_row,
-                ),
-            )                                            \
-            .first()
-
-        if preprocessed_task_row is None:
-            preprocessed_task_row = \
-                PT(
-                    preprocessor = preprocessor_row,
-                    seed         = self.seed,
-                    input_task   = input_task_row,
-                    )
-
-            session.add(preprocessed_task_row)
-
-        return preprocessed_task_row
-
-    @property
-    def preprocessor(self):
-        """
-        The preprocessor that yielded this task.
-        """
-
-        return self._preprocessor
-
-    @property
-    def seed(self):
-        """
-        The preprocessor seed on the run that yielded this task.
-        """
-
-        return self._seed
-
-    @property
-    def input_task(self):
-        """
-        The preprocessor input task that yielded this task.
-        """
-
-        return self._input_task
-
-    @property
-    def path(self):
-        """
-        The path to the associated task file.
-        """
-
-        from os.path import join
-
-        return join(self._output_path, "preprocessed.cnf")
-
-    @property
-    def output_path(self):
-        """
-        The path to the directory of preprocessor output files.
-        """
-
-        return self._output_path
+        return PreprocessedDirectoryTask(self, seed, input_task, output_path, "preprocessed.cnf")
 
