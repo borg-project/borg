@@ -43,6 +43,23 @@ class AbstractAttempt(AbstractRowed):
         The answer obtained by the solver, if any.
         """
 
+class AbstractPreprocessingAttempt(AbstractAttempt):
+    """
+    Abstract base of a preprocessor/solver pair's attempt.
+    """
+
+    @abstractproperty
+    def preprocessor_attempt(self):
+        """
+        The preprocessor's attempt.
+        """
+
+    @abstractproperty
+    def solver_attempt(self):
+        """
+        The solver's attempt.
+        """
+
 class AbstractRunAttempt(AbstractAttempt):
     """
     Abstract base of a binary solver's attempt.
@@ -60,9 +77,9 @@ class AbstractRunAttempt(AbstractAttempt):
         The details of the run.
         """
 
-class AbstractPreprocessingAttempt(AbstractRunAttempt):
+class AbstractPreprocessorAttempt(AbstractRunAttempt):
     """
-    The result of running a preprocessor.
+    Abstract base of a preprocessor's result.
     """
 
     @abstractproperty
@@ -234,6 +251,73 @@ class WrappedAttempt(Rowed, AbstractAttempt):
 
         return self._inner.answer
 
+class PreprocessingAttempt(Attempt):
+    """
+    Execution of a preprocessor/solver pair on a task.
+    """
+
+    def __init__(self, solver, task, preprocessor_attempt, solver_attempt, answer):
+        """
+        Initialize.
+        """
+
+        if solver_attempt is None:
+            cost   = preprocessor_attempt.cost
+        else:
+            cost   = preprocessor_attempt.cost + solver_attempt.cost
+
+        Attempt.__init__(
+            self,
+            solver,
+            preprocessor_attempt.budget,
+            cost,
+            task,
+            answer,
+            )
+
+        self._preprocessor_attempt = preprocessor_attempt
+        self._solver_attempt       = solver_attempt
+
+    def get_new_row(self, session, solver_row = None):
+        """
+        Return a database description of this result.
+        """
+
+        from borg.data import RunAttemptRow
+
+        return self._get_new_row(session, PreprocessingAttemptRow)
+
+    def _get_new_row(self, session, Row, **kwargs):
+        """
+        Create or obtain an ORM row for this object.
+        """
+
+        return \
+            Attempt._get_new_row(
+                self,
+                session,
+                Row,
+                preprocessor_attempt = self._preprocesor_attempt,
+                solver_attempt       = self._solver_attempt,
+                **kwargs
+                )
+
+    @property
+    def preprocessor_attempt(self):
+        """
+        The preprocessor's attempt.
+        """
+
+        return self._preprocessor_attempt
+
+    @property
+    def solver_attempt(self):
+        """
+        The solver's attempt.
+        """
+
+        return self._solver_attempt
+
 class RunAttempt(Attempt):
     """
     Outcome of an external SAT solver binary.
@@ -331,7 +415,7 @@ class WrappedRunAttempt(WrappedAttempt):
 
         return self._inner.run
 
-class PreprocessingAttempt(RunAttempt, AbstractPreprocessingAttempt):
+class PreprocessorAttempt(RunAttempt, AbstractPreprocessorAttempt):
     """
     The result of a preprocessor.
     """
@@ -357,9 +441,9 @@ class PreprocessingAttempt(RunAttempt, AbstractPreprocessingAttempt):
         Return a database description of this result.
         """
 
-        from borg.data import PreprocessingAttemptRow
+        from borg.data import PreprocessorAttemptRow
 
-        return self._get_new_row(session, PreprocessingAttemptRow, solver_row = solver_row)
+        return self._get_new_row(session, PreprocessorAttemptRow, solver_row = solver_row)
 
     def _get_new_row(self, session, Row, **kwargs):
         """
@@ -383,7 +467,7 @@ class PreprocessingAttempt(RunAttempt, AbstractPreprocessingAttempt):
 
         return self._output_task
 
-class WrappedPreprocessingAttempt(WrappedRunAttempt, AbstractPreprocessingAttempt):
+class WrappedPreprocessorAttempt(WrappedRunAttempt, AbstractPreprocessorAttempt):
     """
     The wrapped outcome of a preprocessor.
     """
@@ -394,7 +478,7 @@ class WrappedPreprocessingAttempt(WrappedRunAttempt, AbstractPreprocessingAttemp
         """
 
         # argument sanity
-        assert isinstance(inner, AbstractPreprocessingAttempt)
+        assert isinstance(inner, AbstractPreprocessorAttempt)
 
         # base
         WrappedRunAttempt.__init__(self, preprocessor, inner)

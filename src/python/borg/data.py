@@ -333,6 +333,17 @@ class AnswerRow(DatumBase):
 
     __mapper_args__ = {"polymorphic_on": type}
 
+    @staticmethod
+    def to_answer(answer_row):
+        """
+        Build an answer from an answer row.
+        """
+
+        if answer_row is None:
+            return None
+        else:
+            return answer_row.get_answer()
+
 class SAT_AnswerRow(AnswerRow):
     """
     Answer to a SAT instance.
@@ -364,6 +375,15 @@ class SAT_AnswerRow(AnswerRow):
             satisfiable    = satisfiable,
             certificate_xz = certificate_xz,
             )
+
+    def get_answer(self):
+        """
+        Return an appropriate answer.
+        """
+
+        from borg.sat import SAT_Answer
+
+        return SAT_Answer(self.satisfiable, self.get_certificate())
 
     def get_certificate(self):
         """
@@ -423,6 +443,7 @@ class AttemptRow(DatumBase):
     attempt_type  =\
         Enum(
             "run",
+            "preprocessor",
             "preprocessing",
             name = "attempt_type",
             )
@@ -445,6 +466,40 @@ class AttemptRow(DatumBase):
             backref   = "attempts",
             )
 
+    def get_answer(self):
+        """
+        Get the answer associated with this attempt, if any.
+        """
+
+        return AnswerRow.to_answer(self.answer)
+
+class PreprocessingAttemptRow(AttemptRow):
+    """
+    Execution of a preprocessor/solver pair on a task.
+    """
+
+    __tablename__ = "preprocessing_attempts"
+
+    uuid                      = Column(SQL_UUID, ForeignKey("attempts.uuid"), primary_key = True, default = uuid4)
+    preprocessor_attempt_uuid = Column(SQL_UUID, ForeignKey("attempts.uuid"), nullable = False)
+    solver_attempt_uuid       = Column(SQL_UUID, ForeignKey("attempts.uuid"))
+
+    __mapper_args__ = {
+        "polymorphic_identity" : "preprocessing",
+        "inherit_condition"    : AttemptRow.uuid == uuid,
+        }
+
+    preprocessor_attempt = \
+        relationship(
+            AttemptRow,
+            primaryjoin = (AttemptRow.uuid == preprocessor_attempt_uuid),
+            )
+    solver_attempt       = \
+        relationship(
+            AttemptRow,
+            primaryjoin = (AttemptRow.uuid == solver_attempt_uuid),
+            )
+
 class RunAttemptRow(AttemptRow):
     """
     An attempt to solve a task with a concrete solver.
@@ -461,20 +516,16 @@ class RunAttemptRow(AttemptRow):
     run    = relationship(CPU_LimitedRunRow)
     solver = relationship(SolverRow)
 
-class PreprocessingAttemptRow(RunAttemptRow):
+class PreprocessorAttemptRow(RunAttemptRow):
     """
     Execution of a preprocessor on a task.
     """
 
-    __tablename__ = "preprocessing_attempts"
-    __mapper_args__ = {"polymorphic_identity": "preprocessing"}
+    __tablename__ = "preprocessor_attempts"
+    __mapper_args__ = {"polymorphic_identity": "preprocessor"}
 
     uuid              = Column(SQL_UUID, ForeignKey("run_attempts.uuid"), primary_key = True, default = uuid4)
     output_task_uuid  = Column(SQL_UUID, ForeignKey("tasks.uuid"), nullable = False)
 
-    output_task = \
-        relationship(
-            TaskRow,
-            primaryjoin = (TaskRow.uuid == output_task_uuid),
-            )
+    output_task = relationship(TaskRow)
 

@@ -78,7 +78,7 @@ class SatELitePreprocessor(Rowed, AbstractPreprocessor):
                     )
 
         # interpret its behavior
-        from borg.solvers.attempts import PreprocessingAttempt
+        from borg.solvers.attempts import PreprocessorAttempt
 
         if run.exit_status in (10, 20):
             from borg.sat                 import SAT_Answer
@@ -87,15 +87,15 @@ class SatELitePreprocessor(Rowed, AbstractPreprocessor):
             out_lines = "".join(c for (t, c) in run.out_chunks).split("\n")
             answer    = scan_competition_output(out_lines)
 
-            return PreprocessingAttempt(self, task, answer, None, run, task)
+            return PreprocessorAttempt(self, task, answer, None, run, task)
         elif run.exit_status == 0:
             from borg.tasks import PreprocessedDirectoryTask
 
             output_task = PreprocessedDirectoryTask(self, None, task, output_path, "preprocessed.cnf")
 
-            return PreprocessingAttempt(self, task, None, None, run, output_task)
+            return PreprocessorAttempt(self, task, None, None, run, output_task)
         else:
-            return PreprocessingAttempt(self, task, None, None, run, task)
+            return PreprocessorAttempt(self, task, None, None, run, task)
 
     def extend(self, task, answer, environment):
         """

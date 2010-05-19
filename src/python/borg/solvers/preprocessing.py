@@ -3,12 +3,8 @@
 """
 
 from cargo.log      import get_logger
-from cargo.temporal import TimeDelta
 from borg.rowed     import Rowed
-from borg.solvers   import (
-    AbstractSolver,
-    PreprocessingAttempt,
-    )
+from borg.solvers   import AbstractSolver
 
 log = get_logger(__name__)
 
@@ -27,49 +23,62 @@ class PreprocessingSolver(Rowed, AbstractSolver):
         self._preprocessor = preprocessor
         self._solver       = solver
 
-    def solve(self, task, cutoff = TimeDelta(seconds = 1e6), seed = None):
+    def solve(self, task, budget, random, environment):
         """
-        Execute the solver and return its outcome, given a concrete input path.
+        Attempt to solve the specified instance.
         """
 
         from cargo.io import mkdtemp_scoped
 
-        with mkdtemp_scoped(prefix = "sat_preprocessing.") as sandbox_path:
-            preprocessed = self.preprocessor.preprocess(task, sandbox_path, cutoff)
+        with mkdtemp_scoped(prefix = "preprocessing.") as sandbox_path:
+            # preprocess!
+            p_attempt = \
+                self._preprocessor.preprocess(
+                    task,
+                    budget,
+                    sandbox_path,
+                    random,
+                    environment,
+                    )
+            s_attempt = None
+            answer    = p_attempt.answer
 
-            if preprocessed.solver_result is not None:
-                # the preprocessor solved the instance
-                return \
-                    SAT_PreprocessingSolverResult(
-                        self,
-                        task,
-                        preprocessed,
-                        None,
-                        preprocessed.solver_result.certificate,
-                        )
-            else:
+            if p_attempt.answer is None:
                 # the preprocessor did not solve the instance
-                remaining = max(TimeDelta(), cutoff - preprocessed.elapsed)
+                from cargo.temporal import TimeDelta
 
-                if preprocessed.cnf_path is None:
-                    # ... it failed unexpectedly
-                    result   = self.inner_solver.solve(task, remaining, seed)
-                    extended = result.certificate
-                else:
-                    # ... it generated a new CNF
-                    result = self.inner_solver.solve(preprocessed.cnf_path, remaining, seed)
+                remaining = max(TimeDelta(), budget - p_attempt.cost)
 
-                    if result.certificate is None:
-                        extended = None
+                if remaining > TimeDelta():
+                    if p_attempt.output_task == task:
+                        # ... it did not generate a preprocessed instance
+                        s_attempt = self._solver.solve(task, remaining, random, environment)
+                        answer    = s_attempt.answer
                     else:
-                        extended = preprocessed.extend(result.certificate)
+                        # ... it generated a preprocessed instance
+                        s_attempt = \
+                            self._solver.solve(
+                                p_attempt.output_task,
+                                remaining,
+                                random,
+                                environment,
+                                )
+                        answer    = \
+                            self._preprocessor.extend(
+                                p_attempt.output_task,
+                                s_attempt.answer,
+                                environment,
+                                )
 
-                return \
-                    SAT_BareResult(
-                        self,
-                        task,
-                        preprocessed,
-                        result,
-                        extended,
-                        )
+        # return the details of this attempt
+        from borg.solvers import PreprocessingAttempt
+
+        return \
+            PreprocessingAttempt(
+                self,
+                task,
+                p_attempt,
+                s_attempt,
+                answer,
+                )
 

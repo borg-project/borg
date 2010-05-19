@@ -65,12 +65,12 @@ class LookupPreprocessor(LookupSolver, AbstractPreprocessor):
         Preprocess an instance.
         """
 
-        from borg.solvers.attempts import WrappedPreprocessingAttempt
+        from borg.solvers.attempts import WrappedPreprocessorAttempt
 
         looked_up = self.look_up(environment)
         inner     = looked_up.preprocess(task, budget, output_path, random, environment)
 
-        return WrappedPreprocessingAttempt(self, inner)
+        return WrappedPreprocessorAttempt(self, inner)
 
     def extend(self, task, answer, environment):
         """

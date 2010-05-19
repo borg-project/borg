@@ -97,13 +97,13 @@ class TaskVerifyingPreprocessor(Rowed, AbstractPreprocessor):
         """
 
         from cargo.unix.accounting import CPU_LimitedRun
-        from borg.solvers          import PreprocessingAttempt
+        from borg.solvers          import PreprocessorAttempt
 
         with open(task.path) as task_file:
             assert_equal(task_file.read(), self._correct_cnf)
 
         return \
-            PreprocessingAttempt(
+            PreprocessorAttempt(
                 self,
                 task,
                 None,
@@ -121,13 +121,14 @@ class FixedPreprocessor(Rowed, AbstractPreprocessor):
     A fake, fixed-result preprocessor.
     """
 
-    def __init__(self, output_task, answer):
+    def __init__(self, output_task, answer, cost = None):
         """
         Initialize.
         """
 
         self._output_task = output_task
         self._answer      = answer
+        self._cost        = cost
 
     def preprocess(self, task, budget, output_dir, random, environment):
         """
@@ -135,15 +136,20 @@ class FixedPreprocessor(Rowed, AbstractPreprocessor):
         """
 
         from cargo.unix.accounting import CPU_LimitedRun
-        from borg.solvers          import PreprocessingAttempt
+        from borg.solvers          import PreprocessorAttempt
+
+        if self._cost is None:
+            cost = budget
+        else:
+            cost = self._cost
 
         return \
-            PreprocessingAttempt(
+            PreprocessorAttempt(
                 self,
                 task,
                 self._answer,
                 None,
-                CPU_LimitedRun(None, budget, None, None, None, budget, None, None),
+                CPU_LimitedRun(None, budget, None, None, None, cost, None, None),
                 self._output_task,
                 )
 
@@ -156,22 +162,22 @@ def add_fake_runs(session):
     Insert standard test data into an empty database.
     """
 
-    from utexas.data import (
+    from borg.data import (
+        TaskRow,
+        TrialRow,
         DatumBase,
-        SAT_TaskRow,
-        SAT_TrialRow,
+        RunAttemptRow,
         SAT_AnswerRow,
         CPU_LimitedRunRow,
-        SAT_RunAttemptRow,
-        PreprocessorRunRow,
         PreprocessedTaskRow,
+        PreprocessorAttemptRow,
         )
 
     # layout
     DatumBase.metadata.create_all(session.connection().engine)
 
     # add the recyclable-run trial
-    recyclable_trial_row = SAT_TrialRow(uuid = SAT_TrialRow.RECYCLABLE_UUID)
+    recyclable_trial_row = TrialRow(uuid = TrialRow.RECYCLABLE_UUID)
 
     session.add(recyclable_trial_row)
 
@@ -181,11 +187,15 @@ def add_fake_runs(session):
         Insert a fake run.
         """
 
-        certificate = [42] if satisfiable else None
+        if satisfiable is None:
+            answer = None
+        else:
+            answer = SAT_AnswerRow(satisfiable, [42] if satisfiable else None)
+
         attempt_row = \
-            SAT_RunAttemptRow(
+            RunAttemptRow(
                 task        = task_row,
-                answer      = SAT_AnswerRow(satisfiable, certificate),
+                answer      = answer,
                 budget      = 32.0,
                 cost        = 8.0,
                 trials      = [recyclable_trial_row],
@@ -201,23 +211,21 @@ def add_fake_runs(session):
         Insert a fake run.
         """
 
-        if satisfiable is True:
-            answer = SAT_AnswerRow(True, [42])
-        elif satisfiable is False:
-            answer = SAT_AnswerRow(False)
-        else:
+        if satisfiable is None:
             answer = None
+        else:
+            answer = SAT_AnswerRow(satisfiable, [42] if satisfiable else None)
 
         run_row = \
-            PreprocessorRunRow(
-                preprocessor_name = preprocessor_name,
-                input_task        = input_task_row,
-                output_task       = output_task_row,
-                run               = CPU_LimitedRunRow(proc_elapsed = 8.0, cutoff = 32.0),
-                answer            = answer,
-                budget            = 32.0,
-                cost              = 8.0,
-                trials            = [recyclable_trial_row],
+            PreprocessorAttemptRow(
+                solver_name = preprocessor_name,
+                task        = input_task_row,
+                output_task = output_task_row,
+                run         = CPU_LimitedRunRow(proc_elapsed = 8.0, cutoff = 32.0),
+                answer      = answer,
+                budget      = 32.0,
+                cost        = 8.0,
+                trials      = [recyclable_trial_row],
                 )
 
         session.add(run_row)
@@ -225,7 +233,7 @@ def add_fake_runs(session):
     # add the tasks
     PTR = PreprocessedTaskRow
 
-    task_rows     = [SAT_TaskRow(uuid = u) for u in task_uuids]
+    task_rows     = [TaskRow(uuid = u) for u in task_uuids]
     baz_task_rows = [
         PTR(uuid = u, input_task = t, preprocessor_name = "baz")
         for (u, t) in zip(baz_task_uuids, task_rows)

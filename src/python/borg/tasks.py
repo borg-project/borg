@@ -64,32 +64,32 @@ class AbstractPreprocessedDirectoryTask(AbstractPreprocessedTask, AbstractFileTa
         The path to the directory of preprocessor output files.
         """
 
-class MockTask(Rowed, AbstractTask):
+class Task(Rowed, AbstractTask):
     """
-    A task not (necessarily) backed by a file.
+    A task not necessarily backed by a file.
     """
 
-    def __init__(self, task_uuid):
+    def __init__(self, row = None):
         """
         Initialize.
         """
 
-        self._task_uuid = task_uuid
+        Rowed.__init__(self, row)
 
-    def get_new_row(self, session):
-        """
-        Create or obtain an ORM row for this object.
-        """
+#     def get_new_row(self, session):
+#         """
+#         Create or obtain an ORM row for this object.
+#         """
 
-        return session.query(TaskRow).get(self._task_uuid)
+#         return session.query(TaskRow).get(self._task_uuid)
 
-    @property
-    def task_uuid(self):
-        """
-        The UUID of the associated database row.
-        """
+#     @property
+#     def task_uuid(self):
+#         """
+#         The UUID of the associated database row.
+#         """
 
-        return self._task_uuid
+#         return self._task_uuid
 
 class WrappedTask(Rowed, AbstractTask):
     """
@@ -114,7 +114,7 @@ class WrappedTask(Rowed, AbstractTask):
 
         return self._inner.get_row(session)
 
-class FileTask(Rowed, AbstractFileTask):
+class FileTask(Task, AbstractFileTask):
     """
     A task backed by a file.
     """
@@ -124,7 +124,7 @@ class FileTask(Rowed, AbstractFileTask):
         Initialize.
         """
 
-        Rowed.__init__(self, row)
+        Task.__init__(self, row)
 
         self._path = path
 
@@ -186,170 +186,21 @@ class WrappedFileTask(WrappedTask, AbstractFileTask):
 
         return self._inner.path
 
-# class PreprocessedTask(Rowed, AbstractPreprocessedTask):
-#     """
-#     A preprocessed task backed by a directory.
-#     """
-
-#     def __init__(self, preprocessor, seed, input_task, output_path, relative_task_path, row = None):
-#         """
-#         Initialize.
-#         """
-
-#         Rowed.__init__(self, row)
-
-#         self._preprocessor       = preprocessor
-#         self._seed               = seed
-#         self._input_task         = input_task
-#         self._output_path        = output_path
-#         self._relative_task_path = relative_task_path
-
-#     def get_new_row(self, session, preprocessor_row = None, **kwargs):
-#         """
-#         Create or obtain an ORM row for this object.
-#         """
-
-#         from sqlalchemy import and_
-#         from borg.data  import PreprocessedTaskRow as PT
-
-#         if preprocessor_row is None:
-#             preprocessor_row = self._preprocessor.get_row(session)
-
-#         input_task_row         = self.input_task.get_row(session)
-#         preprocessed_task_row  =                         \
-#             session                                      \
-#             .query(PT)                                   \
-#             .filter(
-#                 and_(
-#                     PT.preprocessor == preprocessor_row,
-#                     PT.seed         == self.seed,
-#                     PT.input_task   == input_task_row,
-#                 ),
-#             )                                            \
-#             .first()
-
-#         if preprocessed_task_row is None:
-#             preprocessed_task_row = \
-#                 PT(
-#                     preprocessor = preprocessor_row,
-#                     seed         = self.seed,
-#                     input_task   = input_task_row,
-#                     )
-
-#             session.add(preprocessed_task_row)
-
-#         return preprocessed_task_row
-
-#     @property
-#     def preprocessor(self):
-#         """
-#         The preprocessor that yielded this task.
-#         """
-
-#         return self._preprocessor
-
-#     @property
-#     def seed(self):
-#         """
-#         The preprocessor seed on the run that yielded this task.
-#         """
-
-#         return self._seed
-
-#     @property
-#     def input_task(self):
-#         """
-#         The preprocessor input task that yielded this task.
-#         """
-
-#         return self._input_task
-
-#     @property
-#     def path(self):
-#         """
-#         The path to the associated task file.
-#         """
-
-#         from os.path import join
-
-#         return join(self._output_path, self._relative_task_path)
-
-#     @property
-#     def output_path(self):
-#         """
-#         The path to the directory of preprocessor output files.
-#         """
-
-#         return self._output_path
-
-class WrappedPreprocessedTask(WrappedFileTask, AbstractPreprocessedTask, AbstractFileTask):
-    """
-    A wrapped task.
-    """
-
-    def __init__(self, preprocessor, inner):
-        """
-        Initialize.
-        """
-
-        assert isinstance(preprocessor, AbstractPreprocessor)
-        assert isinstance(inner, AbstractPreprocessedTask)
-
-        WrappedFileTask.__init__(self, inner)
-
-        self._preprocessor = preprocessor
-
-    def get_new_row(self, session, preprocessor_row = None):
-        """
-        Create or obtain an ORM row for this object.
-        """
-
-        if preprocessor_row is None:
-            preprocessor_row = self._preprocessor.get_row(session)
-
-        return self._inner.get_row(session, preprocessor_row = preprocessor_row)
-
-    @property
-    def preprocessor(self):
-        """
-        The preprocessor that yielded this task.
-        """
-
-        return self._preprocessor
-
-    @property
-    def seed(self):
-        """
-        The preprocessor seed on the run that yielded this task.
-        """
-
-        return self._inner.seed
-
-    @property
-    def input_task(self):
-        """
-        The preprocessor input task that yielded this task.
-        """
-
-        return self._inner.input_task
-
-class PreprocessedDirectoryTask(Rowed, AbstractPreprocessedDirectoryTask):
+class PreprocessedTask(Task, AbstractPreprocessedTask):
     """
     A preprocessed task backed by a directory.
     """
 
-    def __init__(self, preprocessor, seed, input_task, output_path, relative_task_path, row = None):
+    def __init__(self, preprocessor, seed, input_task, row = None):
         """
         Initialize.
         """
 
-        Rowed.__init__(self, row)
+        Task.__init__(self, row = row)
 
-        self._preprocessor       = preprocessor
-        self._seed               = seed
-        self._input_task         = input_task
-        self._output_path        = output_path
-        self._relative_task_path = relative_task_path
+        self._preprocessor = preprocessor
+        self._seed         = seed
+        self._input_task   = input_task
 
     def get_new_row(self, session, preprocessor_row = None, **kwargs):
         """
@@ -410,6 +261,72 @@ class PreprocessedDirectoryTask(Rowed, AbstractPreprocessedDirectoryTask):
         """
 
         return self._input_task
+
+class WrappedPreprocessedTask(WrappedFileTask, AbstractPreprocessedTask, AbstractFileTask):
+    """
+    A wrapped task.
+    """
+
+    def __init__(self, preprocessor, inner):
+        """
+        Initialize.
+        """
+
+        assert isinstance(preprocessor, AbstractPreprocessor)
+        assert isinstance(inner, AbstractPreprocessedTask)
+
+        WrappedFileTask.__init__(self, inner)
+
+        self._preprocessor = preprocessor
+
+    def get_new_row(self, session, preprocessor_row = None):
+        """
+        Create or obtain an ORM row for this object.
+        """
+
+        if preprocessor_row is None:
+            preprocessor_row = self._preprocessor.get_row(session)
+
+        return self._inner.get_row(session, preprocessor_row = preprocessor_row)
+
+    @property
+    def preprocessor(self):
+        """
+        The preprocessor that yielded this task.
+        """
+
+        return self._preprocessor
+
+    @property
+    def seed(self):
+        """
+        The preprocessor seed on the run that yielded this task.
+        """
+
+        return self._inner.seed
+
+    @property
+    def input_task(self):
+        """
+        The preprocessor input task that yielded this task.
+        """
+
+        return self._inner.input_task
+
+class PreprocessedDirectoryTask(PreprocessedTask, AbstractPreprocessedDirectoryTask):
+    """
+    A preprocessed task backed by a directory.
+    """
+
+    def __init__(self, preprocessor, seed, input_task, output_path, relative_task_path, row = None):
+        """
+        Initialize.
+        """
+
+        PreprocessedTask.__init__(self, preprocessor, seed, input_task, row = row)
+
+        self._output_path        = output_path
+        self._relative_task_path = relative_task_path
 
     @property
     def path(self):

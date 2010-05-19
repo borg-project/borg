@@ -2,15 +2,19 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-class SAT_Answer(object):
+from borg.rowed import Rowed
+
+class SAT_Answer(Rowed):
     """
     An answer to a CNF SAT instance.
     """
 
-    def __init__(self, satisfiable, certificate = None):
+    def __init__(self, satisfiable, certificate = None, row = None):
         """
         Initialize.
         """
+
+        Rowed.__init__(self, row)
 
         if satisfiable is None:
             raise ValueError("answer must provide satisfiability")
@@ -34,4 +38,17 @@ class SAT_Answer(object):
         """
 
         return not self == other
+
+    def get_new_row(self, session):
+        """
+        Create or obtain an ORM row for this object.
+        """
+
+        from borg.data import SAT_AnswerRow
+
+        answer_row = SAT_AnswerRow(self.satisfiable, self.certificate)
+
+        session.add(answer_row)
+
+        return answer_row
 
