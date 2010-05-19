@@ -2,21 +2,20 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from nose.tools import (
-    with_setup,
-    assert_equal,
-    )
-
-def test_mock_competition_simple():
+def test_recycling_solver():
     """
-    Test SAT_MockCompetitionSolver behavior.
+    Test recycling-solver behavior.
     """
 
+    from nose.tools                      import (
+        with_setup,
+        assert_equal,
+        )
     from utexas.data                     import TaskRow
     from utexas.sat.tasks                import MockTask
     from utexas.sat.solvers              import (
-        SAT_Environment,
-        SAT_MockCompetitionSolver,
+        Environment,
+        RecyclingSolver,
         )
     from utexas.sat.solvers.test.support import (
         FakeSolverData,
@@ -30,7 +29,7 @@ def test_mock_competition_simple():
     @with_setup(fake_data.set_up, fake_data.tear_down)
     def test_solver(solver_name, task_uuid, seconds, satisfiable, certificate):
         """
-        Test SAT_MockCompetitionSolver behavior.
+        Test recycling-solver behavior.
         """
 
         task        = MockTask(task_uuid)

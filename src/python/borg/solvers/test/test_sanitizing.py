@@ -9,8 +9,8 @@ def test_sat_sanitizing_solver():
     Test the sanitizing SAT solver wrapper.
     """
 
-    from tempfile                        import NamedTemporaryFile
-    from utexas.sat.solvers.test.support import (
+    from tempfile                  import NamedTemporaryFile
+    from borg.solvers.test.support import (
         TaskVerifyingSolver,
         sanitized_cnf,
         unsanitized_cnf,
@@ -22,11 +22,11 @@ def test_sat_sanitizing_solver():
         named_file.flush()
 
         # test the solver
-        from utexas.sat.tasks   import FileTask
-        from utexas.sat.solvers import SAT_SanitizingSolver
+        from borg.tasks   import FileTask
+        from borg.solvers import SanitizingSolver
 
         inner_solver = TaskVerifyingSolver(sanitized_cnf)
-        solver       = SAT_SanitizingSolver(inner_solver)
+        solver       = SanitizingSolver(inner_solver)
         task         = FileTask(named_file.name)
 
         solver.solve(task, None, None, None)

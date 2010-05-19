@@ -14,14 +14,17 @@ class SatELitePreprocessor(Rowed, AbstractPreprocessor):
     The standard SatELite preprocessor.
     """
 
-    def __init__(self, command, relative_to):
+    def __init__(self, command, relative_to = None):
         """
         Initialize.
         """
 
-        SAT_Preprocessor.__init__(self)
+        Rowed.__init__(self)
 
-        self._command = [s.replace("$HERE", relative_to) for s in command]
+        if relative_to is None:
+            self._command = command
+        else:
+            self._command = [s.replace("$HERE", relative_to) for s in command]
 
     def solve(self, task, budget, random, environment):
         """
@@ -81,13 +84,14 @@ class SatELitePreprocessor(Rowed, AbstractPreprocessor):
             from borg.sat                 import SAT_Answer
             from borg.solvers.competition import scan_competition_output
 
-            out_lines                  = "".join(c for (t, c) in run.out_chunks).split("\n")
-            (satisfiable, certificate) = scan_competition_output(out_lines)
-            answer                     = SAT_Answer(satisfiable, certificate)
+            out_lines = "".join(c for (t, c) in run.out_chunks).split("\n")
+            answer    = scan_competition_output(out_lines)
 
             return PreprocessingAttempt(self, task, answer, None, run, task)
         elif run.exit_status == 0:
-            output_task = SatELitePreprocessedTask(self, None, task, output_path)
+            from borg.tasks import PreprocessedDirectoryTask
+
+            output_task = PreprocessedDirectoryTask(self, None, task, output_path, "preprocessed.cnf")
 
             return PreprocessingAttempt(self, task, None, None, run, output_task)
         else:
@@ -99,10 +103,9 @@ class SatELitePreprocessor(Rowed, AbstractPreprocessor):
         """
 
         # sanity
-        from borg.tasks import AbstractPreprocessedFileTask
+        from borg.tasks import AbstractPreprocessedTask
 
-        if not isinstance(task, AbstractPreprocessedFileTask):
-            raise TypeError("tasks to extend must be preprocessed file-backed tasks")
+        assert isinstance(task, AbstractPreprocessedTask)
 
         # trivial cases
         if answer.certificate is None:
@@ -155,11 +158,13 @@ class SatELitePreprocessor(Rowed, AbstractPreprocessor):
                             )
 
                     # parse the extended certificate from its output
-                    from borg.sat                 import SAT_Answer
                     from borg.solvers.competition import scan_competition_output
 
-                    (_, extended)   = scan_competition_output(popened.stdout)
-                    extended_answer = SAT_Answer(answer.satisfiable, extended)
+                    extended_answer = \
+                        scan_competition_output(
+                            popened.stdout,
+                            satisfiable = answer.satisfiable,
+                            )
 
                     # wait for its natural death
                     popened.wait()

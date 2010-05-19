@@ -12,7 +12,7 @@ def assert_tasks_stored(session):
     Verify that the tasks have been stored.
     """
 
-    from utexas.data import (
+    from borg.data import (
         TaskRow     as T,
         TaskNameRow as TN,
         )
@@ -67,8 +67,8 @@ def test_get_tasks():
                     file.write(make_cnf([j]))
 
         # invoke the script
-        from subprocess                          import check_call
-        from utexas.tools.portfolio.test.support import clean_up_environment
+        from subprocess                        import check_call
+        from borg.tools.portfolio.test.support import clean_up_environment
 
         research_engine_url = "sqlite:///%s" % join(sandbox_path, "research.sqlite")
 
@@ -77,7 +77,7 @@ def test_get_tasks():
                 [
                     "python",
                     "-m",
-                    "utexas.tools.sat.get_tasks",
+                    "borg.tools.sat.get_tasks",
                     tasks_path,
                     sandbox_path,
                     "--collection",

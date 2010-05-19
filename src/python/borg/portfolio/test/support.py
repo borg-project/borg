@@ -2,7 +2,7 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from utexas.portfolio.world import (
+from borg.portfolio.world import (
     Action,
     Outcome,
     )

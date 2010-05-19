@@ -2,33 +2,29 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from nose.tools                      import assert_equal
-from utexas.sat.solvers.test.support import FixedSolver
+from nose.tools import assert_equal
 
-def test_named_solver():
+def test_lookup_solver():
     """
-    Test the lookup-based SAT solver.
+    Test the lookup-based solver.
     """
 
     # set up the solver
-    from utexas.sat.solvers import (
-        SAT_Environment,
-        SAT_LookupSolver,
+    from borg.sat                  import SAT_Answer
+    from borg.solvers              import (
+        Environment,
+        LookupSolver,
         )
+    from borg.solvers.test.support import FixedSolver
 
-    certificate   = [1, 2, 3, 4, 0]
-    foo_solver    = FixedSolver(True, certificate)
-    named_solvers = {
-        "foo": foo_solver,
-        }
-    environment   = SAT_Environment(named_solvers = named_solvers)
-    solver        = SAT_LookupSolver("foo")
+    foo_solver    = FixedSolver(SAT_Answer(True, [1, 2, 3, 4, 0]))
+    environment   = Environment(named_solvers = {"foo": foo_solver})
+    solver        = LookupSolver("foo")
 
     # test it
-    result = solver.solve(None, None, None, environment)
+    attempt = solver.solve(None, None, None, environment)
 
-    assert_equal(result.satisfiable, foo_solver.satisfiable)
-    assert_equal(result.certificate, foo_solver.certificate)
+    assert_equal(attempt.answer, foo_solver.answer)
 
 def test_lookup_preprocessor():
     """
@@ -43,20 +39,21 @@ def test_lookup_preprocessor():
 
         import numpy
 
-        from cargo.temporal                        import TimeDelta
-        from utexas.sat.solvers                    import SAT_Environment
-        from utexas.sat.preprocessors              import LookupPreprocessor
-        from utexas.sat.preprocessors.test.support import FixedPreprocessor
+        from cargo.temporal            import TimeDelta
+        from borg.solvers              import (
+            Environment,
+            LookupPreprocessor,
+            )
+        from borg.solvers.test.support import FixedPreprocessor
 
         named       = FixedPreprocessor(output_task, answer)
-        environment = SAT_Environment(named_preprocessors    = {"baz": named})
+        environment = Environment(named_solvers = {"baz": named})
         lookup      = LookupPreprocessor("baz")
-        output_dir  = "/tmp/arbitrary_directory"
         result      = \
             lookup.preprocess(
                 input_task,
                 TimeDelta(seconds = 32.0),
-                output_dir,
+                "/tmp/arbitrary_directory",
                 numpy.random,
                 environment,
                 )
@@ -65,10 +62,8 @@ def test_lookup_preprocessor():
         assert_equal(result.answer, answer)
 
     # each test
-    from utexas.sat import (
-        FileTask,
-        SAT_Answer,
-        )
+    from borg.sat   import SAT_Answer
+    from borg.tasks import FileTask
 
     input_task  = FileTask("/tmp/arbitrary_path.cnf")
     output_task = FileTask("/tmp/arbitrary_path2.cnf")

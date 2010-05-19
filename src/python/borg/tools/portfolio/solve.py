@@ -4,15 +4,15 @@
 """
 
 if __name__ == "__main__":
-    from utexas.tools.portfolio.solve import main
+    from borg.tools.portfolio.solve import main
 
     raise SystemExit(main())
 
-import utexas.sat.solvers
+import borg.solvers
 
-from logging                    import Formatter
-from cargo.log                  import get_logger
-from cargo.flags                import (
+from logging     import Formatter
+from cargo.log   import get_logger
+from cargo.flags import (
     Flag,
     Flags,
     with_flags_parsed,
@@ -108,11 +108,9 @@ def main((solver_path, input_path, seed_string)):
     flags = module_flags.given
 
     if flags.verbose:
-        get_logger("cargo.unix.accounting",        level = "DETAIL")
-        get_logger("utexas.sat.solvers",           level = "DETAIL")
-        get_logger("utexas.sat.preprocessors",     level = "DETAIL")
-        get_logger("utexas.tools.sat.run_solvers", level = "NOTSET")
-        get_logger("utexas.portfolio.models",      level = "NOTSET")
+        get_logger("cargo.unix.accounting",      level = "DETAIL")
+        get_logger("borg.tools.sat.run_solvers", level = "NOTSET")
+        get_logger("borg.portfolio.models",      level = "NOTSET")
 
     # build our PRNG
     from numpy.random import RandomState
@@ -126,35 +124,36 @@ def main((solver_path, input_path, seed_string)):
         solver = pickle.load(file)
 
     # build the solver environment
-    from utexas.sat.solvers import (
-        SAT_Environment,
+    from borg.solvers import (
+        Environment,
         get_named_solvers,
         )
 
     environment = \
-        SAT_Environment(
+        Environment(
             named_solvers = get_named_solvers(),
             )
 
     # solve
-    from cargo.temporal   import TimeDelta
-    from utexas.sat.tasks import FileTask
+    from cargo.temporal import TimeDelta
+    from borg.tasks     import FileTask
 
-    task   = FileTask(input_path)
-    result = solver.solve(task, TimeDelta(seconds = 1e6), random, environment)
+    task    = FileTask(input_path)
+    attempt = solver.solve(task, TimeDelta(seconds = 1e6), random, environment)
+    answer  = attempt.answer
 
     # tell the world
-    if result.satisfiable is True:
-        print "s SATISFIABLE"
-        print "v %s" % " ".join(map(str, result.certificate))
-
-        return 10
-    elif result.satisfiable is False:
-        print "s UNSATISFIABLE"
-
-        return 20
-    else:
+    if answer is None:
         print "s UNKNOWN"
 
         return 0
+    elif answer.satisfiable:
+        print "s SATISFIABLE"
+        print "v %s" % " ".join(map(str, answer.certificate))
+
+        return 10
+    else:
+        print "s UNSATISFIABLE"
+
+        return 20
 

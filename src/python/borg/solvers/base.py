@@ -2,21 +2,18 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from abc         import (
-    abstractmethod,
-    abstractproperty,
-    )
+from abc         import abstractmethod
 from cargo.log   import get_logger
-from cargo.sugar import ABC
 from cargo.flags import (
     Flag,
     Flags,
     )
+from borg.rowed import AbstractRowed
 
 log          = get_logger(__name__)
 module_flags = \
     Flags(
-        "SAT Solver Configuration",
+        "Solver Configuration",
         Flag(
             "--solvers-file",
             default = [],
@@ -46,7 +43,7 @@ def get_named_solvers(paths = [], flags = {}):
 
     from os.path      import dirname
     from cargo.io     import expandpath
-    from borg.solvers import SAT_CompetitionSolver
+    from borg.solvers import CompetitionSolver
 
     flags = module_flags.merged(flags)
 
@@ -66,7 +63,7 @@ def get_named_solvers(paths = [], flags = {}):
         for (name, attributes) in loaded.get("solvers", {}).items():
             yield (
                 name,
-                SAT_CompetitionSolver(
+                CompetitionSolver(
                     attributes["command"],
                     solvers_home = relative,
                     name         = name,
@@ -123,21 +120,19 @@ class Environment(object):
 
     def __init__(
         self,
-        time_ratio          = 1.0,
-        named_solvers       = None,
-        named_preprocessors = None,
-        collections         = {},
-        MainSession         = None,
-        CacheSession        = None,
+        time_ratio    = 1.0,
+        named_solvers = None,
+        collections   = {},
+        MainSession   = None,
+        CacheSession  = None,
         ):
         """
         Initialize.
         """
 
-        self.time_ratio          = time_ratio
-        self.named_solvers       = named_solvers
-        self.named_preprocessors = named_preprocessors
-        self.collections         = collections
-        self.MainSession         = MainSession
-        self.CacheSession        = CacheSession
+        self.time_ratio    = time_ratio
+        self.named_solvers = named_solvers
+        self.collections   = collections
+        self.MainSession   = MainSession
+        self.CacheSession  = CacheSession
 

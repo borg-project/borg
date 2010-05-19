@@ -3,7 +3,7 @@
 """
 
 if __name__ == "__main__":
-    from utexas.tools.sat.get_tasks import main
+    from borg.tools.sat.get_tasks import main
 
     raise SystemExit(main())
 
@@ -51,8 +51,8 @@ def get_task(
     # get the task
     with ResearchSession() as session:
         # has this task already been stored?
-        from sqlalchemy  import and_
-        from utexas.data import TaskNameRow as TN
+        from sqlalchemy import and_
+        from borg.data  import TaskNameRow as TN
 
         task_name_row =                          \
             session                              \
@@ -71,13 +71,13 @@ def get_task(
             return
 
         # hash the task file
-        from os.path        import join
-        from cargo.io       import (
+        from os.path      import join
+        from cargo.io     import (
             decompress_if,
             mkdtemp_scoped,
             hash_yielded_bytes,
             )
-        from utexas.sat.cnf import yield_sanitized_cnf
+        from borg.sat.cnf import yield_sanitized_cnf
 
         log.debug("hashing %s", name)
 
@@ -93,14 +93,14 @@ def get_task(
 
         # find or create the task row
         from cargo.sql.alchemy import lock_table
-        from utexas.data       import SAT_TaskRow as ST
+        from borg.data         import FileTaskRow as FT
 
-        lock_table(session.connection().engine, ST.__tablename__)
+        lock_table(session.connection().engine, FT.__tablename__)
 
-        task_row = session.query(ST).filter(ST.hash == buffer(file_hash)).first()
+        task_row = session.query(FT).filter(FT.hash == buffer(file_hash)).first()
 
         if task_row is None:
-            task_row = ST(hash = buffer(file_hash))
+            task_row = FT(hash = buffer(file_hash))
 
             session.add(task_row)
 
@@ -142,7 +142,7 @@ def main():
 
     # get command line arguments
     import cargo.labor.storage
-    import utexas.data
+    import borg.data
 
     from cargo.flags import parse_given
 
@@ -160,8 +160,8 @@ def main():
         )
 
     with SQL_Engines.default:
-        from os.path     import abspath
-        from utexas.data import research_connect
+        from os.path   import abspath
+        from borg.data import research_connect
 
         ResearchSession = make_session(bind = research_connect())
 

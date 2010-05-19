@@ -1,26 +1,19 @@
 """
-utexas/sat/solvers/competition.py
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from cargo.log               import get_logger
-from utexas.sat.solvers.base import (
-    SAT_Solver,
-    SAT_BareResult,
-    )
+from cargo.log    import get_logger
+from borg.rowed   import Rowed
+from borg.solvers import AbstractSolver
 
 log = get_logger(__name__)
 
-def scan_competition_output(lines):
+def scan_competition_output(lines, satisfiable = None, certificate = None):
     """
     Interpret reasonably well-formed competition-style output.
     """
 
     from itertools import imap
-
-    satisfiable = None
-    certificate = None
 
     for line in lines:
         # reported sat
@@ -44,11 +37,17 @@ def scan_competition_output(lines):
             else:
                 certificate.extend(literals)
 
-    return (satisfiable, certificate)
+    # done
+    if satisfiable is None:
+        return None
+    else:
+        from borg.sat import SAT_Answer
 
-class SAT_CompetitionSolver(SAT_Solver):
+        return SAT_Answer(satisfiable, certificate)
+
+class CompetitionSolver(Rowed, AbstractSolver):
     """
-    A solver for SAT that uses the circa-2009 competition interface.
+    A solver for that uses the circa-2009 SAT competition interface.
     """
 
     def __init__(
@@ -64,7 +63,7 @@ class SAT_CompetitionSolver(SAT_Solver):
         """
 
         # base
-        SAT_Solver.__init__(self)
+        Rowed.__init__(self)
 
         # members
         from copy import copy
@@ -78,14 +77,12 @@ class SAT_CompetitionSolver(SAT_Solver):
         Execute the solver and return its outcome.
         """
 
-        from utexas.sat.solvers import SolverError
-
         # argument sanity
-        from utexas.sat.tasks import AbstractFileTask
+        from borg.tasks import AbstractFileTask
 
-        if not isinstance(task, AbstractFileTask):
-            raise TypeError("competition solver requires a file-backed task")
+        assert isinstance(task, AbstractFileTask)
 
+        # set up the command arguments
         def expand(strings, variable, value):
             """
             Expand occurences of variable in string with value.
@@ -118,7 +115,7 @@ class SAT_CompetitionSolver(SAT_Solver):
         expanded     = expand(expanded, "BENCHNAME", task.path)
 
         # RANDOMSEED: a random seed which is a number between 0 and 4294967295
-        from utexas.sat.solvers import get_random_seed
+        from borg.solvers import get_random_seed
 
         if self.seeded:
             seed     = get_random_seed(random)
@@ -176,20 +173,15 @@ class SAT_CompetitionSolver(SAT_Solver):
 
         # and analyze its output
         if run.exit_status is not None:
-            out_lines                  = "".join(c for (t, c) in run.out_chunks).split("\n")
-            (satisfiable, certificate) = scan_competition_output(out_lines)
+            out_lines = "".join(c for (t, c) in run.out_chunks).split("\n")
+            answer    = scan_competition_output(out_lines)
         else:
-            satisfiable = None
-            certificate = None
+            answer = None
 
-        # crazy solver?
-        if satisfiable is True:
-            if certificate is None:
-                raise SolverError("solver reported sat but did not provide a certificate")
-        elif certificate is not None:
-            raise SolverError("solver did not report sat but provided a certificate")
+        # return our attempt
+        from borg.solvers import RunAttempt
 
-        return SAT_RunResult(self, task, satisfiable, certificate, run, seed)
+        return RunAttempt(self, task, answer, seed, run)
 
     @property
     def seeded(self):

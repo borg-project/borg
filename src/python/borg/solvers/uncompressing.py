@@ -4,6 +4,7 @@
 
 from contextlib   import contextmanager
 from cargo.log    import get_logger
+from borg.rowed   import Rowed
 from borg.solvers import (
     AbstractSolver,
     AbstractPreprocessor,
@@ -40,7 +41,7 @@ class UncompressingSolver(Rowed, AbstractSolver):
         """
 
         # argument sanity
-        from utexas.sat.tasks import AbstractFileTask
+        from borg.tasks import AbstractFileTask
 
         if not isinstance(task, AbstractFileTask):
             raise TypeError("uncompressing solver requires a file-backed task")

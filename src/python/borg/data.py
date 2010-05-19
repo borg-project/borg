@@ -191,7 +191,7 @@ class TaskRow(DatumBase):
     __tablename__ = "tasks"
     task_type     = \
         Enum(
-            "sat",
+            "file",
             "preprocessed",
             name = "task_type",
             )
@@ -275,7 +275,7 @@ class PreprocessedTaskRow(TaskRow):
         "inherit_condition"    : uuid == TaskRow.uuid,
         }
 
-    preprocessor = relationship(PreprocessorRow)
+    preprocessor = relationship(SolverRow)
     input_task   = \
         relationship(
             TaskRow,

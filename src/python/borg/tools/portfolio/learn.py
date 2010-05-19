@@ -4,7 +4,7 @@
 """
 
 if __name__ == "__main__":
-    from utexas.tools.portfolio.learn import main
+    from borg.tools.portfolio.learn import main
 
     raise SystemExit(main())
 
@@ -75,7 +75,7 @@ def make_mult_mixture_model(training, ncomponents, nrestarts):
         EM_MixtureEstimator,
         )
     from cargo.statistics.multinomial import MultinomialEstimator
-    from utexas.portfolio.models      import MultinomialMixtureActionModel
+    from borg.portfolio.models        import MultinomialMixtureActionModel
 
     model = \
         MultinomialMixtureActionModel(
@@ -133,7 +133,7 @@ def make_dcm_mixture_model(training, ncomponents, nrestarts):
         RestartedEstimator,
         EM_MixtureEstimator,
         )
-    from utexas.portfolio.models  import DCM_MixtureActionModel
+    from borg.portfolio.models    import DCM_MixtureActionModel
 
     model  = \
         DCM_MixtureActionModel(
@@ -155,13 +155,13 @@ def make_random_model():
     Build a random portfolio model.
     """
 
-    from numpy                      import r_
-    from numpy.random               import RandomState
-    from itertools                  import product
-    from cargo.temporal             import TimeDelta
-    from utexas.sat.solvers         import SAT_LookupSolver
-    from utexas.portfolio.models    import RandomActionModel
-    from utexas.portfolio.sat_world import SAT_WorldAction
+    from numpy                    import r_
+    from numpy.random             import RandomState
+    from itertools                import product
+    from cargo.temporal           import TimeDelta
+    from borg.solvers             import LookupSolver
+    from borg.portfolio.models    import RandomActionModel
+    from borg.portfolio.sat_world import SAT_WorldAction
 
     solver_names = [
         "sat/2009/CirCUs",
@@ -175,7 +175,7 @@ def make_random_model():
         "sat/2009/rsat_09",
         "sat/2009/SApperloT",
         ]
-    solvers = [SAT_LookupSolver(n) for n in solver_names]
+    solvers = [LookupSolver(n) for n in solver_names]
     cutoffs = [TimeDelta(seconds = c) for c in r_[10.0:800.0:6j]]
     actions = [SAT_WorldAction(*a) for a in product(solvers, cutoffs)]
     model   = RandomActionModel(actions, RandomState()) # FIXME needs to respect seed
@@ -188,7 +188,7 @@ def main():
     """
 
     # get command line arguments
-    import utexas.data
+    import borg.data
 
     from cargo.sql.alchemy import SQL_Engines
     from cargo.flags       import parse_given
@@ -228,14 +228,14 @@ def main():
             raise ValueError("unrecognized model type")
 
     # build the entire solver
-    from utexas.sat.solvers          import (
-        SAT_PortfolioSolver,
-        SAT_UncompressingSolver,
-        SAT_PreprocessingSolver,
+    from borg.solvers                import (
+        PortfolioSolver,
+        UncompressingSolver,
+        PreprocessingSolver,
         )
-    from utexas.sat.preprocessors    import SatELitePreprocessor
-    from utexas.portfolio.planners   import HardMyopicActionPlanner
-    from utexas.portfolio.strategies import ModelingSelectionStrategy
+    from borg.solvers              import SatELitePreprocessor
+    from borg.portfolio.planners   import HardMyopicActionPlanner
+    from borg.portfolio.strategies import ModelingSelectionStrategy
 
     planner  = HardMyopicActionPlanner(1.0 - 2e-3)
     strategy = \
@@ -244,10 +244,10 @@ def main():
             planner,
             )
     solver   = \
-        SAT_UncompressingSolver(
+        UncompressingSolver(
 #             SAT_PreprocessingSolver(
 #                 SatELitePreprocessor(),
-                SAT_PortfolioSolver(strategy),
+                PortfolioSolver(strategy),
 #                 ),
             )
 

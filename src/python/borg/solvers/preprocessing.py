@@ -2,16 +2,17 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from cargo.log         import get_logger
-from cargo.temporal    import TimeDelta
-from borg.solvers.base import (
+from cargo.log      import get_logger
+from cargo.temporal import TimeDelta
+from borg.rowed     import Rowed
+from borg.solvers   import (
     AbstractSolver,
-    SAT_BareResult,
+    PreprocessingAttempt,
     )
 
 log = get_logger(__name__)
 
-class SAT_PreprocessingSolver(SAT_Solver):
+class PreprocessingSolver(Rowed, AbstractSolver):
     """
     Execute a solver after a preprocessor pass.
     """
@@ -21,10 +22,10 @@ class SAT_PreprocessingSolver(SAT_Solver):
         Initialize.
         """
 
-        SAT_Solver.__init__(self)
+        Rowed.__init__(self)
 
-        self.preprocessor = preprocessor
-        self.inner_solver = solver
+        self._preprocessor = preprocessor
+        self._solver       = solver
 
     def solve(self, task, cutoff = TimeDelta(seconds = 1e6), seed = None):
         """

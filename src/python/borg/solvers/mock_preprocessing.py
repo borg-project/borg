@@ -4,15 +4,16 @@ utexas/sat/solvers/preprocessing.py
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from cargo.log               import get_logger
-from utexas.sat.solvers.base import (
-    SAT_Solver,
-    SAT_BareResult,
+from cargo.log    import get_logger
+from borg.rowed   import Rowed
+from borg.solvers import (
+    AbstractSolver,
+    PreprocessingAttempt,
     )
 
 log = get_logger(__name__)
 
-class SAT_MockPreprocessingSolver(SAT_Solver):
+class RecyclingPreprocessingSolver(Rowed, AbstractSolver):
     """
     Execute a solver after a preprocessor pass.
     """

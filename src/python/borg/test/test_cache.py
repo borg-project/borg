@@ -11,13 +11,13 @@ def test_copy_tables():
 
     from sqlalchemy        import create_engine
     from cargo.sql.alchemy import make_session
-    from utexas.data       import (
+    from borg.data       import (
         DatumBase,
-        SAT_AttemptRow,
-        SAT_RunAttemptRow,
+        AttemptRow,
+        RunAttemptRow,
         CPU_LimitedRunRow,
         )
-    from utexas.cache      import copy_tables
+    from borg.cache      import copy_tables
 
     # set up the two databases
     from_engine = create_engine("sqlite:///:memory:")
@@ -34,10 +34,10 @@ def test_copy_tables():
 
     # insert some fake data
     fake_attempts = [
-        SAT_RunAttemptRow(run = CPU_LimitedRunRow(), solver_name = "foo"),
-        SAT_RunAttemptRow(run = CPU_LimitedRunRow(), solver_name = "foo"),
-        SAT_RunAttemptRow(run = CPU_LimitedRunRow(), solver_name = "foo"),
-        SAT_RunAttemptRow(run = CPU_LimitedRunRow(), solver_name = "foo"),
+        RunAttemptRow(run = CPU_LimitedRunRow(), solver_name = "foo"),
+        RunAttemptRow(run = CPU_LimitedRunRow(), solver_name = "foo"),
+        RunAttemptRow(run = CPU_LimitedRunRow(), solver_name = "foo"),
+        RunAttemptRow(run = CPU_LimitedRunRow(), solver_name = "foo"),
         ]
 
     from_session.add_all(fake_attempts)
@@ -51,7 +51,7 @@ def test_copy_tables():
         copy_tables(from_connection, to_connection, DatumBase.metadata.sorted_tables)
 
     # did it work?
-    assert_equal(to_session.query(SAT_AttemptRow).count(),    len(fake_attempts))
-    assert_equal(to_session.query(SAT_RunAttemptRow).count(), len(fake_attempts))
+    assert_equal(to_session.query(AttemptRow).count(),        len(fake_attempts))
+    assert_equal(to_session.query(RunAttemptRow).count(),     len(fake_attempts))
     assert_equal(to_session.query(CPU_LimitedRunRow).count(), len(fake_attempts))
 

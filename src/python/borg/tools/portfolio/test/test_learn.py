@@ -15,8 +15,8 @@ def test_tools_portfolio_learn():
 
     with mkdtemp_scoped() as sandbox_path:
         # invoke the script
-        from subprocess                          import check_call
-        from utexas.tools.portfolio.test.support import clean_up_environment
+        from subprocess                        import check_call
+        from borg.tools.portfolio.test.support import clean_up_environment
 
         solver_pickle_path = join(sandbox_path, "solver.pickle")
 
@@ -25,7 +25,7 @@ def test_tools_portfolio_learn():
                 [
                     "python",
                     "-m",
-                    "utexas.tools.portfolio.learn",
+                    "borg.tools.portfolio.learn",
                     "-m",
                     "random",
                     "none",
@@ -45,12 +45,13 @@ def test_tools_portfolio_learn():
     # execute it in an environment with appropriate fake solvers mapped
     import numpy
 
-    from cargo.temporal                  import TimeDelta
-    from utexas.sat.tasks                import FileTask
-    from utexas.sat.solvers              import SAT_Environment
-    from utexas.sat.solvers.test.support import FixedSolver
+    from cargo.temporal            import TimeDelta
+    from borg.tasks                import FileTask
+    from borg.sat                  import SAT_Answer
+    from borg.solvers              import Environment
+    from borg.solvers.test.support import FixedSolver
 
-    fixed_solver  = FixedSolver(True, [1, 2, 3, 4, 0])
+    fixed_solver  = FixedSolver(SAT_Answer(True, [1, 2, 3, 4, 0]))
     named_solvers = {
         "sat/2009/CirCUs"         : fixed_solver,
         "sat/2009/clasp"          : fixed_solver,
@@ -63,10 +64,9 @@ def test_tools_portfolio_learn():
         "sat/2009/rsat_09"        : fixed_solver,
         "sat/2009/SApperloT"      : fixed_solver,
         }
-    environment   = SAT_Environment(named_solvers = named_solvers)
+    environment   = Environment(named_solvers = named_solvers)
     task          = FileTask("/tmp/arbitrary_path.cnf")
-    result        = solver.solve(task, TimeDelta(seconds = 1e6), numpy.random, environment)
+    attempt       = solver.solve(task, TimeDelta(seconds = 1e6), numpy.random, environment)
 
-    assert_equal(result.satisfiable, fixed_solver.satisfiable)
-    assert_equal(result.certificate, fixed_solver.certificate)
+    assert_equal(attempt.answer, fixed_solver.answer)
 

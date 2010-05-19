@@ -39,7 +39,7 @@ while True: pass
 
     # each test instance is similar
     @timed(32.0)
-    def test_solver(solver_code, satisfiable, certificate):
+    def test_solver(solver_code, answer):
         """
         Test the SAT competition-binary solver.
         """
@@ -52,28 +52,26 @@ while True: pass
             code_file.flush()
 
             # build the solver interface
-            from cargo.temporal     import TimeDelta
-            from utexas.sat.tasks   import FileTask
-            from utexas.sat.solvers import SAT_CompetitionSolver
+            from borg.solvers import CompetitionSolver
 
-            command = [
-                "python",
-                code_file.name,
-                ]
-            solver  = SAT_CompetitionSolver(command)
+            solver = CompetitionSolver(["python", code_file.name])
 
             # run the solver
-            task   = FileTask("/tmp/path_irrelevant.cnf")
-            budget = TimeDelta(seconds = 8.0)
-            result = solver.solve(task, budget, None, None)
+            from cargo.temporal import TimeDelta
+            from borg.tasks     import FileTask
+
+            task    = FileTask("/tmp/path_irrelevant.cnf")
+            budget  = TimeDelta(seconds = 8.0)
+            attempt = solver.solve(task, budget, None, None)
 
             # verify its response
-            assert_equal(result.satisfiable, satisfiable)
-            assert_equal(result.certificate, certificate)
+            assert_equal(attempt.answer, answer)
 
     # run each test
-    yield (test_solver, finds_sat_solver,     True,  range(1, 9) + [0])
-    yield (test_solver, finds_unsat_solver,   False, None)
-    yield (test_solver, finds_unknown_solver, None,  None)
-    yield (test_solver, times_out_solver,     None,  None)
+    from borg.sat import SAT_Answer
+
+    yield (test_solver, finds_sat_solver,     SAT_Answer(True,  range(1, 9) + [0]))
+    yield (test_solver, finds_unsat_solver,   SAT_Answer(False, None))
+    yield (test_solver, finds_unknown_solver, None)
+    yield (test_solver, times_out_solver,     None)
 

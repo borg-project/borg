@@ -2,8 +2,8 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from nose.tools                    import assert_equal
-from utexas.portfolio.test.support import FakeAction
+from nose.tools                  import assert_equal
+from borg.portfolio.test.support import FakeAction
 
 def get_action(strategy, task, budget, outcome):
     """
@@ -25,9 +25,9 @@ def test_sequence_selection_strategy():
     Test the sequence selection strategy.
     """
 
-    from itertools                   import cycle
-    from functools                   import partial
-    from utexas.portfolio.strategies import SequenceSelectionStrategy
+    from itertools                 import cycle
+    from functools                 import partial
+    from borg.portfolio.strategies import SequenceSelectionStrategy
 
     actions  = [FakeAction(i) for i in xrange(4)]
     strategy = SequenceSelectionStrategy(cycle(actions))
@@ -51,8 +51,8 @@ def test_fixed_selection_strategy():
     Test the fixed selection strategy.
     """
 
-    from functools                   import partial
-    from utexas.portfolio.strategies import FixedSelectionStrategy
+    from functools                 import partial
+    from borg.portfolio.strategies import FixedSelectionStrategy
 
     strategy = FixedSelectionStrategy(FakeAction(42))
     getter   = partial(get_action, strategy, None, 128.0, None)
@@ -67,9 +67,9 @@ def test_modeling_selection_strategy():
 
     import numpy
 
-    from utexas.portfolio.models     import FixedActionModel
-    from utexas.portfolio.planners   import HardMyopicActionPlanner
-    from utexas.portfolio.strategies import ModelingSelectionStrategy
+    from borg.portfolio.models     import FixedActionModel
+    from borg.portfolio.planners   import HardMyopicActionPlanner
+    from borg.portfolio.strategies import ModelingSelectionStrategy
 
     # set up the strategy
     actions    = [FakeAction(i) for i in xrange(4)]

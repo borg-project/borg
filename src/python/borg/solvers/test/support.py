@@ -2,9 +2,13 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from uuid               import uuid4
-from nose.tools         import assert_equal
-from utexas.sat.solvers import SAT_Solver
+from uuid         import uuid4
+from nose.tools   import assert_equal
+from borg.rowed   import Rowed
+from borg.solvers import (
+    AbstractSolver,
+    AbstractPreprocessor,
+    )
 
 task_uuids      = [uuid4() for i in xrange(3)]
 baz_task_uuids  = [uuid4() for i in xrange(3)]
@@ -23,7 +27,7 @@ sanitized_cnf   = \
 -4 -5 6 0
 """
 
-class TaskVerifyingSolver(SAT_Solver):
+class TaskVerifyingSolver(Rowed, AbstractSolver):
     """
     Solver that merely verifies the contents of the task.
     """
@@ -40,44 +44,79 @@ class TaskVerifyingSolver(SAT_Solver):
         Verify behavior.
         """
 
-        from utexas.sat.solvers import SAT_BareResult
+        from borg.solvers import Attempt
 
         with open(task.path) as task_file:
             assert_equal(task_file.read(), self.correct_cnf)
 
-        return SAT_BareResult(self, task, budget, budget, None, None)
+        return Attempt(self, budget, budget, task, None)
 
-class FixedSolver(SAT_Solver):
+class FixedSolver(Rowed, AbstractSolver):
     """
     A fake, fixed-result solver.
     """
 
-    def __init__(self, satisfiable, certificate):
+    def __init__(self, answer):
         """
         Initialize.
         """
 
-        self.satisfiable = satisfiable
-        self.certificate = certificate
+        self.answer = answer
 
     def solve(self, task, budget, random, environment):
         """
         Pretend to solve the task.
         """
 
-        from utexas.sat.solvers import SAT_BareResult
+        from borg.solvers import Attempt
 
         return \
-            SAT_BareResult(
+            Attempt(
                 self,
+                budget,
+                budget,
                 task,
-                budget,
-                budget,
-                self.satisfiable,
-                self.certificate,
+                self.answer,
                 )
 
-class FixedPreprocessor(SAT_Preprocessor):
+class TaskVerifyingPreprocessor(Rowed, AbstractPreprocessor):
+    """
+    Preprocessor that merely verifies the contents of the task.
+    """
+
+    def __init__(self, correct_cnf):
+        """
+        Initialize.
+        """
+
+        self._correct_cnf = correct_cnf
+
+    def preprocess(self, task, budget, output_dir, random, environment):
+        """
+        Verify behavior.
+        """
+
+        from cargo.unix.accounting import CPU_LimitedRun
+        from borg.solvers          import PreprocessingAttempt
+
+        with open(task.path) as task_file:
+            assert_equal(task_file.read(), self._correct_cnf)
+
+        return \
+            PreprocessingAttempt(
+                self,
+                task,
+                None,
+                None,
+                CPU_LimitedRun(None, budget, None, None, None, budget, None, None),
+                task,
+                )
+
+    def solve(): pass
+    def extend(): pass
+    def make_task(): pass
+
+class FixedPreprocessor(Rowed, AbstractPreprocessor):
     """
     A fake, fixed-result preprocessor.
     """
@@ -95,24 +134,22 @@ class FixedPreprocessor(SAT_Preprocessor):
         Pretend to preprocess an instance.
         """
 
-        from utexas.sat.preprocessors import BarePreprocessorResult
+        from cargo.unix.accounting import CPU_LimitedRun
+        from borg.solvers          import PreprocessingAttempt
 
         return \
-            BarePreprocessorResult(
+            PreprocessingAttempt(
                 self,
                 task,
-                self._output_task,
-                budget,
-                budget,
                 self._answer,
+                None,
+                CPU_LimitedRun(None, budget, None, None, None, budget, None, None),
+                self._output_task,
                 )
 
-    def extend(self, task, answer):
-        """
-        Pretend to extend an answer.
-        """
-
-        raise NotImplementedError()
+    def solve(): pass
+    def extend(): pass
+    def make_task(): pass
 
 def add_fake_runs(session):
     """

@@ -2,24 +2,25 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from cargo.log               import get_logger
-from utexas.sat.solvers.base import SAT_Solver
+from cargo.log    import get_logger
+from borg.rowed   import Rowed
+from borg.solvers import AbstractSolver
 
 log = get_logger(__name__)
 
-class SAT_SanitizingSolver(SAT_Solver):
+class SanitizingSolver(Rowed, AbstractSolver):
     """
     Execute another solver using a sanitized instance.
     """
 
-    def __init__(self, solver):
+    def __init__(self, inner):
         """
         Initialize.
         """
 
-        SAT_Solver.__init__(self)
+        Rowed.__init__(self)
 
-        self.solver = solver
+        self._inner = inner
 
     def solve(self, task, budget, random, environment):
         """
@@ -30,14 +31,14 @@ class SAT_SanitizingSolver(SAT_Solver):
         from cargo.io import mkdtemp_scoped
 
         # argument sanity
-        from utexas.sat.tasks import AbstractFileTask
+        from borg.tasks import AbstractFileTask
 
         if not isinstance(task, AbstractFileTask):
             raise TypeError("sanitizing solver requires a file-backed task")
 
         with mkdtemp_scoped(prefix = "sanitized.") as sandbox_path:
             # unconditionally sanitize the instance
-            from utexas.sat.cnf import write_sanitized_cnf
+            from borg.sat.cnf import write_sanitized_cnf
 
             sanitized_path = join(sandbox_path, "sanitized.cnf")
 
@@ -50,9 +51,9 @@ class SAT_SanitizingSolver(SAT_Solver):
             log.info("sanitized task file is %s", sanitized_path)
 
             # execute the next solver in the chain
-            from utexas.sat.tasks import FileTask
+            from borg.tasks import FileTask
 
             sanitized_task = FileTask(sanitized_path)
 
-            return self.solver.solve(sanitized_task, budget, random, environment)
+            return self._inner.solve(sanitized_task, budget, random, environment)
 

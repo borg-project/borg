@@ -2,7 +2,7 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from utexas.portfolio.world  import (
+from borg.portfolio.world  import (
     Action,
     Outcome,
     )
@@ -89,12 +89,15 @@ class SAT_WorldOutcome(Outcome):
         return self._utility
 
     @staticmethod
-    def from_result(result):
+    def from_result(attempt):
         """
-        Return an outcome from a solver result.
+        Return an outcome from a solver attempt.
         """
 
-        return SAT_WorldOutcome.from_bool(result.satisfiable)
+        if attempt.answer is None:
+            return SAT_WorldOutcome.UNSOLVED
+        else:
+            return SAT_WorldOutcome.from_bool(attempt.answer.satisfiable)
 
     @staticmethod
     def from_bool(bool):

@@ -52,16 +52,17 @@ while True: pass
             code_file.flush()
 
             # build the preprocessor
-            from cargo.temporal           import TimeDelta
-            from utexas.sat.tasks         import FileTask
-            from utexas.sat.preprocessors import SatELitePreprocessor
+            from borg.solvers import SatELitePreprocessor
 
             satelite = SatELitePreprocessor(["python", code_file.name])
 
             # run the preprocessor
-            task   = FileTask("/tmp/path_irrelevant.cnf")
-            budget = TimeDelta(seconds = 8.0)
-            result = satelite.preprocess(task, budget, "/tmp/arbitrary", None, None)
+            from cargo.temporal import TimeDelta
+            from borg.tasks     import FileTask
+
+            task    = FileTask("/tmp/path_irrelevant.cnf")
+            budget  = TimeDelta(seconds = 8.0)
+            attempt = satelite.preprocess(task, budget, "/tmp/arbitrary", None, None)
 
             # verify its response
             from nose.tools import (
@@ -69,15 +70,15 @@ while True: pass
                 assert_equal,
                 )
 
-            assert_equal(result.answer, answer)
+            assert_equal(attempt.answer, answer)
 
             if preprocesses:
-                assert_true(result.output_task is not result.input_task)
+                assert_true(attempt.output_task is not attempt.task)
             else:
-                assert_true(result.output_task is result.input_task)
+                assert_true(attempt.output_task is attempt.task)
 
     # run each test
-    from utexas.sat import SAT_Answer
+    from borg.sat import SAT_Answer
 
     yield (test_satelite, finds_sat_code,    False, SAT_Answer(True, [42, 0]))
     yield (test_satelite, finds_unsat_code,  False, SAT_Answer(False))
@@ -113,16 +114,18 @@ raise SystemExit(10)
             code_file.flush()
 
             # build the preprocessor
-            from utexas.sat.preprocessors import SatELitePreprocessor
+            from borg.solvers import SatELitePreprocessor
 
             satelite = SatELitePreprocessor(["python", code_file.name])
 
             # run the preprocessor
-            from utexas.sat.tasks         import FileTask
-            from utexas.sat.preprocessors import SatELitePreprocessedTask
+            from borg.tasks import (
+                FileTask,
+                PreprocessedDirectoryTask,
+                )
 
             task_in  = FileTask("/tmp/path_irrelevant.cnf")
-            task     = SatELitePreprocessedTask(satelite, None, task_in, "/tmp/foo/")
+            task     = PreprocessedDirectoryTask(satelite, None, task_in, "/tmp/foo/", "bar.cnf")
             extended = satelite.extend(task, answer_in, None)
 
             # verify its response
@@ -131,7 +134,7 @@ raise SystemExit(10)
             assert_equal(extended, answer_out)
 
     # run each test
-    from utexas.sat import SAT_Answer
+    from borg.sat import SAT_Answer
 
     answer_in  = SAT_Answer(True, [42, 0])
     answer_out = SAT_Answer(True, [1, 2, 3, 4, 0])

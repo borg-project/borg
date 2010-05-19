@@ -2,12 +2,13 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from utexas.sat.solvers import (
-    SAT_Solver,
-    SAT_BareResult,
+from borg.rowed   import Rowed
+from borg.solvers import (
+    Attempt,
+    AbstractSolver,
     )
 
-class SAT_PortfolioResult(SAT_BareResult):
+class PortfolioAttempt(Attempt):
     """
     Result of a portfolio solver.
     """
@@ -18,21 +19,18 @@ class SAT_PortfolioResult(SAT_BareResult):
         """
 
         if record:
-            (_, result) = record[-1]
-            satisfiable = result.satisfiable
-            certificate = result.certificate
+            (_, attempt) = record[-1]
+            answer       = attempt.answer
         else:
-            satisfiable = None
-            certificate = None
+            answer = None
 
-        SAT_BareResult.__init__(
+        Attempt.__init__(
             self,
             solver,
-            task,
             budget,
             cost,
-            satisfiable,
-            certificate,
+            task,
+            answer,
             )
 
         self._record = record
@@ -45,9 +43,9 @@ class SAT_PortfolioResult(SAT_BareResult):
 
         return self._record
 
-class SAT_PortfolioSolver(SAT_Solver):
+class PortfolioSolver(Rowed, AbstractSolver):
     """
-    Solve SAT instances with a portfolio.
+    Solve tasks with a portfolio.
     """
 
     def __init__(self, strategy):
@@ -81,10 +79,10 @@ class SAT_PortfolioSolver(SAT_Solver):
 
                 record.append((action.solver, result))
 
-                if result.satisfiable is not None:
+                if result.answer is not None:
                     break
 
-        return SAT_PortfolioResult(self, task, budget, budget - remaining, record)
+        return PortfolioAttempt(self, task, budget, budget - remaining, record)
 
     def _solve_once_on(self, task, budget, random, environment):
         """
@@ -101,8 +99,8 @@ class SAT_PortfolioSolver(SAT_Solver):
             raise RuntimeError("strategy selected an infeasible action")
 
         # take it, and provide the outcome
-        from cargo.temporal             import TimeDelta
-        from utexas.portfolio.sat_world import SAT_WorldOutcome
+        from cargo.temporal           import TimeDelta
+        from borg.portfolio.sat_world import SAT_WorldOutcome
 
         calibrated = TimeDelta(seconds = action.cost * environment.time_ratio)
         result     = action.solver.solve(task, calibrated, random, environment)

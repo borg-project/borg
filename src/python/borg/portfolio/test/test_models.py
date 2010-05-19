@@ -15,8 +15,8 @@ def test_fixed_action_model():
 
     import numpy
 
-    from utexas.portfolio.test.test_strategies import FakeAction
-    from utexas.portfolio.models               import FixedActionModel
+    from borg.portfolio.test.test_strategies import FakeAction
+    from borg.portfolio.models               import FixedActionModel
 
     actions     = [FakeAction(i) for i in xrange(4)]
     predictions = dict((a, numpy.array([0.25, 0.125, 0.125, 0.50])) for a in actions)
@@ -30,8 +30,8 @@ def test_random_action_model():
     """
 
     # set up the model
-    from utexas.portfolio.test.support import FakeAction
-    from utexas.portfolio.models       import RandomActionModel
+    from borg.portfolio.test.support import FakeAction
+    from borg.portfolio.models       import RandomActionModel
 
     actions = [FakeAction(i) for i in xrange(4)]
     model   = RandomActionModel(actions)
