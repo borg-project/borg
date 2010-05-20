@@ -71,6 +71,14 @@ class UncompressingSolver(Rowed, AbstractSolver):
 
         return self._inner.get_new_row(session)
 
+    @property
+    def name(self):
+        """
+        Get the name of this solver, if any.
+        """
+
+        return self._inner.name
+
 class UncompressingPreprocessor(UncompressingSolver, AbstractPreprocessor):
     """
     Uncompress and then preprocess SAT instances.

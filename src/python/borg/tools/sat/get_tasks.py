@@ -20,7 +20,7 @@ module_flags = \
         Flag(
             "--collection",
             default = "default",
-            metavar  = "NAME",
+            metavar = "NAME",
             help    = "task names in collection NAME [%default]",
             ),
         )

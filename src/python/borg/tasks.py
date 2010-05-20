@@ -187,7 +187,7 @@ class PreprocessedTask(Task, AbstractPreprocessedTask):
         self._seed         = seed
         self._input_task   = input_task
 
-    def get_new_row(self, session, preprocessor_row = None, **kwargs):
+    def get_new_row(self, session, preprocessor_row = None):
         """
         Create or obtain an ORM row for this object.
         """

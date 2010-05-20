@@ -64,6 +64,14 @@ class LookupSolver(Rowed, AbstractSolver):
 
         return solver_row
 
+    @property
+    def name(self):
+        """
+        The name used for lookup by this solver.
+        """
+
+        return self._name
+
 class LookupPreprocessor(LookupSolver, AbstractPreprocessor):
     """
     A preprocessor which indirectly executes a named preprocessor.
@@ -95,7 +103,10 @@ class LookupPreprocessor(LookupSolver, AbstractPreprocessor):
         Construct an appropriate preprocessed task from its output directory.
         """
 
-        looked_up = self.look_up(environment)
+        from borg.tasks import WrappedPreprocessedDirectoryTask
 
-        return looked_up.make_task(seed, input_task, output_path, environment, row = row)
+        looked_up = self.look_up(environment)
+        task      = looked_up.make_task(seed, input_task, output_path, environment, row = row)
+
+        return WrappedPreprocessedDirectoryTask(self, task)
 

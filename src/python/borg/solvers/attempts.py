@@ -451,7 +451,12 @@ class PreprocessorAttempt(RunAttempt, AbstractPreprocessorAttempt):
         Create or obtain an ORM row for this object.
         """
 
-        output_task_row = self._output_task.get_row(session, preprocessor_row = solver_row)
+        from borg.tasks import AbstractPreprocessedTask
+
+        if isinstance(self._output_task, AbstractPreprocessedTask):
+            output_task_row = self._output_task.get_row(session, preprocessor_row = solver_row)
+        else:
+            output_task_row = self._output_task.get_row(session)
 
         return \
             RunAttempt._get_new_row(

@@ -7,16 +7,31 @@ if __name__ == "__main__":
 
     raise SystemExit(main())
 
-from cargo.log import get_logger
+from cargo.log   import get_logger
+from cargo.flags import (
+    Flag,
+    Flags,
+    )
 
-log = get_logger(__name__, default_level = "NOTE")
+log          = get_logger(__name__, default_level = "NOTE")
+module_flags = \
+    Flags(
+        "Script Options",
+        Flag(
+            "--restarts",
+            type    = int,
+            default = 1,
+            metavar = "INT",
+            help    = "make INT restarts per task [%default]",
+            ),
+        )
 
 def preprocess_task(
     engine_url,
     preprocessor,
     trial_row,
     input_task_row,
-    runs,
+    restarts,
     named_solvers,
     budget,
     tasks_path,
@@ -34,7 +49,6 @@ def preprocess_task(
     get_logger("borg.solvers.satelite", level = "DEBUG")
 
     # connect to the database
-    from os                import getenv
     from cargo.sql.alchemy import (
         SQL_Engines,
         make_session,
@@ -64,13 +78,18 @@ def preprocess_task(
         from cargo.io   import mkdtemp_scoped
         from borg.tasks import FileTask
 
-        for i in xrange(runs):
+        for i in xrange(restarts):
             # prepare this run
             input_task_name_row = input_task_row.names[0]
             input_task_path     = join(tasks_path, input_task_name_row.name)
             input_task          = FileTask(input_task_path, row = input_task_row)
 
-            log.info("preprocessing %s (run %i of %i)", input_task_name_row.name, i + 1, runs)
+            log.info(
+                "preprocessing %s (run %i of %i)",
+                input_task_name_row.name,
+                i + 1,
+                restarts,
+                )
 
             with mkdtemp_scoped() as temporary_path:
                 # make this run
@@ -124,7 +143,6 @@ def yield_jobs(session, preprocessor_name, budget, tasks_path, output_path, pref
     session.commit()
 
     # yield jobs
-    from os               import getenv
     from cargo.labor.jobs import CallableJob
     from borg.data        import TaskRow
     from borg.solvers     import (
@@ -136,6 +154,7 @@ def yield_jobs(session, preprocessor_name, budget, tasks_path, output_path, pref
     task_rows     = TaskRow.with_prefix(session, prefix)
     named_solvers = get_named_solvers()
     preprocessor  = UncompressingPreprocessor(LookupPreprocessor(preprocessor_name))
+    restarts      = module_flags.given.restarts
 
     for task_row in task_rows:
         yield CallableJob(
@@ -144,7 +163,7 @@ def yield_jobs(session, preprocessor_name, budget, tasks_path, output_path, pref
             preprocessor   = preprocessor,
             trial_row      = trial_row,
             input_task_row = task_row,
-            runs           = 16,
+            restarts       = restarts,
             named_solvers  = named_solvers,
             budget         = budget,
             tasks_path     = tasks_path,

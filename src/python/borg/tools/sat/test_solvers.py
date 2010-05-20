@@ -1,14 +1,10 @@
 # vim: set fileencoding=UTF-8 :
 """
-utexas/tools/sat/run_solvers.py
-
-Test one or more SAT solver(s).
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
 if __name__ == "__main__":
-    from utexas.tools.sat.run_solvers import main
+    from borg.tools.sat.test_solvers import main
 
     raise SystemExit(main())
 

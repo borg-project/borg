@@ -16,9 +16,7 @@ from sqlalchemy                 import (
     ForeignKey,
     LargeBinary,
     )
-from sqlalchemy.orm             import (
-    relationship,
-    )
+from sqlalchemy.orm             import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from cargo.log                  import get_logger
 from cargo.sql.alchemy          import (
@@ -149,14 +147,26 @@ class SolverRow(DatumBase):
     name = Column(String, primary_key = True)
     type = Column(String)
 
-    def get_solver(self):
+    def get_solver(self, environment):
         """
         Get the solver associated with this solver row.
         """
 
-        from utexas.sat.solvers import LookupSolver
+        from borg.solvers import (
+            AbstractSolver,
+            AbstractPreprocessor,
+            )
 
-        return LookupSolver(self.name)
+        inner = environment.named_solvers[self.name]
+
+        if isinstance(inner, AbstractPreprocessor):
+            from borg.solvers import LookupPreprocessor
+
+            return LookupPreprocessor(self.name)
+        else:
+            from borg.solvers import LookupSolver
+
+            return LookupSolver(self.name)
 
 class TrialRow(DatumBase):
     """
@@ -171,6 +181,22 @@ class TrialRow(DatumBase):
     parent_uuid = Column(SQL_UUID, ForeignKey("trials.uuid"))
     label       = Column(String)
 
+    # backref "attempts" from AttemptRow
+    # backref "children" from TrialRow (below)
+
+    def delete(self, session):
+        """
+        Delete this trial, its members, and its children.
+        """
+
+        for attempt in self.attempts:
+            attempt.delete(session)
+
+        for child in self.children:
+            child.delete(session)
+
+        session.delete(self)
+
     @staticmethod
     def get_recyclable(session):
         """
@@ -182,6 +208,13 @@ class TrialRow(DatumBase):
             .query(TrialRow)                                   \
             .filter(TrialRow.uuid == TrialRow.RECYCLABLE_UUID) \
             .one()
+
+TrialRow.parent = \
+    relationship(
+        TrialRow,
+        backref     = "children",
+        remote_side = [TrialRow.uuid],
+        )
 
 class TaskRow(DatumBase):
     """
@@ -201,7 +234,18 @@ class TaskRow(DatumBase):
 
     __mapper_args__ = {"polymorphic_on": type}
 
-    # backref: "names" from TaskNameRow
+    # backref "names" from TaskNameRow
+
+    def get_name(self, collection):
+        """
+        Get this task's name in the specified collection.
+        """
+
+        for name_row in self.names:
+            if name_row.collection == collection:
+                return name_row.name
+
+        raise KeyError("no matching name could be found for this task")
 
     @staticmethod
     def with_prefix(session, prefix, collection = "default"):
@@ -240,6 +284,8 @@ class FileTaskRow(TaskRow):
         """
 
         # find a path for this task, if one exists
+        from os.path import join
+
         task_path = None
 
         for name_row in self.names:
@@ -251,12 +297,16 @@ class FileTaskRow(TaskRow):
                 break
 
         # if possible, build and return the task
+        from os.path import exists
+
         if task_path is None:
             raise RuntimeError("could not find a usable name for this task")
+        elif not exists(task_path):
+            raise RuntimeError("no file corresponds to task name")
         else:
-            from utexas.sat.tasks import FileTask
+            from borg.tasks import FileTask
 
-            return FileTask(tasks_path, row = self)
+            return FileTask(task_path, row = self)
 
 class PreprocessedTaskRow(TaskRow):
     """
@@ -279,7 +329,7 @@ class PreprocessedTaskRow(TaskRow):
     input_task   = \
         relationship(
             TaskRow,
-            primaryjoin = (input_task_uuid == TaskRow.uuid),
+            primaryjoin = (TaskRow.uuid == input_task_uuid),
             )
 
     def get_task(self, environment):
@@ -288,16 +338,18 @@ class PreprocessedTaskRow(TaskRow):
         """
 
         # find the corresponding output directory, if it exists
-        from os import isdir
+        from os.path import (
+            join,
+            isdir,
+            )
 
-        root        = environment.collections[None]
-        output_path = join(root, self.uuid.hex)
+        output_path = join(environment.collections[None], self.uuid.hex)
 
         if not isdir(output_path):
             raise RuntimeError("no corresponding directory exists for task")
 
         # build and return the task
-        preprocessor = self.preprocessor.get_solver()
+        preprocessor = self.preprocessor.get_solver(environment)
         input_task   = self.input_task.get_task(environment)
 
         return preprocessor.make_task(self.seed, input_task, output_path, environment, self)
@@ -458,7 +510,7 @@ class AttemptRow(DatumBase):
     __mapper_args__ = {"polymorphic_on": type}
 
     task   = relationship(TaskRow)
-    answer = relationship(AnswerRow)
+    answer = relationship(AnswerRow, cascade = "save-update, merge, delete")
     trials = \
         relationship(
             TrialRow,
@@ -472,6 +524,13 @@ class AttemptRow(DatumBase):
         """
 
         return AnswerRow.to_answer(self.answer)
+
+    def delete(self, session):
+        """
+        Delete this attempt.
+        """
+
+        session.delete(self)
 
 class PreprocessingAttemptRow(AttemptRow):
     """
@@ -500,6 +559,18 @@ class PreprocessingAttemptRow(AttemptRow):
             primaryjoin = (AttemptRow.uuid == solver_attempt_uuid),
             )
 
+    def delete(self, session):
+        """
+        Delete this attempt.
+        """
+
+        if self.preprocessor_attempt is not None:
+            self.preprocessor_attempt.delete(session)
+        if self.solver_attempt is not None:
+            self.solver_attempt.delete(session)
+
+        AttemptRow.delete(self, session)
+
 class RunAttemptRow(AttemptRow):
     """
     An attempt to solve a task with a concrete solver.
@@ -513,7 +584,7 @@ class RunAttemptRow(AttemptRow):
     seed        = Column(Integer)
     run_uuid    = Column(SQL_UUID, ForeignKey("cpu_limited_runs.uuid"), nullable = False)
 
-    run    = relationship(CPU_LimitedRunRow)
+    run    = relationship(CPU_LimitedRunRow, cascade = "save-update, merge, delete")
     solver = relationship(SolverRow)
 
 class PreprocessorAttemptRow(RunAttemptRow):
