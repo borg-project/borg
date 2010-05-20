@@ -195,8 +195,6 @@ class PreprocessedTask(Task, AbstractPreprocessedTask):
         from sqlalchemy import and_
         from borg.data  import PreprocessedTaskRow as PT
 
-        print "preprocessor", self._preprocessor
-
         if preprocessor_row is None:
             preprocessor_row = self._preprocessor.get_row(session)
 

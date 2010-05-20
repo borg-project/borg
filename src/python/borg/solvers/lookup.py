@@ -57,8 +57,6 @@ class LookupSolver(Rowed, AbstractSolver):
 
         solver_row = session.query(SolverRow).get(self._name)
 
-        print "we are", self
-
         if solver_row is None:
             solver_row = SolverRow(name = self._name, type = "sat")
 
