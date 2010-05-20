@@ -53,8 +53,8 @@ class CompetitionSolver(Rowed, AbstractSolver):
     def __init__(
         self,
         command,
-        memlimit     = None,
         solvers_home = ".",
+        memlimit     = None,
         ):
         """
         Initialize this solver.

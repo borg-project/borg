@@ -18,6 +18,8 @@ class LookupSolver(Rowed, AbstractSolver):
         Initialize.
         """
 
+        Rowed.__init__(self)
+
         self._name = name
 
     def solve(self, task, budget, random, environment):
@@ -53,7 +55,16 @@ class LookupSolver(Rowed, AbstractSolver):
 
         from borg.data import SolverRow
 
-        return session.query(SolverRow).get(self._name)
+        solver_row = session.query(SolverRow).get(self._name)
+
+        print "we are", self
+
+        if solver_row is None:
+            solver_row = SolverRow(name = self._name, type = "sat")
+
+            session.add(solver_row)
+
+        return solver_row
 
 class LookupPreprocessor(LookupSolver, AbstractPreprocessor):
     """

@@ -121,14 +121,14 @@ class FixedPreprocessor(Rowed, AbstractPreprocessor):
     A fake, fixed-result preprocessor.
     """
 
-    def __init__(self, output_task, answer, cost = None):
+    def __init__(self, preprocess, answer, cost = None):
         """
         Initialize.
         """
 
-        self._output_task = output_task
-        self._answer      = answer
-        self._cost        = cost
+        self._preprocess = preprocess
+        self._answer     = answer
+        self._cost       = cost
 
     def preprocess(self, task, budget, output_dir, random, environment):
         """
@@ -143,6 +143,13 @@ class FixedPreprocessor(Rowed, AbstractPreprocessor):
         else:
             cost = self._cost
 
+        if self._preprocess:
+            from borg.tasks import PreprocessedTask
+
+            output_task = PreprocessedTask(self, None, task)
+        else:
+            output_task = task
+
         return \
             PreprocessorAttempt(
                 self,
@@ -150,7 +157,7 @@ class FixedPreprocessor(Rowed, AbstractPreprocessor):
                 self._answer,
                 None,
                 CPU_LimitedRun(None, budget, None, None, None, cost, None, None),
-                self._output_task,
+                output_task,
                 )
 
     def solve(): pass

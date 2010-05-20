@@ -66,7 +66,7 @@ def get_task(
             .first()
 
         if task_name_row is not None:
-            log.debug("database already contains %s", name)
+            log.note("database already contains %s", name)
 
             return
 
@@ -79,7 +79,7 @@ def get_task(
             )
         from borg.sat.cnf import yield_sanitized_cnf
 
-        log.debug("hashing %s", name)
+        log.note("hashing %s", name)
 
         with mkdtemp_scoped(prefix = "cnf.") as sandbox_path:
             uncompressed_path = \
@@ -137,7 +137,7 @@ def yield_get_task_jobs(session, tasks_path, relative_to, collection):
 
 def main():
     """
-    Deal with core database metadata.
+    Run the script.
     """
 
     # get command line arguments

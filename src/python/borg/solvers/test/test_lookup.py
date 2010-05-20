@@ -2,8 +2,6 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from nose.tools import assert_equal
-
 def test_lookup_solver():
     """
     Test the lookup-based solver.
@@ -22,6 +20,8 @@ def test_lookup_solver():
     solver        = LookupSolver("foo")
 
     # test it
+    from nose.tools import assert_equal
+
     attempt = solver.solve(None, None, None, environment)
 
     assert_equal(attempt.answer, foo_solver.answer)
@@ -32,7 +32,7 @@ def test_lookup_preprocessor():
     """
 
     # the body of each
-    def test_preprocessor(input_task, output_task, answer):
+    def test_preprocessor(input_task, preprocess, answer):
         """
         Test the lookup-based preprocessor.
         """
@@ -46,7 +46,7 @@ def test_lookup_preprocessor():
             )
         from borg.solvers.test.support import FixedPreprocessor
 
-        named       = FixedPreprocessor(output_task, answer)
+        named       = FixedPreprocessor(preprocess, answer)
         environment = Environment(named_solvers = {"baz": named})
         lookup      = LookupPreprocessor("baz")
         result      = \
@@ -58,18 +58,30 @@ def test_lookup_preprocessor():
                 environment,
                 )
 
-        assert_equal(result.output_task, output_task)
+        # assert our expectations
+        from nose.tools import (
+            assert_true,
+            assert_equal,
+            )
+
         assert_equal(result.answer, answer)
+
+        if preprocess:
+            assert_true(result.task != result.output_task)
+        else:
+            assert_true(result.task == result.output_task)
 
     # each test
     from borg.sat   import SAT_Answer
-    from borg.tasks import FileTask
+    from borg.tasks import (
+        FileTask,
+        PreprocessedTask,
+        )
 
-    input_task  = FileTask("/tmp/arbitrary_path.cnf")
-    output_task = FileTask("/tmp/arbitrary_path2.cnf")
-    answer      = SAT_Answer(True, [42])
+    input_task = FileTask("/tmp/arbitrary_path.cnf")
+    answer     = SAT_Answer(True, [42])
 
-    yield (test_preprocessor, input_task, input_task, answer)
-    yield (test_preprocessor, input_task, input_task, None)
-    yield (test_preprocessor, input_task, output_task, None)
+    yield (test_preprocessor, input_task, False, answer)
+    yield (test_preprocessor, input_task, False, None)
+    yield (test_preprocessor, input_task, True,  None)
 

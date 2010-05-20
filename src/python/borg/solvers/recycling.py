@@ -84,19 +84,14 @@ class RecyclingSolver(Rowed, AbstractSolver):
         Create or obtain an ORM row for this object.
         """
 
-        from cargo.sql.alchemy import lock_table
-        from borg.data         import SolverRow
+        from borg.data import SolverRow
 
         solver_row = session.query(SolverRow).get(self._solver_name)
 
         if solver_row is None:
             solver_row = SolverRow(name = self._solver_name, type = "sat")
 
-            lock_table(session, SolverRow.__tablename__, "row exclusive")
-
-            solver_row = session.merge(solver_row)
-
-            session.commit()
+            session.add(solver_row)
 
         return solver_row
 

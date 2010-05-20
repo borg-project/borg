@@ -76,21 +76,6 @@ class Task(Rowed, AbstractTask):
 
         Rowed.__init__(self, row)
 
-#     def get_new_row(self, session):
-#         """
-#         Create or obtain an ORM row for this object.
-#         """
-
-#         return session.query(TaskRow).get(self._task_uuid)
-
-#     @property
-#     def task_uuid(self):
-#         """
-#         The UUID of the associated database row.
-#         """
-
-#         return self._task_uuid
-
 class WrappedTask(Rowed, AbstractTask):
     """
     A wrapped task.
@@ -210,6 +195,8 @@ class PreprocessedTask(Task, AbstractPreprocessedTask):
         from sqlalchemy import and_
         from borg.data  import PreprocessedTaskRow as PT
 
+        print "preprocessor", self._preprocessor
+
         if preprocessor_row is None:
             preprocessor_row = self._preprocessor.get_row(session)
 
@@ -271,6 +258,8 @@ class WrappedPreprocessedTask(WrappedFileTask, AbstractPreprocessedTask, Abstrac
         """
         Initialize.
         """
+
+        from borg.solvers import AbstractPreprocessor
 
         assert isinstance(preprocessor, AbstractPreprocessor)
         assert isinstance(inner, AbstractPreprocessedTask)

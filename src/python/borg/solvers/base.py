@@ -43,9 +43,31 @@ def get_named_solvers(paths = [], flags = {}):
 
     from os.path      import dirname
     from cargo.io     import expandpath
-    from borg.solvers import CompetitionSolver
+    from borg.solvers import (
+        CompetitionSolver,
+        SatELitePreprocessor,
+        )
 
     flags = module_flags.merged(flags)
+
+    def competition_loader(relative, attributes):
+        """
+        Load a competition solver.
+        """
+
+        return CompetitionSolver(attributes["command"], relative)
+
+    def satelite_loader(relative, attributes):
+        """
+        Load a SatELite solver.
+        """
+
+        return SatELitePreprocessor(attributes["command"], relative)
+
+    loaders = {
+        "competition" : competition_loader,
+        "satelite"    : satelite_loader,
+        }
 
     def yield_solvers_from(raw_path):
         """
@@ -61,14 +83,9 @@ def get_named_solvers(paths = [], flags = {}):
         log.note("read named-solvers file: %s", raw_path)
 
         for (name, attributes) in loaded.get("solvers", {}).items():
-            yield (
-                name,
-                CompetitionSolver(
-                    attributes["command"],
-                    solvers_home = relative,
-                    name         = name,
-                    ),
-                )
+            yield (name, loaders[attributes["type"]](relative, attributes))
+
+            log.debug("constructed named solver %s", name)
 
         for included in loaded.get("includes", []):
             for solver in yield_solvers_from(expandpath(included, relative)):
