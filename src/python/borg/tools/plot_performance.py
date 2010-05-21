@@ -17,54 +17,84 @@ def plot_trial(session, trial_row):
     """
 
     # get the relevant attempts
-    from sqlalchemy import and_
-    from borg.data  import RunAttemptRow
+    from sqlalchemy     import and_
+    from borg.data      import (
+        RunAttemptRow,
+        SAT_AnswerRow,
+        )
 
-    attempt_rows =                                        \
-        session                                           \
-        .query(RunAttemptRow)                             \
+    rows =                                                       \
+        session                                                  \
+        .query(
+            RunAttemptRow.solver_name,
+            RunAttemptRow.budget,
+            RunAttemptRow.cost,
+            SAT_AnswerRow.satisfiable,
+            )                                                    \
         .filter(
             and_(
                 RunAttemptRow.trials.contains(trial_row),
                 RunAttemptRow.answer != None,
+                RunAttemptRow.answer_uuid == SAT_AnswerRow.uuid,
                 ),
-            )                                             \
+            )                                                    \
         .order_by(RunAttemptRow.cost)
 
     # break them into series
-    attempts = {}
-    budget   = None
+    costs      = {}
+    the_budget = None
 
-    for attempt_row in attempt_rows:
+    for (solver_name, budget, cost, satisfiable) in rows:
+        # store the cost and answer
+        solver_costs = costs.get(solver_name, [])
 
-        solver_name     = attempt_row.solver_name
-        solver_attempts = attempts.get(solver_name, [])
+        solver_costs.append((cost, satisfiable))
 
-        solver_attempts.append(attempt_row.cost)
-
-        attempts[solver_name] = solver_attempts
+        costs[solver_name] = solver_costs
 
         # determine the budget
-        if budget is None:
-            budget = attempt_row.budget
+        if the_budget is None:
+            the_budget = budget
         else:
-            if budget != attempt_row.budget:
+            if the_budget != budget:
                 raise RuntimeError("multiple budgets in trial")
 
-    session.commit()
+    # build a color list
+    import numpy
+
+    from matplotlib.colors import hsv_to_rgb
+
+    hsv_colors = numpy.empty((1, len(costs), 3))
+
+    hsv_colors[:, :, 0] = numpy.r_[0.0:0.75:complex(0, len(costs))]
+    hsv_colors[:, :, 1] = 1.0
+    hsv_colors[:, :, 2] = 0.75
+
+    (rgb_colors,) = hsv_to_rgb(hsv_colors)
 
     # plot the series
     import pylab
 
-    pylab.title("Solver Performance (Trial %s)" % trial_row.uuid)
+    for (i, (name, costs)) in enumerate(costs.iteritems()):
+        # set up the coordinates
+        x_values      = [0.0] + [c.as_s for (c, _) in costs] + [budget.as_s]
+        y_values      = range(len(costs) + 1) + [len(costs)]
+        tick_x_values = {True: [], False: []}
+        tick_y_values = {True: [], False: []}
 
-    for (name, costs) in attempts.iteritems():
-        x_values = [0.0] + [c.as_s for c in costs] + [budget.as_s]
-        y_values = range(len(costs) + 1) + [len(costs)]
+        for (j, (_, satisfiable)) in enumerate(costs):
+            tick_x_values[satisfiable].append(x_values[j + 1])
+            tick_y_values[satisfiable].append(y_values[j + 1])
 
-        pylab.plot(x_values, y_values, label = name)
+        # then plot them
+        color = rgb_colors[i, :]
 
-    pylab.legend()
+        pylab.plot(x_values, y_values, label = name, c = color)
+        pylab.plot(tick_x_values[True], tick_y_values[True], marker = "+", c = color, ls = "None")
+        pylab.plot(tick_x_values[False], tick_y_values[False], marker = "x", c = color, ls = "None")
+
+    pylab.title("Solver Performance (Trial $\\mathtt{%s}$)" % trial_row.uuid)
+    pylab.legend(loc = "lower right")
     pylab.show()
 
 def main():
