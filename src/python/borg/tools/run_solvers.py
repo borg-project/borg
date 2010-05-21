@@ -145,23 +145,17 @@ def main():
     # get command line arguments
     import cargo.labor.storage
     import borg.data
+    import borg.tasks
     import borg.solvers
 
-    from cargo.flags import parse_given
-
-    (budget, arguments, collections) = \
-        parse_given(
-            usage = "%prog <budget> <arguments.json> <collections.json> [options]",
-            )
-
-    # interpret them
-    from cargo.io       import expandpath
     from cargo.json     import load_json
+    from cargo.flags    import parse_given
     from cargo.temporal import TimeDelta
 
-    budget      = TimeDelta(seconds = float(budget))
-    arguments   = load_json(arguments)
-    collections = dict((k, expandpath(v)) for (k, v) in load_json(collections))
+    (budget, arguments) = parse_given(usage = "%prog <budget> <args.json> [options]")
+
+    budget    = TimeDelta(seconds = float(budget))
+    arguments = load_json(arguments)
 
     # set up logging
     from cargo.log import enable_default_logging
@@ -207,7 +201,8 @@ def main():
             session.commit()
 
             # build jobs
-            from uuid import UUID
+            from uuid       import UUID
+            from borg.tasks import get_collections
 
             jobs = \
                 list(
@@ -217,7 +212,7 @@ def main():
                         budget,
                         arguments["solvers"],
                         map(UUID, arguments["tasks"]),
-                        collections,
+                        get_collections(),
                         ),
                     )
 

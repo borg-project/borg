@@ -95,7 +95,7 @@ def get_task(
         from cargo.sql.alchemy import lock_table
         from borg.data         import FileTaskRow as FT
 
-        lock_table(session.connection().engine, FT.__tablename__)
+        lock_table(session.connection().engine, FT.__tablename__, "share row exclusive")
 
         task_row = session.query(FT).filter(FT.hash == buffer(file_hash)).first()
 

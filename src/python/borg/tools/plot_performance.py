@@ -59,21 +59,12 @@ def plot_trial(session, trial_row):
             if the_budget != budget:
                 raise RuntimeError("multiple budgets in trial")
 
-    # build a color list
-    import numpy
-
-    from matplotlib.colors import hsv_to_rgb
-
-    hsv_colors = numpy.empty((1, len(costs), 3))
-
-    hsv_colors[:, :, 0] = numpy.r_[0.0:0.75:complex(0, len(costs))]
-    hsv_colors[:, :, 1] = 1.0
-    hsv_colors[:, :, 2] = 0.75
-
-    (rgb_colors,) = hsv_to_rgb(hsv_colors)
-
     # plot the series
     import pylab
+
+    from cargo.plot import get_color_list
+
+    colors = get_color_list(len(costs))
 
     for (i, (name, costs)) in enumerate(costs.iteritems()):
         # set up the coordinates
@@ -87,7 +78,7 @@ def plot_trial(session, trial_row):
             tick_y_values[satisfiable].append(y_values[j + 1])
 
         # then plot them
-        color = rgb_colors[i, :]
+        color = colors[i, :]
 
         pylab.plot(x_values, y_values, label = name, c = color)
         pylab.plot(tick_x_values[True], tick_y_values[True], marker = "+", c = color, ls = "None")

@@ -2,17 +2,48 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from abc        import (
+from abc         import (
     abstractmethod,
     abstractproperty,
     )
-from cargo.log  import get_logger
-from borg.rowed import (
+from cargo.log   import get_logger
+from cargo.flags import (
+    Flag,
+    Flags,
+    )
+from borg.rowed  import (
     Rowed,
     AbstractRowed,
     )
 
-log = get_logger(__name__)
+log          = get_logger(__name__)
+module_flags = \
+    Flags(
+        "Script Options",
+        Flag(
+            "--task-collections",
+            metavar = "PATH",
+            help    = "read collection paths from PATH [%default]",
+            )
+        )
+
+def get_collections(path = None, default = {None: "."}):
+    """
+    Get paths to task collections from a configuration file.
+    """
+
+    from cargo.io   import expandpath
+    from cargo.json import load_json
+
+    if path is None:
+        json_path = module_flags.given.task_collections
+    else:
+        json_path = path
+
+    if json_path is None:
+        return default
+
+    return dict((k, expandpath(v)) for (k, v) in load_json(json_path))
 
 class AbstractTask(AbstractRowed):
     """

@@ -21,7 +21,7 @@ def main():
 
     from cargo.flags import parse_given
 
-    trial_uuids = parse_given(usage = "%prog [options]")
+    trial_uuids = parse_given(usage = "%prog <trial_uuid> [<trial_uuid> [...]] [options]")
 
     # set up logging
     from cargo.log import enable_default_logging

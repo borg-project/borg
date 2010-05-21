@@ -83,7 +83,11 @@ class CPU_LimitedRunRow(DatumBase):
     def from_run(run, **kwargs):
         """
         Create a row from a run instance.
+
+        The run is assumed to have been made on this machine.
         """
+
+        from socket import getfqdn
 
         row = \
             CPU_LimitedRunRow(
@@ -93,6 +97,7 @@ class CPU_LimitedRunRow(DatumBase):
                 cutoff        = run.limit,
                 exit_status   = run.exit_status,
                 exit_signal   = run.exit_signal,
+                fqdn          = getfqdn(),
                 **kwargs
                 )
 
@@ -235,6 +240,13 @@ class TaskRow(DatumBase):
     __mapper_args__ = {"polymorphic_on": type}
 
     # backref "names" from TaskNameRow
+
+    def get_task(self, environment):
+        """
+        Build a task from this task row.
+        """
+
+        raise RuntimeError("base task has no associated file")
 
     def get_name(self, collection):
         """

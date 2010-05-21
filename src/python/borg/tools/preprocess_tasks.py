@@ -13,7 +13,7 @@ from cargo.flags import (
     Flags,
     )
 
-log          = get_logger(__name__, default_level = "NOTE")
+log          = get_logger(__name__, default_level = "INFO")
 module_flags = \
     Flags(
         "Script Options",
@@ -30,12 +30,11 @@ def preprocess_task(
     engine_url,
     preprocessor,
     trial_row,
-    input_task_row,
+    input_task_uuid,
     restarts,
     named_solvers,
     budget,
-    tasks_path,
-    output_path,
+    collections,
     ):
     """
     Make some number of preprocessor runs on a task.
@@ -61,35 +60,31 @@ def preprocess_task(
         # set up the environment
         from borg.solvers import Environment
 
+        output_path = collections[None]
         environment = \
             Environment(
                 MainSession   = MainSession,
                 named_solvers = named_solvers,
+                collections   = collections,
                 )
 
         # merge unpickled rows
-        trial_row      = session.merge(trial_row)
-        input_task_row = session.merge(input_task_row)
+        from borg.data import TaskRow
 
-        session.commit()
+        trial_row      = session.merge(trial_row)
+        input_task_row = session.query(TaskRow).get(input_task_uuid)
+
+        if input_task_row is None:
+            raise RuntimeError("no such task")
 
         # make the preprocessor runs
-        from os.path    import join
-        from cargo.io   import mkdtemp_scoped
-        from borg.tasks import FileTask
+        from cargo.io import mkdtemp_scoped
 
         for i in xrange(restarts):
             # prepare this run
-            input_task_name_row = input_task_row.names[0]
-            input_task_path     = join(tasks_path, input_task_name_row.name)
-            input_task          = FileTask(input_task_path, row = input_task_row)
+            input_task = input_task_row.get_task(environment)
 
-            log.info(
-                "preprocessing %s (run %i of %i)",
-                input_task_name_row.name,
-                i + 1,
-                restarts,
-                )
+            log.info("preprocessing %s (run %i of %i)", input_task_uuid, i + 1, restarts)
 
             with mkdtemp_scoped() as temporary_path:
                 # make this run
@@ -107,17 +102,19 @@ def preprocess_task(
 
                 run_row.trials = [trial_row]
 
-                log.info("run_row %s", run_row)
-                log.info("run_row uuid %s", run_row.uuid)
-
                 # save the preprocessed task data, if necessary
                 if attempt.output_task != attempt.task:
                     from os      import rename
-                    from os.path import lexists
+                    from os.path import (
+                        join,
+                        lexists,
+                        )
                     from shutil  import copytree
 
                     output_task_row = attempt.output_task.get_row(session)
                     final_path      = join(output_path, output_task_row.uuid.hex)
+
+                    log.info("output task is %s", output_task_row)
 
                     if not lexists(final_path):
                         stage_path = "%s.partial" % final_path
@@ -125,10 +122,12 @@ def preprocess_task(
                         copytree(temporary_path, stage_path)
                         rename(stage_path, final_path)
 
+                        log.note("copied output from %s to %s", temporary_path, final_path)
+
             # flush this row to the database
             session.commit()
 
-def yield_jobs(session, preprocessor_name, budget, tasks_path, output_path, prefix):
+def yield_jobs(session, preprocessor_names, budget, task_uuids, collections):
     """
     Generate a set of jobs to distribute.
     """
@@ -137,7 +136,7 @@ def yield_jobs(session, preprocessor_name, budget, tasks_path, output_path, pref
     from cargo.temporal import utc_now
     from borg.data      import TrialRow
 
-    trial_row = TrialRow(label = "preprocessor runs (at %s)" % utc_now())
+    trial_row = TrialRow(label = "preprocessing tasks (at %s)" % utc_now())
 
     session.add(trial_row)
     session.commit()
@@ -151,24 +150,24 @@ def yield_jobs(session, preprocessor_name, budget, tasks_path, output_path, pref
         get_named_solvers,
         )
 
-    task_rows     = TaskRow.with_prefix(session, prefix)
     named_solvers = get_named_solvers()
-    preprocessor  = UncompressingPreprocessor(LookupPreprocessor(preprocessor_name))
     restarts      = module_flags.given.restarts
 
-    for task_row in task_rows:
-        yield CallableJob(
-            preprocess_task,
-            engine_url     = session.connection().engine.url,
-            preprocessor   = preprocessor,
-            trial_row      = trial_row,
-            input_task_row = task_row,
-            restarts       = restarts,
-            named_solvers  = named_solvers,
-            budget         = budget,
-            tasks_path     = tasks_path,
-            output_path    = output_path,
-            )
+    for preprocessor_name in preprocessor_names:
+        preprocessor = UncompressingPreprocessor(LookupPreprocessor(preprocessor_name))
+
+        for task_uuid in task_uuids:
+            yield CallableJob(
+                preprocess_task,
+                engine_url      = session.connection().engine.url,
+                preprocessor    = preprocessor,
+                trial_row       = trial_row,
+                input_task_uuid = task_uuid,
+                restarts        = restarts,
+                named_solvers   = named_solvers,
+                budget          = budget,
+                collections     = collections,
+                )
 
 def main():
     """
@@ -180,22 +179,21 @@ def main():
     import borg.data
     import borg.solvers
 
+    from cargo.json     import load_json
     from cargo.flags    import parse_given
     from cargo.temporal import TimeDelta
 
-    (preprocessor_name, budget, tasks_path, output_path, prefix) = \
-        parse_given(
-            usage = "%prog <preprocessor> <budget> <tasks> <output> <prefix> [options]",
-            )
+    (budget, arguments) = parse_given(usage = "%prog <budget> <args.json> [options]")
 
-    budget = TimeDelta(seconds = float(budget))
+    budget    = TimeDelta(seconds = float(budget))
+    arguments = load_json(arguments)
 
     # set up logging
     from cargo.log import enable_default_logging
 
     enable_default_logging()
 
-    get_logger("sqlalchemy.engine", level = "DETAIL")
+    get_logger("sqlalchemy.engine", level = "WARNING")
 
     # connect to the database and go
     from cargo.sql.alchemy import (
@@ -209,16 +207,19 @@ def main():
 
         ResearchSession = make_session(bind = research_connect())
 
+        # build jobs
+        from uuid       import UUID
+        from borg.tasks import get_collections
+
         with ResearchSession() as session:
             jobs = \
                 list(
                     yield_jobs(
                         session,
-                        preprocessor_name,
+                        arguments["preprocessors"],
                         budget,
-                        abspath(tasks_path),
-                        abspath(output_path),
-                        prefix,
+                        map(UUID, arguments["tasks"]),
+                        get_collections(),
                         ),
                     )
 
@@ -226,5 +227,5 @@ def main():
         from cargo.labor.storage import outsource_or_run
         from cargo.temporal      import utc_now
 
-        outsource_or_run(jobs, "preprocessing %s (at %s)" % (prefix, utc_now()))
+        outsource_or_run(jobs, "preprocessing tasks (at %s)" % utc_now())
 
