@@ -48,14 +48,17 @@ def main():
     enable_default_logging()
 
     get_logger("cargo.statistics.mixture", level = "DETAIL")
+    get_logger("sqlalchemy.engine",        level = "DEBUG")
 
     # construct the builder
     from cargo.sql.alchemy        import make_session
     from borg.data                import research_connect
     from borg.portfolio.sat_world import SAT_Trainer
 
+    train_task_uuids = ["1e993586-1709-4c3a-b9a0-9b7fa23adc39"] # FIXME
+
     ResearchSession = make_session(bind = research_connect())
-    trainer         = SAT_Trainer(ResearchSession)
+    trainer         = SAT_Trainer(train_task_uuids, ResearchSession)
     solver          = build_requested(request, trainer)
 
     # write it to disk

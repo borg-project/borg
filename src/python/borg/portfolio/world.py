@@ -1,8 +1,4 @@
 """
-utexas/portfolio/world.py
-
-Actions, tasks, outcomes, and other pieces of the world.
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 

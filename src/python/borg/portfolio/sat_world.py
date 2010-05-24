@@ -9,7 +9,7 @@ from borg.portfolio.world import (
     Outcome,
     )
 
-class Trainer(ABC):
+class AbstractTrainer(ABC):
     """
     Grant a portfolio access to training data.
     """
@@ -26,17 +26,18 @@ class Trainer(ABC):
         Provide per-task {outcome: count} maps to the trainee.
         """
 
-class SAT_Trainer(Trainer):
+class SAT_Trainer(AbstractTrainer):
     """
     Grant a SAT portfolio access to training data.
     """
 
-    def __init__(self, Session):
+    def __init__(self, task_uuids, Session):
         """
         Initialize.
         """
 
-        self._Session = Session
+        self._task_uuids = task_uuids
+        self._Session    = Session
 
     def build_actions(self, request):
         """
@@ -61,15 +62,48 @@ class SAT_Trainer(Trainer):
         """
 
         with self._Session() as session:
-            solver_row  = action.solver.get_row(session)
-            answer_case = 
-            expression  = \
+            from sqlalchemy               import (
+                and_,
+                case,
+                select,
+                )
+            from sqlalchemy.sql.functions import count
+            from borg.data                import (
+                TrialRow      as TR,
+                AttemptRow    as AR,
+                RunAttemptRow as RAR,
+                )
+
+            # related rows
+            solver_row           = action.solver.get_row(session)
+            recyclable_trial_row = TR.get_recyclable(session)
+
+            # existing action outcomes
+            rows = \
+                session.execute( 
                     select(
                         [
-                            count(answer_case),
+                            count(case([(RAR.cost <= action.cost, RAR.answer_uuid)])),
                             count(),
                             ],
-                        )
+                        and_(
+                            RAR.solver           == solver_row,
+                            RAR.budget           >= action.cost,
+                            RAR.__table__.c.uuid == AR.uuid,
+                            RAR.task_uuid.in_(self._task_uuids),
+                            RAR.trials.contains(recyclable_trial_row),
+                            ),
+                        group_by = RAR.task_uuid,
+                        ),
+                    )
+
+            return [
+                {
+                    SAT_WorldOutcome.SOLVED   : s,
+                    SAT_WorldOutcome.UNSOLVED : a - s,
+                    }
+                for (s, a) in rows
+                ]
 
 class SAT_WorldAction(Action):
     """
