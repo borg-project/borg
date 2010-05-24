@@ -29,18 +29,33 @@ def assert_sane_predictions(predictions):
         if numpy.sum(prediction) != 1.0:
             raise ValueError("non-normalized probability vector")
 
-class ActionModel(ABC):
+def build_model(request, trainer):
+    """
+    Build a model as requested.
+    """
+
+    builders = {
+        "oracle"      : OracleModel.build,
+        "dcm"         : DCM_MixtureModel.build,
+        "multinomial" : MultinomialMixtureModel.build,
+        "random"      : RandomModel.build,
+        "fixed"       : FixedModel.build,
+        }
+
+    return builders[request["type"]](request, trainer)
+
+class AbstractModel(ABC):
     """
     A model of action outcomes.
     """
 
     @abstractmethod
-    def predict(self, task, history):
+    def predict(self, task, history, random):
         """
         Return a map between actions and (normalized) predicted probabilities.
         """
 
-class FixedActionModel(ActionModel):
+class FixedModel(AbstractModel):
     """
     Stick to one prediction.
     """
@@ -56,44 +71,59 @@ class FixedActionModel(ActionModel):
         # members
         self._predictions = predictions
 
-    def predict(self, task, history):
+    def predict(self, task, history, random):
         """
         Return the fixed map.
         """
 
         return self._predictions
 
-class RandomActionModel(ActionModel):
+    @staticmethod
+    def build(request, trainer):
+        """
+        Build a model as requested.
+        """
+
+        raise NotImplementedError()
+
+class RandomModel(AbstractModel):
     """
     Make random predictions.
     """
 
-    def __init__(self, actions, random = numpy.random):
+    def __init__(self, actions):
         """
         Initialize.
         """
 
         self.actions = actions
-        self.random  = random
 
-    def _random_prediction(self, action):
+    def _random_prediction(self, action, random):
         """
         Return a random prediction.
         """
 
-        predictions  = self.random.rand(len(action.outcomes))
+        predictions  = random.rand(len(action.outcomes))
         predictions /= numpy.sum(predictions)
 
         return predictions
 
-    def predict(self, task, history):
+    def predict(self, task, history, random):
         """
         Return the predicted probability of each outcome, given history.
         """
 
-        return dict((a, self._random_prediction(a)) for a in self.actions)
+        return dict((a, self._random_prediction(a, random)) for a in self.actions)
 
-class MultinomialMixtureActionModel(ActionModel):
+    @staticmethod
+    def build(request, trainer):
+        """
+        Build a model as requested.
+        """
+
+        return RandomModel(trainer.build_actions(request["actions"]))
+
+class MultinomialMixtureModel(AbstractModel):
     """
     An arbitrary mixture model.
     """
@@ -189,10 +219,59 @@ class MultinomialMixtureActionModel(ActionModel):
 
         return dict(zip(feasible, predicted))
 
+    @staticmethod
+    def build_with(training, k, em_restarts):
+        """
+        Build a model as specified.
+        """
+
+        log.info("building a multinomial mixture model")
+
+        from cargo.statistics.mixture     import (
+            RestartedEstimator,
+            EM_MixtureEstimator,
+            smooth_multinomial_mixture,
+            )
+        from cargo.statistics.multinomial import MultinomialEstimator
+        from borg.portfolio.models        import MultinomialMixtureActionModel
+
+        model = \
+            MultinomialMixtureModel(
+                training,
+                RestartedEstimator(
+                    EM_MixtureEstimator(
+                        [[MultinomialEstimator()] * ncomponents] * len(training),
+                        ),
+                    nrestarts = nrestarts,
+                    ),
+                )
+
+        smooth_multinomial_mixture(model.mixture)
+
+        return model
+
+    @staticmethod
+    def build(request, trainer):
+        """
+        Build a model as requested.
+        """
+
+        # get actions and training samples
+        actions = trainer.build_actions(request["actions"])
+        samples = dict((a, trainer.get_data(a)) for a in actions)
+
+        # build the model
+        return \
+            MultinomialMixtureModel.build_with(
+                samples,
+                request["components"],
+                request["em_restarts"],
+                )
+
     # properties
     mixture = property(lambda self: self._mixture)
 
-class DCM_MixtureActionModel(ActionModel):
+class DCM_MixtureModel(AbstractModel):
     """
     A DCM mixture model.
     """
@@ -233,7 +312,8 @@ class DCM_MixtureActionModel(ActionModel):
 
         return post_pi_K
 
-    def predict(self, task, history, feasible):
+#     def predict(self, task, history, feasible):
+    def predict(self, task, history, random):
 
         # mise en place
         M = self.mixture.ndomains
@@ -288,7 +368,57 @@ class DCM_MixtureActionModel(ActionModel):
 
         return dict(zip(feasible, predicted))
 
-class OracleActionModel(ActionModel):
+    @staticmethod
+    def build_with(training, k, em_restarts):
+        """
+        Build a model as specified.
+        """
+
+        log.info("building a DCM mixture model")
+
+        from cargo.statistics.dcm     import (
+            DCM_Estimator,
+            smooth_dcm_mixture,
+            )
+        from cargo.statistics.mixture import (
+            RestartedEstimator,
+            EM_MixtureEstimator,
+            )
+
+        model = \
+            DCM_MixtureModel(
+                training,
+                RestartedEstimator(
+                    EM_MixtureEstimator(
+                        [[DCM_Estimator()] * k] * len(training),
+                        ),
+                    nrestarts = em_restarts,
+                    ),
+                )
+
+        smooth_dcm_mixture(model.mixture)
+
+        return model
+
+    @staticmethod
+    def build(request, trainer):
+        """
+        Build a model as requested.
+        """
+
+        # get actions and training samples
+        actions = trainer.build_actions(request["actions"])
+        samples = dict((a, trainer.get_data(a)) for a in actions)
+
+        # build the action model
+        return \
+            DCM_MixtureModel.build_with(
+                samples,
+                request["components"],
+                request["em_restarts"],
+                )
+
+class OracleModel(AbstractModel):
     """
     Nosce te ipsum.
     """
@@ -304,7 +434,7 @@ class OracleActionModel(ActionModel):
         # FIXME hack
         self.last_task_n = None
 
-    def predict(self, task, history, out = None):
+    def predict(self, task, history, random):
         """
         Return the predicted probability of each outcome given history.
         """
@@ -324,4 +454,12 @@ class OracleActionModel(ActionModel):
             out[:] = ps
 
         return out
+
+    @staticmethod
+    def build(request, trainer):
+        """
+        Build a model as requested.
+        """
+
+        raise NotImplementedError()
 

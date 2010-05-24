@@ -2,26 +2,37 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-import numpy
-
 from abc         import abstractmethod
 from cargo.log   import get_logger
 from cargo.sugar import ABC
 
 log = get_logger(__name__)
 
-class SelectionStrategy(ABC):
+def build_strategy(request, trainer):
+    """
+    Build a selection strategy as requested.
+    """
+
+    builders = {
+        "sequence" : SequenceStrategy.build,
+        "fixed"    : FixedStrategy.build,
+        "modeling" : ModelingStrategy.build,
+        }
+
+    return builders[request["type"]](request, trainer)
+
+class AbstractStrategy(ABC):
     """
     Abstract base for selection strategies.
     """
 
     @abstractmethod
-    def select(self, task, budget):
+    def select(self, task, budget, random):
         """
         Select an action, yield it, and receive its outcome.
         """
 
-class SequenceSelectionStrategy(SelectionStrategy):
+class SequenceStrategy(AbstractStrategy):
     """
     A strategy the follows an iterable sequence.
     """
@@ -33,7 +44,7 @@ class SequenceSelectionStrategy(SelectionStrategy):
 
         self.action_sequence = iter(actions)
 
-    def select(self, task, budget):
+    def select(self, task, budget, random):
         """
         Select an action, yield it, and receive its outcome.
         """
@@ -45,7 +56,15 @@ class SequenceSelectionStrategy(SelectionStrategy):
         else:
             yield selected
 
-class FixedSelectionStrategy(SequenceSelectionStrategy):
+    @staticmethod
+    def build(request, trainer):
+        """
+        Build a sequence strategy as requested.
+        """
+
+        raise NotImplementedError()
+
+class FixedStrategy(SequenceStrategy):
     """
     A strategy that repeats a fixed action.
     """
@@ -59,7 +78,15 @@ class FixedSelectionStrategy(SequenceSelectionStrategy):
 
         SequenceSelectionStrategy.__init__(self, repeat(action))
 
-class ModelingSelectionStrategy(SelectionStrategy):
+    @staticmethod
+    def build(request, trainer):
+        """
+        Build a fixed strategy as requested.
+        """
+
+        raise NotImplementedError()
+
+class ModelingStrategy(AbstractStrategy):
     """
     A strategy that employs a model of its actions.
     """
@@ -73,17 +100,32 @@ class ModelingSelectionStrategy(SelectionStrategy):
         self.planner = planner
         self.history = []
 
-    def select(self, task, budget):
+    def select(self, task, budget, random):
         """
         Select an action, yield it, and receive its outcome.
         """
 
         # predict, then make a selection
-        predicted = self.model.predict(task, self.history)
-        selected  = self.planner.select(predicted, budget)
+        predicted = self.model.predict(task, self.history, random)
+        selected  = self.planner.select(predicted, budget, random)
         outcome   = yield selected
 
         # remember its result
         if outcome is not None:
             self.history.append((task, selected, outcome))
+
+    @staticmethod
+    def build(request, trainer):
+        """
+        Build a modeling selection strategy as requested.
+        """
+
+        from borg.portfolio.models   import build_model
+        from borg.portfolio.planners import build_planner
+
+        return \
+            ModelingStrategy(
+                build_model(request["model"], trainer),
+                build_planner(request["planner"], trainer),
+                )
 

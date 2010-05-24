@@ -17,7 +17,19 @@ from cargo.sugar import ABC
 
 log = get_logger(__name__)
 
-class ActionPlanner(ABC):
+def build_planner(request, trainer):
+    """
+    Build an action planner as requested.
+    """
+
+    builders = {
+        "hard_myopic" : HardMyopicPlanner.build,
+        "soft_myopic" : SoftMyopicPlanner.build,
+        }
+
+    return builders[request["type"]](request, trainer)
+
+class AbstractPlanner(ABC):
     """
     Interface for action selection schemes.
     """
@@ -28,9 +40,7 @@ class ActionPlanner(ABC):
         Select an action given the probabilities of outcomes.
         """
 
-        assert False
-
-class HardMyopicActionPlanner(ActionPlanner):
+class HardMyopicPlanner(AbstractPlanner):
     """
     Deterministic greedy action selection.
     """
@@ -60,17 +70,24 @@ class HardMyopicActionPlanner(ActionPlanner):
         else:
             return None
 
-class SoftMyopicActionPlanner(ActionPlanner):
+    @staticmethod
+    def build(request, trainer):
+        """
+        Build a sequence strategy as requested.
+        """
+
+        return HardMyopicPlanner(request["discount"])
+
+class SoftMyopicPlanner(AbstractPlanner):
     """
     Probabilistic greedy action selection.
     """
 
-    def __init__(self, world, discount, temperature = 1.0):
+    def __init__(self, discount, temperature = 1.0):
         """
         Initialize.
         """
 
-        self.world       = world
         self.discount    = discount
         self.temperature = temperature
 
@@ -91,4 +108,12 @@ class SoftMyopicActionPlanner(ActionPlanner):
         log.detail("selected action %i (p = %.4f): %s", naction, probabilities[naction], action)
 
         return action
+
+    @staticmethod
+    def build(request, trainer):
+        """
+        Build a sequence strategy as requested.
+        """
+
+        return SoftMyopicPlanner(request["discount"], request["temperature"])
 

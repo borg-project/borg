@@ -113,3 +113,13 @@ class PortfolioSolver(Rowed, AbstractSolver):
 
         return (action, result)
 
+    @staticmethod
+    def build(request, trainer):
+        """
+        Build a solver as requested.
+        """
+
+        from borg.portfolio.strategies import build_strategy
+
+        return PortfolioSolver(build_strategy(request, trainer))
+

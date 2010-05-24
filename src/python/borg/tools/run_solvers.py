@@ -31,6 +31,14 @@ module_flags = \
             metavar = "UUID",
             help    = "use a child trial of UUID [%default]",
             ),
+        Flag(
+            "-r",
+            "--restarts",
+            type    = int,
+            default = 1,
+            metavar = "INT",
+            help    = "make INT restarts [%default]",
+            ),
         )
 
 def solve_task(
@@ -105,13 +113,13 @@ def yield_solvers(session, solver_pairs):
     for (kind, name) in solver_pairs:
         if kind == "name":
             yield LookupSolver(name)
-        elif kind == "file":
+        elif kind == "solver":
             with open(name) as file:
                 yield pickle.load(file)
         else:
             raise ValueError("unknown solver kind")
 
-def yield_jobs(session, trial_row, budget, solver_pairs, task_uuids, collections):
+def yield_jobs(session, trial_row, budget, solver_pairs, task_uuids, restarts, collections):
     """
     Generate a set of jobs to distribute.
     """
@@ -125,17 +133,18 @@ def yield_jobs(session, trial_row, budget, solver_pairs, task_uuids, collections
 
     for solver in yield_solvers(session, solver_pairs):
         for task_uuid in task_uuids:
-            yield CallableJob(
-                solve_task,
-                engine_url    = session.connection().engine.url,
-                trial_row     = trial_row,
-                solver        = solver,
-                task_uuid     = task_uuid,
-                budget        = budget,
-                random        = get_random_random(),
-                named_solvers = named_solvers,
-                collections   = collections,
-                )
+            for i in xrange(restarts):
+                yield CallableJob(
+                    solve_task,
+                    engine_url    = session.connection().engine.url,
+                    trial_row     = trial_row,
+                    solver        = solver,
+                    task_uuid     = task_uuid,
+                    budget        = budget,
+                    random        = get_random_random(),
+                    named_solvers = named_solvers,
+                    collections   = collections,
+                    )
 
 def main():
     """
@@ -162,7 +171,7 @@ def main():
 
     enable_default_logging()
 
-    get_logger("sqlalchemy.engine", level = "DETAIL")
+    get_logger("sqlalchemy.engine", level = "WARNING")
 
     # connect to the database and go
     from cargo.sql.alchemy import SQL_Engines
@@ -212,6 +221,7 @@ def main():
                         budget,
                         arguments["solvers"],
                         map(UUID, arguments["tasks"]),
+                        module_flags.given.restarts,
                         get_collections(),
                         ),
                     )

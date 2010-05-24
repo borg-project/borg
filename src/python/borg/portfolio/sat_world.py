@@ -2,10 +2,74 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from borg.portfolio.world  import (
+from abc                  import abstractmethod
+from cargo.sugar          import ABC
+from borg.portfolio.world import (
     Action,
     Outcome,
     )
+
+class Trainer(ABC):
+    """
+    Grant a portfolio access to training data.
+    """
+
+    @abstractmethod
+    def build_actions(request):
+        """
+        Build a list of actions from a configuration request.
+        """
+
+    @abstractmethod
+    def get_data(self, action):
+        """
+        Provide per-task {outcome: count} maps to the trainee.
+        """
+
+class SAT_Trainer(Trainer):
+    """
+    Grant a SAT portfolio access to training data.
+    """
+
+    def __init__(self, Session):
+        """
+        Initialize.
+        """
+
+        self._Session = Session
+
+    def build_actions(self, request):
+        """
+        Build a list of actions from a configuration request.
+        """
+
+        # build the solvers and cutoffs
+        from cargo.temporal import TimeDelta
+        from borg.solvers   import LookupSolver
+
+        solvers = [LookupSolver(s) for s in request["solvers"]]
+        budgets = [TimeDelta(seconds = s) for s in request["budgets"]]
+
+        # build the actions
+        from itertools import product
+
+        return [SAT_WorldAction(*a) for a in product(solvers, budgets)]
+
+    def get_data(self, action):
+        """
+        Provide per-task {outcome: count} maps to the trainee.
+        """
+
+        with self._Session() as session:
+            solver_row  = action.solver.get_row(session)
+            answer_case = 
+            expression  = \
+                    select(
+                        [
+                            count(answer_case),
+                            count(),
+                            ],
+                        )
 
 class SAT_WorldAction(Action):
     """
