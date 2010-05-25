@@ -8,7 +8,7 @@ from borg.solvers import AbstractSolver
 
 log = get_logger(__name__)
 
-def scan_competition_output(lines, satisfiable = None, certificate = None):
+def scan_sat_competition_output(lines, satisfiable = None, certificate = None):
     """
     Interpret reasonably well-formed competition-style output.
     """
@@ -45,17 +45,49 @@ def scan_competition_output(lines, satisfiable = None, certificate = None):
 
         return SAT_Answer(satisfiable, certificate)
 
-class CompetitionSolver(Rowed, AbstractSolver):
+def scan_pb_competition_output(lines, satisfiable = None, certificate = None):
     """
-    A solver for that uses the circa-2009 SAT competition interface.
+    Interpret reasonably well-formed competition-style output.
     """
 
-    def __init__(
-        self,
-        command,
-        solvers_home = ".",
-        memlimit     = None,
-        ):
+    from itertools import imap
+
+    for line in lines:
+        # reported sat
+        if line.startswith("s SATISFIABLE"):
+            if satisfiable is not None:
+                raise RuntimeError("multiple solution lines in output")
+            else:
+                satisfiable = True
+        # reported unsat
+        elif line.startswith("s UNSATISFIABLE"):
+            if satisfiable is not None:
+                raise RuntimeError("multiple solution lines in output")
+            else:
+                satisfiable = False
+        # provided (part of) a sat certificate
+        elif line.startswith("v "):
+            literals = line[2:].split()
+
+            if certificate is None:
+                certificate = list(literals)
+            else:
+                certificate.extend(literals)
+
+    # done
+    if satisfiable is None:
+        return None
+    else:
+        from borg.pb import PB_Answer
+
+        return PB_Answer(satisfiable, certificate)
+
+class StandardSolver(Rowed, AbstractSolver):
+    """
+    A typical solver that writes an answer to standard output.
+    """
+
+    def __init__(self, command, output_scanner, solvers_home = ".", memlimit = None):
         """
         Initialize this solver.
 
@@ -68,9 +100,10 @@ class CompetitionSolver(Rowed, AbstractSolver):
         # members
         from copy import copy
 
-        self.command      = copy(command)
-        self.memlimit     = memlimit
-        self.solvers_home = solvers_home
+        self.command         = copy(command)
+        self._output_scanner = output_scanner
+        self.memlimit        = memlimit
+        self.solvers_home    = solvers_home
 
     def solve(self, task, budget, random, environment):
         """
@@ -174,7 +207,7 @@ class CompetitionSolver(Rowed, AbstractSolver):
         # and analyze its output
         if run.exit_status is not None:
             out_lines = "".join(c for (t, c) in run.out_chunks).split("\n")
-            answer    = scan_competition_output(out_lines)
+            answer    = self._output_scanner(out_lines)
         else:
             answer = None
 
@@ -190,4 +223,40 @@ class CompetitionSolver(Rowed, AbstractSolver):
         """
 
         return any("RANDOMSEED" in s for s in self.command)
+
+class SAT_CompetitionSolver(StandardSolver):
+    """
+    A typical SAT solver that writes a competition-style answer to standard output.
+    """
+
+    def __init__(self, command, solvers_home = ".", memlimit = None):
+        """
+        Initialize.
+        """
+
+        StandardSolver.__init__(
+            self,
+            command,
+            scan_sat_competition_output,
+            solvers_home,
+            memlimit,
+            )
+
+class PB_CompetitionSolver(StandardSolver):
+    """
+    A typical PB solver that writes a competition-style answer to standard output.
+    """
+
+    def __init__(self, command, solvers_home = ".", memlimit = None):
+        """
+        Initialize.
+        """
+
+        StandardSolver.__init__(
+            self,
+            command,
+            scan_pb_competition_output,
+            solvers_home,
+            memlimit,
+            )
 

@@ -410,6 +410,15 @@ class DCM_MixtureModel(AbstractModel):
         actions = trainer.build_actions(request["actions"])
         samples = dict((a, trainer.get_data(a)) for a in actions)
 
+        # verify samples sanity
+        length = None
+
+        for (_, v) in samples.iteritems():
+            if length is None:
+                length = len(v)
+            else:
+                assert len(v) == length
+
         # build the action model
         return \
             DCM_MixtureModel.build_with(

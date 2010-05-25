@@ -2,110 +2,16 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from abc                  import abstractmethod
-from cargo.sugar          import ABC
+from cargo.log            import get_logger
 from borg.portfolio.world import (
-    Action,
-    Outcome,
+    AbstractAction,
+    AbstractOutcome,
+    AbstractTrainer,
     )
 
-class AbstractTrainer(ABC):
-    """
-    Grant a portfolio access to training data.
-    """
+log = get_logger(__name__)
 
-    @abstractmethod
-    def build_actions(request):
-        """
-        Build a list of actions from a configuration request.
-        """
-
-    @abstractmethod
-    def get_data(self, action):
-        """
-        Provide per-task {outcome: count} maps to the trainee.
-        """
-
-class SAT_Trainer(AbstractTrainer):
-    """
-    Grant a SAT portfolio access to training data.
-    """
-
-    def __init__(self, task_uuids, Session):
-        """
-        Initialize.
-        """
-
-        self._task_uuids = task_uuids
-        self._Session    = Session
-
-    def build_actions(self, request):
-        """
-        Build a list of actions from a configuration request.
-        """
-
-        # build the solvers and cutoffs
-        from cargo.temporal import TimeDelta
-        from borg.solvers   import LookupSolver
-
-        solvers = [LookupSolver(s) for s in request["solvers"]]
-        budgets = [TimeDelta(seconds = s) for s in request["budgets"]]
-
-        # build the actions
-        from itertools import product
-
-        return [SAT_WorldAction(*a) for a in product(solvers, budgets)]
-
-    def get_data(self, action):
-        """
-        Provide per-task {outcome: count} maps to the trainee.
-        """
-
-        with self._Session() as session:
-            from sqlalchemy               import (
-                and_,
-                case,
-                select,
-                )
-            from sqlalchemy.sql.functions import count
-            from borg.data                import (
-                TrialRow      as TR,
-                AttemptRow    as AR,
-                RunAttemptRow as RAR,
-                )
-
-            # related rows
-            solver_row           = action.solver.get_row(session)
-            recyclable_trial_row = TR.get_recyclable(session)
-
-            # existing action outcomes
-            rows = \
-                session.execute( 
-                    select(
-                        [
-                            count(case([(RAR.cost <= action.cost, RAR.answer_uuid)])),
-                            count(),
-                            ],
-                        and_(
-                            RAR.solver           == solver_row,
-                            RAR.budget           >= action.cost,
-                            RAR.__table__.c.uuid == AR.uuid,
-                            RAR.task_uuid.in_(self._task_uuids),
-                            RAR.trials.contains(recyclable_trial_row),
-                            ),
-                        group_by = RAR.task_uuid,
-                        ),
-                    )
-
-            return [
-                {
-                    SAT_WorldOutcome.SOLVED   : s,
-                    SAT_WorldOutcome.UNSOLVED : a - s,
-                    }
-                for (s, a) in rows
-                ]
-
-class SAT_WorldAction(Action):
+class SAT_WorldAction(AbstractAction):
     """
     An action in the world.
     """
@@ -124,7 +30,7 @@ class SAT_WorldAction(Action):
         A human-readable description of this action.
         """
 
-        return "%s_%ims" % (self.solver.name, int(self.cost.as_s * 1000))
+        return "%s_%ims" % (self.solver.name, int(self.cost * 1000))
 
     @property
     def cost(self):
@@ -158,7 +64,7 @@ class SAT_WorldAction(Action):
 
         return self._solver
 
-class SAT_WorldOutcome(Outcome):
+class SAT_WorldOutcome(AbstractOutcome):
     """
     An outcome of an action in the world.
     """

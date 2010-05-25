@@ -6,8 +6,6 @@ Model-based action planning.
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-import numpy
-
 from abc import (
     ABCMeta,
     abstractmethod,
@@ -35,7 +33,7 @@ class AbstractPlanner(ABC):
     """
 
     @abstractmethod
-    def select(self, predicted, budget):
+    def select(self, predicted, budget, random):
         """
         Select an action given the probabilities of outcomes.
         """
@@ -52,7 +50,7 @@ class HardMyopicPlanner(AbstractPlanner):
 
         self.discount = discount
 
-    def select(self, predicted, budget):
+    def select(self, predicted, budget, random):
         """
         Select an action given the probabilities of outcomes.
         """
@@ -91,17 +89,19 @@ class SoftMyopicPlanner(AbstractPlanner):
         self.discount    = discount
         self.temperature = temperature
 
-    def select(self, predicted, actions):
+    def select(self, predicted, actions, random):
         """
         Select an action given the probabilities of outcomes.
         """
 
         # convert to expectation
+        import numpy
+
         expected       = numpy.sum(predicted * self.world.utilities, 1)
         discounted     = numpy.fromiter((expected[a.n]*(self.discount**a.cutoff.as_s) for a in actions), numpy.double)
         probabilities  = numpy.exp(discounted / self.temperature)
         probabilities /= numpy.sum(probabilities)
-        ((naction,),)  = numpy.nonzero(numpy.random.multinomial(1, probabilities))
+        ((naction,),)  = numpy.nonzero(random.multinomial(1, probabilities))
         action         = actions[naction]
 
         log.detail("probabilities: %s", probabilities)

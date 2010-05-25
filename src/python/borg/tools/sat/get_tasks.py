@@ -7,6 +7,7 @@ if __name__ == "__main__":
 
     raise SystemExit(main())
 
+from collections import namedtuple
 from cargo.log   import get_logger
 from cargo.flags import (
     Flag,
@@ -23,13 +24,25 @@ module_flags = \
             metavar = "NAME",
             help    = "task names in collection NAME [%default]",
             ),
+        Flag(
+            "-d",
+            "--domain",
+            type    = "choice",
+            choices = ["sat", "pb"],
+            default = "sat",
+            metavar = "NAME",
+            help    = "find NAME tasks [%default]",
+            ),
         )
+
+DomainProperties = namedtuple("DomainProperties", ["patterns", "extension", "sanitizer"])
 
 def get_task(
     engine_url,
     task_path,
     name,
     collection,
+    domain,
     ):
     """
     Add a task.
@@ -77,19 +90,18 @@ def get_task(
             mkdtemp_scoped,
             hash_yielded_bytes,
             )
-        from borg.sat.cnf import yield_sanitized_cnf
 
         log.note("hashing %s", name)
 
-        with mkdtemp_scoped(prefix = "cnf.") as sandbox_path:
+        with mkdtemp_scoped(prefix = "%s." % domain.extension) as sandbox_path:
             uncompressed_path = \
                 decompress_if(
                     task_path,
-                    join(sandbox_path, "uncompressed.cnf"),
+                    join(sandbox_path, "uncompressed.%s" % domain.extension),
                     )
 
             with open(uncompressed_path) as file:
-                (_, file_hash) = hash_yielded_bytes(yield_sanitized_cnf(file), "sha512")
+                (_, file_hash) = hash_yielded_bytes(domain.sanitizer(file), "sha512")
 
         # find or create the task row
         from cargo.sql.alchemy import lock_table
@@ -112,11 +124,33 @@ def get_task(
         session.add(task_name_row)
         session.commit()
 
-def yield_get_task_jobs(session, tasks_path, relative_to, collection):
+def yield_get_task_jobs(session, tasks_path, relative_to, collection, domain_name):
     """
     Find tasks to hash and name.
     """
 
+    # build the domain
+    from borg.sat.cnf import yield_sanitized_cnf
+    from borg.pb.opb  import yield_sanitized_opb
+
+    domain_properties = {
+        "sat" : \
+            DomainProperties(
+                ["*.cnf", "*.cnf.gz", "*.cnf.bz2", "*.cnf.xz"],
+                "cnf",
+                yield_sanitized_cnf,
+                ),
+        "pb" : \
+            DomainProperties(
+                ["*.opb", "*.opb.gz", "*.opb.bz2", "*.opb.xz"],
+                "opb",
+                yield_sanitized_opb,
+                ),
+        }
+
+    domain = domain_properties[domain_name]
+
+    # build tasks
     from os.path          import (
         join,
         relpath,
@@ -124,15 +158,14 @@ def yield_get_task_jobs(session, tasks_path, relative_to, collection):
     from cargo.io         import files_under
     from cargo.labor.jobs import CallableJob
 
-    patterns = ["*.cnf", "*.cnf.gz", "*.cnf.bz2", "*.cnf.xz"]
-
-    for task_path in files_under(tasks_path, patterns):
+    for task_path in files_under(tasks_path, domain.patterns):
         yield CallableJob(
             get_task,
             engine_url = session.connection().engine.url,
             task_path  = task_path,
             name       = relpath(task_path, relative_to),
             collection = collection,
+            domain     = domain,
             )
 
 def main():
@@ -173,7 +206,9 @@ def main():
                         abspath(tasks_path),
                         abspath(relative_to),
                         module_flags.given.collection,
-                        ))
+                        module_flags.given.domain,
+                        ),
+                    )
 
         # run the jobs
         from cargo.labor.storage import outsource_or_run

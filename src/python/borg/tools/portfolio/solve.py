@@ -1,4 +1,3 @@
-# vim: set fileencoding=UTF-8 :
 """
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
@@ -94,7 +93,7 @@ def enable_output():
     logging.root.addHandler(handler)
 
 @with_flags_parsed(
-    usage = "usage: %prog [options] <task>",
+    usage = "usage: %prog [options] <solver.pickle> <task> <seed>",
     )
 def main((solver_path, input_path, seed_string)):
     """
@@ -109,7 +108,6 @@ def main((solver_path, input_path, seed_string)):
 
     if flags.verbose:
         get_logger("cargo.unix.accounting",      level = "DETAIL")
-        get_logger("borg.tools.sat.run_solvers", level = "NOTSET")
         get_logger("borg.portfolio.models",      level = "NOTSET")
 
     # build our PRNG
@@ -143,6 +141,7 @@ def main((solver_path, input_path, seed_string)):
     answer  = attempt.answer
 
     # tell the world
+    # FIXME should be domain-specific
     if answer is None:
         print "s UNKNOWN"
 

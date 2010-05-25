@@ -44,18 +44,26 @@ def get_named_solvers(paths = [], flags = {}):
     from os.path      import dirname
     from cargo.io     import expandpath
     from borg.solvers import (
-        CompetitionSolver,
+        PB_CompetitionSolver,
         SatELitePreprocessor,
+        SAT_CompetitionSolver,
         )
 
     flags = module_flags.merged(flags)
 
-    def competition_loader(relative, attributes):
+    def sat_competition_loader(relative, attributes):
         """
         Load a competition solver.
         """
 
-        return CompetitionSolver(attributes["command"], relative)
+        return SAT_CompetitionSolver(attributes["command"], relative)
+
+    def pb_competition_loader(relative, attributes):
+        """
+        Load a competition solver.
+        """
+
+        return PB_CompetitionSolver(attributes["command"], relative)
 
     def satelite_loader(relative, attributes):
         """
@@ -65,7 +73,8 @@ def get_named_solvers(paths = [], flags = {}):
         return SatELitePreprocessor(attributes["command"], relative)
 
     loaders = {
-        "competition" : competition_loader,
+        "sat_competition" : sat_competition_loader,
+        "pb_competition" : pb_competition_loader,
         "satelite"    : satelite_loader,
         }
 

@@ -90,7 +90,7 @@ class PortfolioSolver(Rowed, AbstractSolver):
         """
 
         # select an action
-        action_generator = self.strategy.select(task, budget.as_s)
+        action_generator = self.strategy.select(task, budget.as_s, random)
         action           = action_generator.send(None)
 
         if action is None:

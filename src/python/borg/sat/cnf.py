@@ -1,8 +1,4 @@
 """
-utexas/sat/cnf.py
-
-Support the DIMACS suggested satisfiability problem format.
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 

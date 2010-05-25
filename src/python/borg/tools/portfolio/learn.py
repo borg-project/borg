@@ -1,4 +1,3 @@
-# vim: set fileencoding=UTF-8 :
 """
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
@@ -8,24 +7,13 @@ if __name__ == "__main__":
 
     raise SystemExit(main())
 
-import numpy
-
 from cargo.log import get_logger
 
 log = get_logger(__name__)
 
-def build_requested(request, trainer):
-    """
-    Build a solver according to a configuration request.
-    """
-
-    from borg.solvers import PortfolioSolver
-
-    return PortfolioSolver.build(request, trainer)
-
 def main():
     """
-    Main.
+    Script entry point.
     """
 
     # get command line arguments
@@ -35,33 +23,36 @@ def main():
     from cargo.json        import load_json
     from cargo.flags       import parse_given
 
-    (request_path, solver_path) = \
+    (train_uuids_path, request_path, solver_path) = \
         parse_given(
-            usage = "%prog <request.json> <out.pickle> [options]",
+            usage = "%prog <train_uuids.json> <request.json> <out.pickle> [options]",
             )
 
-    request = load_json(request_path)
+    train_uuids = load_json(train_uuids_path)
+    request     = load_json(request_path)
 
     # set up log output
     from cargo.log import enable_default_logging
 
     enable_default_logging()
 
+    get_logger("sqlalchemy.engine",        level = "WARNING")
     get_logger("cargo.statistics.mixture", level = "DETAIL")
-    get_logger("sqlalchemy.engine",        level = "DEBUG")
+    get_logger("borg.portfolio.sat_world", level = "DETAIL")
 
-    # construct the builder
-    from cargo.sql.alchemy        import make_session
-    from borg.data                import research_connect
-    from borg.portfolio.sat_world import SAT_Trainer
-
-    train_task_uuids = ["1e993586-1709-4c3a-b9a0-9b7fa23adc39"] # FIXME
+    # construct the solver
+    from cargo.sql.alchemy    import make_session
+    from borg.data            import research_connect
+    from borg.solvers         import PortfolioSolver
+    from borg.portfolio.world import build_trainer
 
     ResearchSession = make_session(bind = research_connect())
-    trainer         = SAT_Trainer(train_task_uuids, ResearchSession)
-    solver          = build_requested(request, trainer)
+    trainer         = build_trainer(request["domain"], train_uuids, ResearchSession)
+    solver          = PortfolioSolver.build(request, trainer)
 
     # write it to disk
+    import cPickle as pickle
+
     with open(solver_path, "w") as file:
         pickle.dump(solver, file, -1)
 
