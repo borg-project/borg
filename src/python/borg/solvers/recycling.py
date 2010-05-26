@@ -44,7 +44,7 @@ class RecyclingSolver(Rowed, AbstractSolver):
             attempt_row = self._get_attempt_row(session, task, budget, RunAttemptRow)
 
             if attempt_row.cost <= budget:
-                return Attempt(self, budget, attempt_row.cost, task, attempt_row.get_answer())
+                return Attempt(self, budget, attempt_row.cost, task, attempt_row.get_short_answer())
             else:
                 return Attempt(self, budget, budget, task, None)
 
@@ -146,7 +146,7 @@ class RecyclingPreprocessor(RecyclingSolver, AbstractPreprocessor):
                     PreprocessorAttempt(
                         self,
                         task,
-                        attempt_row.get_answer(),
+                        attempt_row.get_short_answer(),
                         attempt_row.seed,
                         CPU_LimitedRun(None, budget, None, None, None, attempt_row.cost, None, None),
                         output_task,

@@ -199,7 +199,7 @@ class MultinomialMixtureModel(AbstractModel):
         for action in self._actions:
             ps = rows.get(action.solver, [])
 
-            ps.append((action.cutoff, out[action_indices[action]]))
+            ps.append((action.cost, out[action_indices[action]]))
 
             rows[action.solver] = ps
 
@@ -348,7 +348,7 @@ class DCM_MixtureModel(AbstractModel):
         for action in self._actions:
             ps = rows.get(action.solver, [])
 
-            ps.append((action.cutoff, out[action_indices[action]]))
+            ps.append((action.cost, out[action_indices[action]]))
 
             rows[action.solver] = ps
 
@@ -364,9 +364,9 @@ class DCM_MixtureModel(AbstractModel):
         log.debug("probabilities of action success (DCM model):\n%s", table)
 
         # return predictions
-        predicted = out[numpy.array([action_indices[a] for a in feasible])]
+        predicted = out[numpy.array([action_indices[a] for a in self._actions])]
 
-        return dict(zip(feasible, predicted))
+        return dict(zip(self._actions, predicted))
 
     @staticmethod
     def build_with(training, k, em_restarts):

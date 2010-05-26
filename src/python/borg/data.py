@@ -16,7 +16,10 @@ from sqlalchemy                 import (
     ForeignKey,
     LargeBinary,
     )
-from sqlalchemy.orm             import relationship
+from sqlalchemy.orm             import (
+    deferred,
+    relationship,
+    )
 from sqlalchemy.ext.declarative import declarative_base
 from cargo.log                  import get_logger
 from cargo.sql.alchemy          import (
@@ -408,6 +411,17 @@ class AnswerRow(DatumBase):
         else:
             return answer_row.get_answer()
 
+    @staticmethod
+    def to_short_answer(answer_row):
+        """
+        Build an answer from an answer row.
+        """
+
+        if answer_row is None:
+            return None
+        else:
+            return answer_row.get_short_answer()
+
 class DecisionRow(AnswerRow):
     """
     Answer to an instance of a decision problem.
@@ -418,7 +432,7 @@ class DecisionRow(AnswerRow):
 
     uuid           = Column(SQL_UUID, ForeignKey("answers.uuid"), primary_key = True, default = uuid4)
     satisfiable    = Column(Boolean)
-    certificate_xz = Column(LargeBinary)
+    certificate_xz = deferred(Column(LargeBinary))
 
     def __init__(self, satisfiable = None, certificate = None, certificate_xz = None):
         """
@@ -448,6 +462,15 @@ class DecisionRow(AnswerRow):
         from borg.sat import Decision
 
         return Decision(self.satisfiable, self.get_certificate())
+
+    def get_short_answer(self):
+        """
+        Return an appropriate answer, sans certificate.
+        """
+
+        from borg.sat import Decision
+
+        return Decision(self.satisfiable)
 
     def get_certificate(self):
         """
@@ -536,6 +559,13 @@ class AttemptRow(DatumBase):
         """
 
         return AnswerRow.to_answer(self.answer)
+
+    def get_short_answer(self):
+        """
+        Get the answer associated with this attempt, if any.
+        """
+
+        return AnswerRow.to_short_answer(self.answer)
 
     def delete(self, session):
         """

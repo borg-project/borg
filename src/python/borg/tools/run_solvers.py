@@ -82,13 +82,23 @@ def solve_task(
                 )
 
         # prepare the run
-        from borg.data    import TaskRow
-        from borg.solvers import UncompressingSolver
+        import borg.solvers.base
 
-        full_solver = UncompressingSolver(solver)
+        from borg.data    import TaskRow
+
         trial_row   = session.merge(trial_row)
         task_row    = session.query(TaskRow).get(task_uuid)
-        task        = task_row.get_task(environment)
+
+        if borg.solvers.base.module_flags.given.use_recycled_runs:
+            from borg.tasks import Task
+
+            full_solver = solver
+            task        = Task(row = task_row)
+        else:
+            from borg.solvers import UncompressingSolver
+
+            full_solver = UncompressingSolver(solver)
+            task        = task_row.get_task(environment)
 
         # make the run
         log.info("running %s on %s", solver.name, task_row.uuid)
@@ -107,13 +117,16 @@ def yield_solvers(session, solver_pairs):
     Build the solvers as configured.
     """
 
+    import cPickle as pickle
+
+    from cargo.io     import expandpath
     from borg.solvers import LookupSolver
 
     for (kind, name) in solver_pairs:
         if kind == "name":
             yield LookupSolver(name)
-        elif kind == "solver":
-            with open(name) as file:
+        elif kind == "load":
+            with open(expandpath(name)) as file:
                 yield pickle.load(file)
         else:
             raise ValueError("unknown solver kind")

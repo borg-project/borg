@@ -113,6 +113,14 @@ class PortfolioSolver(Rowed, AbstractSolver):
 
         return (action, result)
 
+    @property
+    def name(self):
+        """
+        A name for this solver.
+        """
+
+        return "portfolio"
+
     @staticmethod
     def build(request, trainer):
         """
