@@ -47,11 +47,11 @@ def test_tools_portfolio_learn():
 
     from cargo.temporal            import TimeDelta
     from borg.tasks                import FileTask
-    from borg.sat                  import SAT_Answer
+    from borg.sat                  import Decision
     from borg.solvers              import Environment
     from borg.solvers.test.support import FixedSolver
 
-    fixed_solver  = FixedSolver(SAT_Answer(True, [1, 2, 3, 4, 0]))
+    fixed_solver  = FixedSolver(Decision(True, [1, 2, 3, 4, 0]))
     named_solvers = {
         "sat/2009/CirCUs"         : fixed_solver,
         "sat/2009/clasp"          : fixed_solver,

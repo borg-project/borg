@@ -78,10 +78,10 @@ while True: pass
                 assert_true(attempt.output_task is attempt.task)
 
     # run each test
-    from borg.sat import SAT_Answer
+    from borg.sat import Decision
 
-    yield (test_satelite, finds_sat_code,    False, SAT_Answer(True, [42, 0]))
-    yield (test_satelite, finds_unsat_code,  False, SAT_Answer(False))
+    yield (test_satelite, finds_sat_code,    False, Decision(True, [42, 0]))
+    yield (test_satelite, finds_unsat_code,  False, Decision(False))
     yield (test_satelite, preprocesses_code, True,  None)
     yield (test_satelite, fails_code,        False, None)
     yield (test_satelite, times_out_code,    False, None)
@@ -134,10 +134,10 @@ raise SystemExit(10)
             assert_equal(extended, answer_out)
 
     # run each test
-    from borg.sat import SAT_Answer
+    from borg.sat import Decision
 
-    answer_in  = SAT_Answer(True, [42, 0])
-    answer_out = SAT_Answer(True, [1, 2, 3, 4, 0])
+    answer_in  = Decision(True, [42, 0])
+    answer_out = Decision(True, [1, 2, 3, 4, 0])
 
     yield (test_satelite, extends_model_code, answer_in, answer_out)
 

@@ -21,6 +21,11 @@ module_flags = \
             metavar = "FILE",
             help    = "read solver descriptions from FILE [%default]",
             ),
+        Flag(
+            "--use-recycled-runs",
+            action = "store_true",
+            help   = "reuse past runs [%default]",
+            ),
         )
 
 def get_random_seed(random):
@@ -44,38 +49,49 @@ def get_named_solvers(paths = [], flags = {}):
     from os.path      import dirname
     from cargo.io     import expandpath
     from borg.solvers import (
+        RecyclingSolver,
         PB_CompetitionSolver,
         SatELitePreprocessor,
+        RecyclingPreprocessor,
         SAT_CompetitionSolver,
         )
 
     flags = module_flags.merged(flags)
 
-    def sat_competition_loader(relative, attributes):
+    def sat_competition_loader(name, relative, attributes):
         """
         Load a competition solver.
         """
 
-        return SAT_CompetitionSolver(attributes["command"], relative)
+        if flags.use_recycled_runs:
+            return RecyclingSolver(name)
+        else:
+            return SAT_CompetitionSolver(attributes["command"], relative)
 
-    def pb_competition_loader(relative, attributes):
+    def pb_competition_loader(name, relative, attributes):
         """
         Load a competition solver.
         """
 
-        return PB_CompetitionSolver(attributes["command"], relative)
+        if flags.use_recycled_runs:
+            return RecyclingSolver(name)
+        else:
+            return PB_CompetitionSolver(attributes["command"], relative)
 
-    def satelite_loader(relative, attributes):
+    def satelite_loader(name, relative, attributes):
         """
         Load a SatELite solver.
         """
 
-        return SatELitePreprocessor(attributes["command"], relative)
+        if flags.use_recycled_runs:
+            return RecyclingPreprocessor(name)
+        else:
+            return SatELitePreprocessor(attributes["command"], relative)
 
     loaders = {
         "sat_competition" : sat_competition_loader,
-        "pb_competition" : pb_competition_loader,
-        "satelite"    : satelite_loader,
+        "pb_competition"  : pb_competition_loader,
+        "satelite"        : satelite_loader,
         }
 
     def yield_solvers_from(raw_path):
@@ -92,7 +108,7 @@ def get_named_solvers(paths = [], flags = {}):
         log.note("read named-solvers file: %s", raw_path)
 
         for (name, attributes) in loaded.get("solvers", {}).items():
-            yield (name, loaders[attributes["type"]](relative, attributes))
+            yield (name, loaders[attributes["type"]](name, relative, attributes))
 
             log.debug("constructed named solver %s", name)
 

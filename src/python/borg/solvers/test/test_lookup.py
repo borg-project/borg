@@ -8,14 +8,14 @@ def test_lookup_solver():
     """
 
     # set up the solver
-    from borg.sat                  import SAT_Answer
+    from borg.sat                  import Decision
     from borg.solvers              import (
         Environment,
         LookupSolver,
         )
     from borg.solvers.test.support import FixedSolver
 
-    foo_solver    = FixedSolver(SAT_Answer(True, [1, 2, 3, 4, 0]))
+    foo_solver    = FixedSolver(Decision(True, [1, 2, 3, 4, 0]))
     environment   = Environment(named_solvers = {"foo": foo_solver})
     solver        = LookupSolver("foo")
 
@@ -72,14 +72,14 @@ def test_lookup_preprocessor():
             assert_true(result.task == result.output_task)
 
     # each test
-    from borg.sat   import SAT_Answer
+    from borg.sat   import Decision
     from borg.tasks import (
         FileTask,
         PreprocessedTask,
         )
 
     input_task = FileTask("/tmp/arbitrary_path.cnf")
-    answer     = SAT_Answer(True, [42])
+    answer     = Decision(True, [42])
 
     yield (test_preprocessor, input_task, False, answer)
     yield (test_preprocessor, input_task, False, None)

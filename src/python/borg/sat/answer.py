@@ -4,9 +4,9 @@
 
 from borg.rowed import Rowed
 
-class SAT_Answer(Rowed):
+class Decision(Rowed):
     """
-    An answer to a CNF SAT instance.
+    An answer to an instance of a decision problem.
     """
 
     def __init__(self, satisfiable, certificate = None, row = None):
@@ -44,11 +44,22 @@ class SAT_Answer(Rowed):
         Create or obtain an ORM row for this object.
         """
 
-        from borg.data import SAT_AnswerRow
+        from borg.data import DecisionRow
 
-        answer_row = SAT_AnswerRow(self.satisfiable, self.certificate)
+        decision_row = DecisionRow(self.satisfiable, self.certificate)
 
-        session.add(answer_row)
+        session.add(decision_row)
 
-        return answer_row
+        return decision_row
+
+    @staticmethod
+    def to_row(decision, session):
+        """
+        Convert a (possibly-None) decision to a (possibly-None) row.
+        """
+
+        if decision is None:
+            return None
+        else:
+            return decision.get_row(session)
 

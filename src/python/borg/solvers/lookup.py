@@ -103,10 +103,18 @@ class LookupPreprocessor(LookupSolver, AbstractPreprocessor):
         Construct an appropriate preprocessed task from its output directory.
         """
 
-        from borg.tasks import WrappedPreprocessedDirectoryTask
+        from borg.tasks import (
+            WrappedPreprocessedTask,
+            AbstractPreprocessedTask,
+            WrappedPreprocessedDirectoryTask,
+            AbstractPreprocessedDirectoryTask,
+            )
 
         looked_up = self.look_up(environment)
         task      = looked_up.make_task(seed, input_task, output_path, environment, row = row)
 
-        return WrappedPreprocessedDirectoryTask(self, task)
+        if isinstance(task, AbstractPreprocessedDirectoryTask):
+            return WrappedPreprocessedDirectoryTask(self, task)
+        else:
+            return WrappedPreprocessedTask(self, task)
 

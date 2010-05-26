@@ -9,7 +9,7 @@ def test_preprocessing_solver():
 
     # set up the solver
     from cargo.temporal            import TimeDelta
-    from borg.sat                  import SAT_Answer
+    from borg.sat                  import Decision
     from borg.tasks                import Task
     from borg.solvers              import (
         Environment,
@@ -21,7 +21,7 @@ def test_preprocessing_solver():
         )
 
     task               = Task()
-    fixed_solver       = FixedSolver(SAT_Answer(True, [1, 2, 3, 4, 0]))
+    fixed_solver       = FixedSolver(Decision(True, [1, 2, 3, 4, 0]))
     fixed_preprocessor = FixedPreprocessor(task, None, TimeDelta(seconds = 8.0))
     environment        = Environment()
     solver             = PreprocessingSolver(fixed_preprocessor, fixed_solver)

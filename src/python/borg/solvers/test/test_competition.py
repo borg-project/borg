@@ -68,10 +68,10 @@ while True: pass
             assert_equal(attempt.answer, answer)
 
     # run each test
-    from borg.sat import SAT_Answer
+    from borg.sat import Decision
 
-    yield (test_solver, finds_sat_solver,     SAT_Answer(True,  range(1, 9) + [0]))
-    yield (test_solver, finds_unsat_solver,   SAT_Answer(False, None))
+    yield (test_solver, finds_sat_solver,     Decision(True,  range(1, 9) + [0]))
+    yield (test_solver, finds_unsat_solver,   Decision(False, None))
     yield (test_solver, finds_unknown_solver, None)
     yield (test_solver, times_out_solver,     None)
 

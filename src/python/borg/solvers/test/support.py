@@ -173,8 +173,8 @@ def add_fake_runs(session):
         TaskRow,
         TrialRow,
         DatumBase,
+        DecisionRow,
         RunAttemptRow,
-        SAT_AnswerRow,
         CPU_LimitedRunRow,
         PreprocessedTaskRow,
         PreprocessorAttemptRow,
@@ -197,7 +197,7 @@ def add_fake_runs(session):
         if satisfiable is None:
             answer = None
         else:
-            answer = SAT_AnswerRow(satisfiable, [42] if satisfiable else None)
+            answer = DecisionRow(satisfiable, [42] if satisfiable else None)
 
         attempt_row = \
             RunAttemptRow(
@@ -221,7 +221,7 @@ def add_fake_runs(session):
         if satisfiable is None:
             answer = None
         else:
-            answer = SAT_AnswerRow(satisfiable, [42] if satisfiable else None)
+            answer = DecisionRow(satisfiable, [42] if satisfiable else None)
 
         run_row = \
             PreprocessorAttemptRow(

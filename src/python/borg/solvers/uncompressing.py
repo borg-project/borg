@@ -40,29 +40,29 @@ class UncompressingSolver(Rowed, AbstractSolver):
         Provide an uncompressed task in a managed context.
         """
 
-        # argument sanity
+        # it it's not file-backed, pass it along
         from borg.tasks import AbstractFileTask
 
         if not isinstance(task, AbstractFileTask):
-            raise TypeError("uncompressing solver requires a file-backed task")
+            yield task
+        else:
+            # create the context
+            from cargo.io import mkdtemp_scoped
 
-        # create the context
-        from cargo.io import mkdtemp_scoped
+            with mkdtemp_scoped(prefix = "uncompressing.") as sandbox_path:
+                # decompress the instance, if necessary
+                from os.path  import join
+                from cargo.io import decompress_if
 
-        with mkdtemp_scoped(prefix = "uncompressing.") as sandbox_path:
-            # decompress the instance, if necessary
-            from os.path  import join
-            from cargo.io import decompress_if
+                sandboxed_path    = join(sandbox_path, "uncompressed.cnf")
+                uncompressed_path = decompress_if(task.path, sandboxed_path)
 
-            sandboxed_path    = join(sandbox_path, "uncompressed.cnf")
-            uncompressed_path = decompress_if(task.path, sandboxed_path)
+                log.info("uncompressed task file is %s", uncompressed_path)
 
-            log.info("uncompressed task file is %s", uncompressed_path)
+                # provide the task
+                from borg.tasks import UncompressedFileTask
 
-            # provide the task
-            from borg.tasks import UncompressedFileTask
-
-            yield UncompressedFileTask(uncompressed_path, task)
+                yield UncompressedFileTask(uncompressed_path, task)
 
     def get_new_row(self, session):
         """

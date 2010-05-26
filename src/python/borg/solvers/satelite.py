@@ -81,7 +81,6 @@ class SatELitePreprocessor(Rowed, AbstractPreprocessor):
         from borg.solvers.attempts import PreprocessorAttempt
 
         if run.exit_status in (10, 20):
-            from borg.sat                 import SAT_Answer
             from borg.solvers.competition import scan_competition_output
 
             out_lines = "".join(c for (t, c) in run.out_chunks).split("\n")

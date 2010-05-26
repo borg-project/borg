@@ -106,7 +106,7 @@ class Attempt(Rowed, AbstractAttempt):
         self._task   = task
         self._answer = answer
 
-    def get_new_row(self, session):
+    def get_new_row(self, session, solver_row = None):
         """
         Create or obtain an ORM row for this object.
         """
@@ -120,23 +120,14 @@ class Attempt(Rowed, AbstractAttempt):
         Create or obtain an ORM row for this object.
         """
 
-        from borg.data import SAT_AnswerRow
-
-        if self.answer is None:
-            answer_row = None
-        else:
-            answer_row = \
-                SAT_AnswerRow(
-                    satisfiable = self.answer.satisfiable,
-                    certificate = self.answer.certificate,
-                    )
+        from borg.sat import Decision
 
         attempt_row = \
             Row(
                 budget = self.budget,
                 cost   = self.cost,
                 task   = self.task.get_row(session),
-                answer = answer_row,
+                answer = Decision.to_row(self.answer, session),
                 **kwargs
                 )
 

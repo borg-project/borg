@@ -408,12 +408,12 @@ class AnswerRow(DatumBase):
         else:
             return answer_row.get_answer()
 
-class SAT_AnswerRow(AnswerRow):
+class DecisionRow(AnswerRow):
     """
-    Answer to a SAT instance.
+    Answer to an instance of a decision problem.
     """
 
-    __tablename__   = "sat_answers"
+    __tablename__   = "sat_answers" # FIXME
     __mapper_args__ = {"polymorphic_identity": "sat"}
 
     uuid           = Column(SQL_UUID, ForeignKey("answers.uuid"), primary_key = True, default = uuid4)
@@ -431,7 +431,7 @@ class SAT_AnswerRow(AnswerRow):
 
         # members
         if certificate is not None:
-            certificate_xz = SAT_AnswerRow.pack_certificate(certificate)
+            certificate_xz = DecisionRow.pack_certificate(certificate)
 
         # base
         AnswerRow.__init__(
@@ -445,9 +445,9 @@ class SAT_AnswerRow(AnswerRow):
         Return an appropriate answer.
         """
 
-        from borg.sat import SAT_Answer
+        from borg.sat import Decision
 
-        return SAT_Answer(self.satisfiable, self.get_certificate())
+        return Decision(self.satisfiable, self.get_certificate())
 
     def get_certificate(self):
         """
@@ -457,14 +457,14 @@ class SAT_AnswerRow(AnswerRow):
         if self.certificate_xz is None:
             return None
         else:
-            return SAT_AnswerRow.unpack_certificate(self.certificate_xz)
+            return DecisionRow.unpack_certificate(self.certificate_xz)
 
     def set_certificate(self, certificate):
         """
         Set (and compress) the certificate array.
         """
 
-        self.certificate_xz = SAT_AnswerRow.pack_certificate(certificate)
+        self.certificate_xz = DecisionRow.pack_certificate(certificate)
 
     @staticmethod
     def pack_certificate(certificate):

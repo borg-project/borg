@@ -19,8 +19,8 @@ def plot_trial(session, trial_row):
     # get the relevant attempts
     from sqlalchemy     import and_
     from borg.data      import (
+        DecisionRow,
         RunAttemptRow,
-        SAT_AnswerRow,
         )
 
     rows =                                                       \
@@ -29,13 +29,13 @@ def plot_trial(session, trial_row):
             RunAttemptRow.solver_name,
             RunAttemptRow.budget,
             RunAttemptRow.cost,
-            SAT_AnswerRow.satisfiable,
+            DecisionRow.satisfiable,
             )                                                    \
         .filter(
             and_(
                 RunAttemptRow.trials.contains(trial_row),
                 RunAttemptRow.answer != None,
-                RunAttemptRow.answer_uuid == SAT_AnswerRow.uuid,
+                RunAttemptRow.answer_uuid == DecisionRow.uuid,
                 ),
             )                                                    \
         .order_by(RunAttemptRow.cost)

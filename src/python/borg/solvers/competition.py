@@ -41,9 +41,9 @@ def scan_sat_competition_output(lines, satisfiable = None, certificate = None):
     if satisfiable is None:
         return None
     else:
-        from borg.sat import SAT_Answer
+        from borg.sat import Decision
 
-        return SAT_Answer(satisfiable, certificate)
+        return Decision(satisfiable, certificate)
 
 def scan_pb_competition_output(lines, satisfiable = None, certificate = None):
     """
@@ -78,16 +78,16 @@ def scan_pb_competition_output(lines, satisfiable = None, certificate = None):
     if satisfiable is None:
         return None
     else:
-        from borg.pb import PB_Answer
+        from borg.sat import Decision
 
-        return PB_Answer(satisfiable, certificate)
+        return Decision(satisfiable, certificate)
 
 class StandardSolver(Rowed, AbstractSolver):
     """
     A typical solver that writes an answer to standard output.
     """
 
-    def __init__(self, command, output_scanner, solvers_home = ".", memlimit = None):
+    def __init__(self, command, output_scanner, solvers_home = ".", memlimit = 2048):
         """
         Initialize this solver.
 
@@ -172,7 +172,7 @@ class StandardSolver(Rowed, AbstractSolver):
         # only report memlimit if requested to do so
         if self.memlimit is not None:
             # MEMLIMIT: the total amount of memory (in MiB) that the solver may use
-            memlimit                = 2048
+            memlimit                = self.memlimit
             expanded                = expand(expanded, "MEMLIMIT", memlimit)
             environment["MEMLIMIT"] = memlimit
 
@@ -214,6 +214,8 @@ class StandardSolver(Rowed, AbstractSolver):
         # return our attempt
         from borg.solvers import RunAttempt
 
+        log.note("attempt yielded an answer? %s", answer is not None)
+
         return RunAttempt(self, task, answer, seed, run)
 
     @property
@@ -229,7 +231,7 @@ class SAT_CompetitionSolver(StandardSolver):
     A typical SAT solver that writes a competition-style answer to standard output.
     """
 
-    def __init__(self, command, solvers_home = ".", memlimit = None):
+    def __init__(self, command, solvers_home = ".", memlimit = 2048):
         """
         Initialize.
         """
@@ -247,7 +249,7 @@ class PB_CompetitionSolver(StandardSolver):
     A typical PB solver that writes a competition-style answer to standard output.
     """
 
-    def __init__(self, command, solvers_home = ".", memlimit = None):
+    def __init__(self, command, solvers_home = ".", memlimit = 2048):
         """
         Initialize.
         """

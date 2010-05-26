@@ -278,7 +278,7 @@ class PreprocessedTask(Task, AbstractPreprocessedTask):
 
         return self._input_task
 
-class WrappedPreprocessedTask(WrappedFileTask, AbstractPreprocessedTask, AbstractFileTask):
+class WrappedPreprocessedTask(WrappedTask, AbstractPreprocessedTask):
     """
     A wrapped task.
     """
@@ -293,7 +293,7 @@ class WrappedPreprocessedTask(WrappedFileTask, AbstractPreprocessedTask, Abstrac
         assert isinstance(preprocessor, AbstractPreprocessor)
         assert isinstance(inner, AbstractPreprocessedTask)
 
-        WrappedFileTask.__init__(self, inner)
+        WrappedTask.__init__(self, inner)
 
         self._preprocessor = preprocessor
 
@@ -377,6 +377,14 @@ class WrappedPreprocessedDirectoryTask(WrappedPreprocessedTask, AbstractPreproce
         assert isinstance(inner, AbstractPreprocessedDirectoryTask)
 
         WrappedPreprocessedTask.__init__(self, preprocessor, inner)
+
+    @property
+    def path(self):
+        """
+        The path to the associated task file.
+        """
+
+        return self._inner.path
 
     @property
     def output_path(self):

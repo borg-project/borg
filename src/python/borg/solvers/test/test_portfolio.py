@@ -12,7 +12,7 @@ def test_sat_portfolio_solver():
 
     # set up the portfolio solver
     from cargo.temporal            import TimeDelta
-    from borg.sat                  import SAT_Answer
+    from borg.sat                  import Decision
     from borg.solvers              import (
         Environment,
         PortfolioSolver,
@@ -23,8 +23,8 @@ def test_sat_portfolio_solver():
     certificate = [1, 2, 3, 4, 0]
     subsolvers  = [
         FixedSolver(None),
-        FixedSolver(SAT_Answer(True,  certificate)),
-        FixedSolver(SAT_Answer(False, None)),
+        FixedSolver(Decision(True,  certificate)),
+        FixedSolver(Decision(False, None)),
         ]
     actions     = [SAT_WorldAction(s, TimeDelta(seconds = 16.0)) for s in subsolvers]
     environment = Environment()
@@ -48,8 +48,8 @@ def test_sat_portfolio_solver():
         assert_equal([s for (s, _) in attempt.record], clean_record)
 
     # yield the individual tests
-    yield (test_now,  2.0, None,                          [])
-    yield (test_now, 18.0, None,                          subsolvers[:1])
-    yield (test_now, 34.0, SAT_Answer(True, certificate), subsolvers[:2])
-    yield (test_now, 72.0, SAT_Answer(True, certificate), subsolvers[:2])
+    yield (test_now,  2.0, None,                        [])
+    yield (test_now, 18.0, None,                        subsolvers[:1])
+    yield (test_now, 34.0, Decision(True, certificate), subsolvers[:2])
+    yield (test_now, 72.0, Decision(True, certificate), subsolvers[:2])
 

@@ -52,15 +52,13 @@ def solve_task(
     collections,
     ):
     """
-    Make some number of preprocessor runs on a task.
+    Make some number of solver runs on a task.
     """
 
     # make sure that we're logging
     from cargo.log import enable_default_logging
 
     enable_default_logging()
-
-    get_logger("borg.solvers.satelite", level = "DEBUG")
 
     # connect to the database
     from cargo.sql.alchemy import (
@@ -78,6 +76,7 @@ def solve_task(
         environment = \
             Environment(
                 MainSession   = MainSession,
+                CacheSession  = MainSession, # FIXME
                 named_solvers = named_solvers,
                 collections   = collections,
                 )
@@ -171,7 +170,9 @@ def main():
 
     enable_default_logging()
 
-    get_logger("sqlalchemy.engine", level = "WARNING")
+    get_logger("sqlalchemy.engine",        level = "WARNING")
+    get_logger("cargo.unix.accounting",    level = "WARNING")
+    get_logger("borg.solvers.competition", level = "NOTE")
 
     # connect to the database and go
     from cargo.sql.alchemy import SQL_Engines
@@ -208,6 +209,8 @@ def main():
                 assert trial_row is not None
 
             session.commit()
+
+            log.note("placing attempts in trial %s", trial_row.uuid)
 
             # build jobs
             from uuid       import UUID

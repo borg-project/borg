@@ -43,15 +43,15 @@ def test_recycling_solver():
     test_solver = with_setup(fake_data.set_up, fake_data.tear_down)(generated)
 
     # test behavior of foo on raw tasks
-    from borg.sat                  import SAT_Answer
+    from borg.sat                  import Decision
     from borg.solvers              import RecyclingSolver
     from borg.solvers.test.support import task_uuids
 
     foo_solver = RecyclingSolver("foo")
 
-    yield (test_solver, foo_solver, task_uuids[0], 9.0, SAT_Answer(True,  [42]))
+    yield (test_solver, foo_solver, task_uuids[0], 9.0, Decision(True,  [42]))
     yield (test_solver, foo_solver, task_uuids[0], 7.0, None)
-    yield (test_solver, foo_solver, task_uuids[1], 9.0, SAT_Answer(False))
+    yield (test_solver, foo_solver, task_uuids[1], 9.0, Decision(False))
     yield (test_solver, foo_solver, task_uuids[1], 7.0, None)
     yield (test_solver, foo_solver, task_uuids[2], 9.0, None)
 
@@ -60,9 +60,9 @@ def test_recycling_solver():
 
     fob_solver = RecyclingSolver("fob")
 
-    yield (test_solver, fob_solver, baz_task_uuids[0], 9.0, SAT_Answer(True,  [42]))
+    yield (test_solver, fob_solver, baz_task_uuids[0], 9.0, Decision(True,  [42]))
     yield (test_solver, fob_solver, baz_task_uuids[0], 7.0, None)
-    yield (test_solver, fob_solver, baz_task_uuids[1], 9.0, SAT_Answer(False))
+    yield (test_solver, fob_solver, baz_task_uuids[1], 9.0, Decision(False))
     yield (test_solver, fob_solver, baz_task_uuids[1], 7.0, None)
 
     # test behavior of bar on raw tasks
@@ -71,9 +71,9 @@ def test_recycling_solver():
     bar_solver = RecyclingPreprocessor("bar")
 
     yield (test_solver, bar_solver, task_uuids[0], 9.0, None)
-    yield (test_solver, bar_solver, task_uuids[1], 9.0, SAT_Answer(False))
+    yield (test_solver, bar_solver, task_uuids[1], 9.0, Decision(False))
     yield (test_solver, bar_solver, task_uuids[1], 7.0, None)
-    yield (test_solver, bar_solver, task_uuids[2], 9.0, SAT_Answer(True,  [42]))
+    yield (test_solver, bar_solver, task_uuids[2], 9.0, Decision(True,  [42]))
     yield (test_solver, bar_solver, task_uuids[2], 7.0, None)
 
 def test_recycling_preprocessor():
@@ -119,17 +119,17 @@ def test_recycling_preprocessor():
 #             assert_equal(output_task_row.uuid, output_task_uuid)
 
     # test behavior of the bar preprocessor
-    from borg.sat                  import SAT_Answer
+    from borg.sat                  import Decision
     from borg.solvers              import RecyclingPreprocessor
     from borg.solvers.test.support import task_uuids
 
     bar_solver = RecyclingPreprocessor("bar")
 
-    yield (test_solver, bar_solver, task_uuids[0], 9.0, None,                    task_uuids[0])
-    yield (test_solver, bar_solver, task_uuids[1], 9.0, SAT_Answer(False),       task_uuids[1])
-    yield (test_solver, bar_solver, task_uuids[1], 7.0, None,                    task_uuids[1])
-    yield (test_solver, bar_solver, task_uuids[2], 9.0, SAT_Answer(True,  [42]), task_uuids[2])
-    yield (test_solver, bar_solver, task_uuids[2], 7.0, None,                    task_uuids[2])
+    yield (test_solver, bar_solver, task_uuids[0], 9.0, None,                  task_uuids[0])
+    yield (test_solver, bar_solver, task_uuids[1], 9.0, Decision(False),       task_uuids[1])
+    yield (test_solver, bar_solver, task_uuids[1], 7.0, None,                  task_uuids[1])
+    yield (test_solver, bar_solver, task_uuids[2], 9.0, Decision(True,  [42]), task_uuids[2])
+    yield (test_solver, bar_solver, task_uuids[2], 7.0, None,                  task_uuids[2])
 
     # test the behavior of the baz preprocessor
     from borg.solvers.test.support import baz_task_uuids
@@ -158,7 +158,7 @@ def test_preprocessing_solver_with_recycling():
     test_solver = with_setup(fake_data.set_up, fake_data.tear_down)(generated)
 
     # test the bar-foo combination on fake data
-    from borg.sat                  import SAT_Answer
+    from borg.sat                  import Decision
     from borg.solvers              import (
         RecyclingSolver,
         PreprocessingSolver,
@@ -172,22 +172,22 @@ def test_preprocessing_solver_with_recycling():
 
     yield (test_solver, bar_foo_solver, task_uuids[0],  7.0, None)
     yield (test_solver, bar_foo_solver, task_uuids[0],  9.0, None)
-    yield (test_solver, bar_foo_solver, task_uuids[0], 17.0, SAT_Answer(True, [42]))
+    yield (test_solver, bar_foo_solver, task_uuids[0], 17.0, Decision(True, [42]))
     yield (test_solver, bar_foo_solver, task_uuids[1],  7.0, None)
-    yield (test_solver, bar_foo_solver, task_uuids[1],  9.0, SAT_Answer(False))
+    yield (test_solver, bar_foo_solver, task_uuids[1],  9.0, Decision(False))
     yield (test_solver, bar_foo_solver, task_uuids[2],  7.0, None)
-    yield (test_solver, bar_foo_solver, task_uuids[2],  9.0, SAT_Answer(True, [42]))
+    yield (test_solver, bar_foo_solver, task_uuids[2],  9.0, Decision(True, [42]))
 
     # test the baz-fob combination on fake data
     baz_preprocessor = RecyclingPreprocessor("baz")
-    fob_solver      = RecyclingSolver("fob")
-    baz_fob_solver  = PreprocessingSolver(baz_preprocessor, fob_solver)
+    fob_solver       = RecyclingSolver("fob")
+    baz_fob_solver   = PreprocessingSolver(baz_preprocessor, fob_solver)
 
     yield (test_solver, baz_fob_solver, task_uuids[0],  7.0, None)
     yield (test_solver, baz_fob_solver, task_uuids[0],  9.0, None)
-    yield (test_solver, baz_fob_solver, task_uuids[0], 17.0, SAT_Answer(True, [42]))
+    yield (test_solver, baz_fob_solver, task_uuids[0], 17.0, Decision(True, [42]))
     yield (test_solver, baz_fob_solver, task_uuids[1],  7.0, None)
     yield (test_solver, baz_fob_solver, task_uuids[1],  9.0, None)
-    yield (test_solver, baz_fob_solver, task_uuids[1], 17.0, SAT_Answer(False))
+    yield (test_solver, baz_fob_solver, task_uuids[1], 17.0, Decision(False))
     yield (test_solver, baz_fob_solver, task_uuids[2], 17.0, None)
 

@@ -7,6 +7,7 @@ from borg.rowed   import Rowed
 from borg.solvers import (
     Attempt,
     AbstractSolver,
+    AbstractPreprocessor,
     )
 
 log = get_logger(__name__)
@@ -95,7 +96,7 @@ class RecyclingSolver(Rowed, AbstractSolver):
 
         return solver_row
 
-class RecyclingPreprocessor(RecyclingSolver):
+class RecyclingPreprocessor(RecyclingSolver, AbstractPreprocessor):
     """
     Execute a solver after a preprocessor pass.
     """
@@ -173,5 +174,7 @@ class RecyclingPreprocessor(RecyclingSolver):
         Construct an appropriate preprocessed task from its output directory.
         """
 
-        raise NotImplementedError()
+        from borg.tasks import PreprocessedTask
+
+        return PreprocessedTask(self, seed, input_task, row = row)
 

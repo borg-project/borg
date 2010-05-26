@@ -11,10 +11,10 @@ def test_tools_portfolio_solve():
 
     # build a solver
     from tempfile                  import NamedTemporaryFile
-    from borg.sat                  import SAT_Answer
+    from borg.sat                  import Decision
     from borg.solvers.test.support import FixedSolver
 
-    fixed_solver = FixedSolver(SAT_Answer(True, [1, 2, 3, 4, 0]))
+    fixed_solver = FixedSolver(Decision(True, [1, 2, 3, 4, 0]))
 
     with NamedTemporaryFile(suffix = ".pickle") as pickle_file:
         # write it to disk
