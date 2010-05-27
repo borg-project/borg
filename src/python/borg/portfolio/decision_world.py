@@ -158,13 +158,6 @@ class DecisionWorldOutcome(AbstractOutcome):
         self.n        = n
         self._utility = utility
 
-    def __str__(self):
-        """
-        Return a human-readable description of this outcome.
-        """
-
-        return str(self._utility)
-
     @property
     def utility(self):
         """

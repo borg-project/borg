@@ -11,7 +11,7 @@ def test_get_named_solvers():
 {
     "solvers" : {
         "foo" : {
-			"type"    : "competition",
+			"type"    : "sat_competition",
             "command" : ["HERE/foo", "BENCHNAME", "RANDOMSEED"]
             }
         },
@@ -53,7 +53,13 @@ def test_get_named_solvers():
         # load the solvers
         from borg.solvers import get_named_solvers
 
-        solvers = get_named_solvers(flags = {"solvers_file": [solvers_json_path]})
+        solvers = \
+            get_named_solvers(
+                flags = {
+                    "solvers_file"      : [solvers_json_path],
+                    "use_recycled_runs" : False,
+                    },
+                )
 
         # assert expectations
         from nose.tools   import (
@@ -61,11 +67,11 @@ def test_get_named_solvers():
             assert_equal,
             )
         from borg.solvers import (
-            CompetitionSolver,
+            StandardSolver,
             SatELitePreprocessor,
             )
 
         assert_equal(len(solvers), 2)
-        assert_true(isinstance(solvers["foo"], CompetitionSolver))
+        assert_true(isinstance(solvers["foo"], StandardSolver))
         assert_true(isinstance(solvers["bar"], SatELitePreprocessor))
 

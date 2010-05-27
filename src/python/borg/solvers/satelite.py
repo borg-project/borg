@@ -81,10 +81,10 @@ class SatELitePreprocessor(Rowed, AbstractPreprocessor):
         from borg.solvers.attempts import PreprocessorAttempt
 
         if run.exit_status in (10, 20):
-            from borg.solvers.competition import scan_competition_output
+            from borg.solvers.competition import scan_sat_competition_output
 
             out_lines = "".join(c for (t, c) in run.out_chunks).split("\n")
-            answer    = scan_competition_output(out_lines)
+            answer    = scan_sat_competition_output(out_lines)
 
             return PreprocessorAttempt(self, task, answer, None, run, task)
         elif run.exit_status == 0:
@@ -157,10 +157,10 @@ class SatELitePreprocessor(Rowed, AbstractPreprocessor):
                             )
 
                     # parse the extended certificate from its output
-                    from borg.solvers.competition import scan_competition_output
+                    from borg.solvers.competition import scan_sat_competition_output
 
                     extended_answer = \
-                        scan_competition_output(
+                        scan_sat_competition_output(
                             popened.stdout,
                             satisfiable = answer.satisfiable,
                             )

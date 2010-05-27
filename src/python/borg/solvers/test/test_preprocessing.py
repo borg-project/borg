@@ -22,7 +22,7 @@ def test_preprocessing_solver():
 
     task               = Task()
     fixed_solver       = FixedSolver(Decision(True, [1, 2, 3, 4, 0]))
-    fixed_preprocessor = FixedPreprocessor(task, None, TimeDelta(seconds = 8.0))
+    fixed_preprocessor = FixedPreprocessor(False, None, TimeDelta(seconds = 8.0))
     environment        = Environment()
     solver             = PreprocessingSolver(fixed_preprocessor, fixed_solver)
 

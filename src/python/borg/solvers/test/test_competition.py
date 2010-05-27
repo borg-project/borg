@@ -52,9 +52,9 @@ while True: pass
             code_file.flush()
 
             # build the solver interface
-            from borg.solvers import CompetitionSolver
+            from borg.solvers import SAT_CompetitionSolver
 
-            solver = CompetitionSolver(["python", code_file.name])
+            solver = SAT_CompetitionSolver(["python", code_file.name])
 
             # run the solver
             from cargo.temporal import TimeDelta

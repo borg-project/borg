@@ -76,7 +76,7 @@ class FixedStrategy(SequenceStrategy):
 
         from itertools import repeat
 
-        SequenceSelectionStrategy.__init__(self, repeat(action))
+        SequenceStrategy.__init__(self, repeat(action))
 
     @staticmethod
     def build(request, trainer):

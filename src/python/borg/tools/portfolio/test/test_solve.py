@@ -46,11 +46,11 @@ def test_tools_portfolio_solve():
             from borg.tasks     import FileTask
             from borg.solvers   import (
                 Environment,
-                CompetitionSolver,
+                SAT_CompetitionSolver,
                 )
 
             script_solver = \
-                CompetitionSolver(
+                SAT_CompetitionSolver(
                     command = [
                         "python",
                         "-m",

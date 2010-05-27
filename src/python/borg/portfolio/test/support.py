@@ -3,11 +3,11 @@
 """
 
 from borg.portfolio.world import (
-    Action,
-    Outcome,
+    AbstractAction,
+    AbstractOutcome,
     )
 
-class FakeAction(Action):
+class FakeAction(AbstractAction):
     """
     An action strictly for testing.
     """
@@ -36,7 +36,7 @@ class FakeAction(Action):
 
         return self._outcomes
 
-class FakeOutcome(Outcome):
+class FakeOutcome(AbstractOutcome):
     """
     An outcome strictly for testing.
     """

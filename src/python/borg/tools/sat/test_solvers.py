@@ -11,7 +11,7 @@ if __name__ == "__main__":
 import re
 import json
 import numpy
-import utexas.sat.solvers
+import borg.solvers
 
 from os.path            import (
     join,
@@ -19,6 +19,7 @@ from os.path            import (
     )
 from copy               import copy
 from tempfile           import NamedTemporaryFile
+from nose.tools         import nottest
 from cargo.io           import expandpath
 from cargo.log          import get_logger
 from cargo.json         import follows
@@ -188,6 +189,7 @@ def do_verified_run(solver, cnf_path, cutoff, seed_request):
 
     return result
 
+@nottest
 def test_solver_on(solver, path, expectation):
     """
     Run a single test on a single solver.
@@ -248,6 +250,7 @@ def test_solver_on(solver, path, expectation):
                 seed,
                 )
 
+@nottest
 def test_solver(solver, tests):
     """
     Run a set of tests on a single solver.
@@ -258,6 +261,7 @@ def test_solver(solver, tests):
     for (path, expectation) in tests.items():
         test_solver_on(solver, path, expectation)
 
+@nottest
 def test_solvers(tests_map):
     """
     Run a set of solver tests.

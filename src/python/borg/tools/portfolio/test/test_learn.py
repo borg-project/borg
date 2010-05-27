@@ -12,13 +12,39 @@ def test_tools_portfolio_learn():
     # fork; build a random-model solver
     from os.path    import join
     from cargo.io   import mkdtemp_scoped
+    from cargo.json import save_json
+
+    solver_request = {
+        "domain"  : "sat",
+        "type"    : "modeling",
+        "planner" : {
+            "type"     : "hard_myopic",
+            "discount" : 1.0,
+            },
+        "model"   : {
+            "type"        : "random",
+            "actions"     : {
+                "solvers" : [
+                    "foo",
+                    "bar",
+                    "baz",
+                    ],
+                "budgets" : [1],
+                }
+            }
+        }
 
     with mkdtemp_scoped() as sandbox_path:
         # invoke the script
         from subprocess                        import check_call
         from borg.tools.portfolio.test.support import clean_up_environment
 
+        uuids_json_path    = join(sandbox_path, "train_uuids.json")
+        solver_json_path   = join(sandbox_path, "solver.json")
         solver_pickle_path = join(sandbox_path, "solver.pickle")
+
+        save_json([], uuids_json_path)
+        save_json(solver_request, solver_json_path)
 
         with open("/dev/null", "w") as null_file:
             check_call(
@@ -26,9 +52,8 @@ def test_tools_portfolio_learn():
                     "python",
                     "-m",
                     "borg.tools.portfolio.learn",
-                    "-m",
-                    "random",
-                    "none",
+                    uuids_json_path,
+                    solver_json_path,
                     solver_pickle_path,
                     ],
                 stdout     = null_file,
@@ -53,16 +78,9 @@ def test_tools_portfolio_learn():
 
     fixed_solver  = FixedSolver(Decision(True, [1, 2, 3, 4, 0]))
     named_solvers = {
-        "sat/2009/CirCUs"         : fixed_solver,
-        "sat/2009/clasp"          : fixed_solver,
-        "sat/2009/glucose"        : fixed_solver,
-        "sat/2009/LySAT_i"        : fixed_solver,
-        "sat/2009/minisat_09z"    : fixed_solver,
-        "sat/2009/minisat_cumr_p" : fixed_solver,
-        "sat/2009/mxc_09"         : fixed_solver,
-        "sat/2009/precosat"       : fixed_solver,
-        "sat/2009/rsat_09"        : fixed_solver,
-        "sat/2009/SApperloT"      : fixed_solver,
+        "foo" : fixed_solver,
+        "bar" : fixed_solver,
+        "baz" : fixed_solver,
         }
     environment   = Environment(named_solvers = named_solvers)
     task          = FileTask("/tmp/arbitrary_path.cnf")

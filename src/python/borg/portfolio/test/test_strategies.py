@@ -10,7 +10,9 @@ def get_action(strategy, task, budget, outcome):
     Return a strategy's next action.
     """
 
-    action_generator = strategy.select(task, budget)
+    import numpy
+
+    action_generator = strategy.select(task, budget, numpy.random)
     action           = action_generator.send(None)
 
     try:
@@ -20,17 +22,17 @@ def get_action(strategy, task, budget, outcome):
 
     return action
 
-def test_sequence_selection_strategy():
+def test_sequence_strategy():
     """
     Test the sequence selection strategy.
     """
 
     from itertools                 import cycle
     from functools                 import partial
-    from borg.portfolio.strategies import SequenceSelectionStrategy
+    from borg.portfolio.strategies import SequenceStrategy
 
     actions  = [FakeAction(i) for i in xrange(4)]
-    strategy = SequenceSelectionStrategy(cycle(actions))
+    strategy = SequenceStrategy(cycle(actions))
     getter   = partial(get_action, strategy, None, 128.0, None)
 
     # verify basic behavior
@@ -46,15 +48,15 @@ def test_sequence_selection_strategy():
 
     assert_equal(selected, None)
 
-def test_fixed_selection_strategy():
+def test_fixed_strategy():
     """
     Test the fixed selection strategy.
     """
 
     from functools                 import partial
-    from borg.portfolio.strategies import FixedSelectionStrategy
+    from borg.portfolio.strategies import FixedStrategy
 
-    strategy = FixedSelectionStrategy(FakeAction(42))
+    strategy = FixedStrategy(FakeAction(42))
     getter   = partial(get_action, strategy, None, 128.0, None)
 
     for i in xrange(4):
@@ -67,16 +69,16 @@ def test_modeling_selection_strategy():
 
     import numpy
 
-    from borg.portfolio.models     import FixedActionModel
-    from borg.portfolio.planners   import HardMyopicActionPlanner
-    from borg.portfolio.strategies import ModelingSelectionStrategy
+    from borg.portfolio.models     import FixedModel
+    from borg.portfolio.planners   import HardMyopicPlanner
+    from borg.portfolio.strategies import ModelingStrategy
 
     # set up the strategy
     actions    = [FakeAction(i) for i in xrange(4)]
     prediction = dict(zip(actions, numpy.eye(4)))
-    model      = FixedActionModel(prediction)
-    planner    = HardMyopicActionPlanner(1.0)
-    strategy   = ModelingSelectionStrategy(model, planner)
+    model      = FixedModel(prediction)
+    planner    = HardMyopicPlanner(1.0)
+    strategy   = ModelingStrategy(model, planner)
 
     # does it select the expected action?
     selected = get_action(strategy, None, 42.0, None)

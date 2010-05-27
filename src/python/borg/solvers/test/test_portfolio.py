@@ -17,8 +17,8 @@ def test_sat_portfolio_solver():
         Environment,
         PortfolioSolver,
         )
-    from borg.portfolio.sat_world  import SAT_WorldAction
-    from borg.portfolio.strategies import SequenceSelectionStrategy
+    from borg.portfolio.decision_world import DecisionWorldAction
+    from borg.portfolio.strategies     import SequenceStrategy
 
     certificate = [1, 2, 3, 4, 0]
     subsolvers  = [
@@ -26,7 +26,7 @@ def test_sat_portfolio_solver():
         FixedSolver(Decision(True,  certificate)),
         FixedSolver(Decision(False, None)),
         ]
-    actions     = [SAT_WorldAction(s, TimeDelta(seconds = 16.0)) for s in subsolvers]
+    actions     = [DecisionWorldAction(s, TimeDelta(seconds = 16.0)) for s in subsolvers]
     environment = Environment()
 
     # each test is similar
@@ -39,7 +39,7 @@ def test_sat_portfolio_solver():
 
         from borg.tasks import FileTask
 
-        strategy = SequenceSelectionStrategy(actions)
+        strategy = SequenceStrategy(actions)
         solver   = PortfolioSolver(strategy)
         task     = FileTask("/tmp/arbitrary_path.cnf")
         attempt  = solver.solve(task, TimeDelta(seconds = seconds), numpy.random, environment)
