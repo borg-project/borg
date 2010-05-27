@@ -107,8 +107,8 @@ def main((solver_path, input_path, seed_string)):
     flags = module_flags.given
 
     if flags.verbose:
-        get_logger("cargo.unix.accounting",      level = "DETAIL")
-        get_logger("borg.portfolio.models",      level = "NOTSET")
+        get_logger("cargo.unix.accounting", level = "DEBUG")
+        get_logger("borg.portfolio.models", level = "NOTSET")
 
     # build our PRNG
     from numpy.random import RandomState
@@ -135,10 +135,12 @@ def main((solver_path, input_path, seed_string)):
     # solve
     from cargo.temporal import TimeDelta
     from borg.tasks     import FileTask
+    from borg.solvers   import UncompressingSolver
 
-    task    = FileTask(input_path)
-    attempt = solver.solve(task, TimeDelta(seconds = 1e6), random, environment)
-    answer  = attempt.answer
+    task        = FileTask(input_path)
+    full_solver = UncompressingSolver(solver)
+    attempt     = full_solver.solve(task, TimeDelta(seconds = 1e6), random, environment)
+    answer      = attempt.answer
 
     # tell the world
     # FIXME should be domain-specific

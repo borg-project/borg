@@ -11,19 +11,18 @@ from cargo.log import get_logger
 
 log = get_logger(__name__, default_level = "INFO")
 
-def plot_trial(session, trial_row):
+def get_attempt_data(session, trial_row):
     """
-    Plot the specified trial.
+    Get relevant attempt data from a trial.
     """
 
-    # get the relevant attempts
-    from sqlalchemy     import and_
-    from borg.data      import (
+    from sqlalchemy import and_
+    from borg.data  import (
         DecisionRow,
         RunAttemptRow,
         )
 
-    rows =                                                       \
+    return                                                       \
         session                                                  \
         .query(
             RunAttemptRow.solver_name,
@@ -34,13 +33,19 @@ def plot_trial(session, trial_row):
         .filter(
             and_(
                 RunAttemptRow.trials.contains(trial_row),
-                RunAttemptRow.answer != None,
                 RunAttemptRow.answer_uuid == DecisionRow.uuid,
                 ),
             )                                                    \
-        .order_by(RunAttemptRow.cost)
+        .order_by(RunAttemptRow.cost)                            \
+        .all()
 
-    # break them into series
+def plot_trial(session, trial_rows):
+    """
+    Plot the specified trial.
+    """
+
+    # get attempts and break them into series
+    rows       = sum((get_attempt_data(session, r) for r in trial_rows), [])
     costs      = {}
     the_budget = None
 
@@ -84,7 +89,7 @@ def plot_trial(session, trial_row):
         pylab.plot(tick_x_values[True], tick_y_values[True], marker = "+", c = color, ls = "None")
         pylab.plot(tick_x_values[False], tick_y_values[False], marker = "x", c = color, ls = "None")
 
-    pylab.title("Solver Performance (Trial $\\mathtt{%s}$)" % trial_row.uuid)
+    pylab.title("Solver Performance")
     pylab.legend(loc = "lower right")
     pylab.show()
 
@@ -98,7 +103,7 @@ def main():
 
     from cargo.flags import parse_given
 
-    (trial_uuid,) = parse_given(usage = "%prog <trial_uuid> [options]")
+    trial_uuids = parse_given(usage = "%prog [options] <trial_uuid> [...]")
 
     # set up logging
     from cargo.log import enable_default_logging
@@ -120,11 +125,11 @@ def main():
             # get the trial
             from borg.data import TrialRow
 
-            trial_row = session.query(TrialRow).get(trial_uuid)
+            trial_rows = [session.query(TrialRow).get(u) for u in trial_uuids]
 
-            if trial_row is None:
-                raise ValueError("no such trial")
+            if None in trial_rows:
+                raise ValueError("at least one trial could not be round")
 
             # and plot it
-            plot_trial(session, trial_row)
+            plot_trial(session, trial_rows)
 

@@ -140,7 +140,7 @@ class DecisionWorldAction(AbstractAction):
     @property
     def solver(self):
         """
-        The solver associated with this SAT action.
+        The solver associated with this action.
         """
 
         return self._solver

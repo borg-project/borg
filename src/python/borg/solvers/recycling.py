@@ -38,15 +38,30 @@ class RecyclingSolver(Rowed, AbstractSolver):
 
         # generate a recycled result
         with environment.CacheSession() as session:
-            from borg.data    import RunAttemptRow
-            from borg.solvers import Attempt
+            from cargo.unix.accounting import CPU_LimitedRun
+            from borg.data             import RunAttemptRow
+            from borg.solvers          import RunAttempt
 
             attempt_row = self._get_attempt_row(session, task, budget, RunAttemptRow)
 
             if attempt_row.cost <= budget:
-                return Attempt(self, budget, attempt_row.cost, task, attempt_row.get_short_answer())
+                return \
+                    RunAttempt(
+                        self,
+                        task,
+                        attempt_row.get_short_answer(),
+                        attempt_row.seed,
+                        CPU_LimitedRun(None, budget, None, None, None, attempt_row.cost, None, None),
+                        )
             else:
-                return Attempt(self, budget, budget, task, None)
+                return \
+                    RunAttempt(
+                        self,
+                        task,
+                        None,
+                        attempt_row.seed,
+                        CPU_LimitedRun(None, budget, None, None, None, budget, None, None),
+                        )
 
     def _get_attempt_row(self, session, task, budget, AR):
         """

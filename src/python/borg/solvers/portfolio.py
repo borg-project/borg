@@ -4,11 +4,13 @@
 
 from borg.rowed   import Rowed
 from borg.solvers import (
-    Attempt,
+    RunAttempt,
     AbstractSolver,
     )
 
-class PortfolioAttempt(Attempt):
+# FIXME hack---shouldn't really be a run attempt
+
+class PortfolioAttempt(RunAttempt):
     """
     Result of a portfolio solver.
     """
@@ -18,19 +20,21 @@ class PortfolioAttempt(Attempt):
         Initialize.
         """
 
+        from cargo.unix.accounting import CPU_LimitedRun
+
         if record:
             (_, attempt) = record[-1]
             answer       = attempt.answer
         else:
             answer = None
 
-        Attempt.__init__(
+        RunAttempt.__init__(
             self,
             solver,
-            budget,
-            cost,
             task,
             answer,
+            None,
+            CPU_LimitedRun(None, budget, None, None, None, cost, None, None),
             )
 
         self._record = record
@@ -52,6 +56,8 @@ class PortfolioSolver(Rowed, AbstractSolver):
         """
         Initialize.
         """
+
+        Rowed.__init__(self)
 
         self.strategy        = strategy
         self.max_invocations = 50
@@ -99,12 +105,12 @@ class PortfolioSolver(Rowed, AbstractSolver):
             raise RuntimeError("strategy selected an infeasible action")
 
         # take it, and provide the outcome
-        from cargo.temporal           import TimeDelta
-        from borg.portfolio.sat_world import SAT_WorldOutcome
+        from cargo.temporal                import TimeDelta
+        from borg.portfolio.decision_world import DecisionWorldOutcome
 
         calibrated = TimeDelta(seconds = action.cost * environment.time_ratio)
         result     = action.solver.solve(task, calibrated, random, environment)
-        outcome    = SAT_WorldOutcome.from_result(result)
+        outcome    = DecisionWorldOutcome.from_result(result)
 
         try:
             action_generator.send(outcome)
@@ -112,6 +118,22 @@ class PortfolioSolver(Rowed, AbstractSolver):
             pass
 
         return (action, result)
+
+    def get_new_row(self, session):
+        """
+        Create or obtain an ORM row for this object.
+        """
+
+        from borg.data import SolverRow
+
+        solver_row = session.query(SolverRow).get(self.name)
+
+        if solver_row is None:
+            solver_row = SolverRow(name = self.name, type = "sat")
+
+            session.add(solver_row)
+
+        return solver_row
 
     @property
     def name(self):

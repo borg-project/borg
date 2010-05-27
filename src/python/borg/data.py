@@ -104,8 +104,10 @@ class CPU_LimitedRunRow(DatumBase):
                 **kwargs
                 )
 
-        row.set_stdout("".join(c for (_, c) in run.out_chunks))
-        row.set_stderr("".join(c for (_, c) in run.err_chunks))
+        if run.out_chunks is not None:
+            row.set_stdout("".join(c for (_, c) in run.out_chunks))
+        if run.err_chunks is not None:
+            row.set_stderr("".join(c for (_, c) in run.err_chunks))
 
         return row
 
