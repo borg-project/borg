@@ -1,4 +1,3 @@
-#!/usr/bin/env python2.6
 """
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
@@ -10,17 +9,14 @@ def addenv(variable, value, separator = ":"):
     Set the environment variable, prepending if necessary.
     """
 
-    from os import (
-        getenv,
-        putenv,
-        )
+    from os import environ
 
-    old = getenv(variable)
+    old = environ.get(variable)
 
     if old is None:
-        putenv(variable, value)
+        environ[variable] = value
     else:
-        putenv(variable, "%s%s%s" % (value, separator, old))
+        environ[variable] = "%s%s%s" % (value, separator, old)
 
 def get_default_root():
     """
@@ -36,16 +32,15 @@ def execute_borg(
     support   = "",
     submodule = "",
     as_module = False,
-    argv      = sys.argv,
+    argv      = sys.argv[1:],
     ):
     """
     Set up the solver environment, and run.
     """
 
     from os      import (
-        getenv,
-        putenv,
         execvp,
+        environ,
         )
     from os.path import (
         join,
@@ -59,7 +54,7 @@ def execute_borg(
     submodule_path = join(root, submodule)
 
     # provide the borg root path
-    putenv("BORG_ROOT", root_path)
+    environ["BORG_ROOT"] = root_path
 
     # set up submodule paths for python
     python_paths = [
@@ -85,7 +80,7 @@ def execute_borg(
         if exists(local_python_binary):
             local_python = local_python_binary
 
-            putenv("PYTHONHOME", prefix_path)
+            environ["PYTHONHOME"] = prefix_path
             addenv("PYTHONPATH", join(prefix_path, "lib/python2.6"))
         else:
             local_python = None
@@ -101,19 +96,23 @@ def execute_borg(
     # set up a default (local) tmpdir, if one exists
     tmpdir_name = "TMPDIR"
 
-    if getenv(tmpdir_name) is None:
+    if environ.get(tmpdir_name) is None:
         tmpdir_path = join(support_path, "tmp")
 
         if isdir(tmpdir_path):
-            putenv(tmpdir_name, tmpdir_path)
+            environ[tmpdir_name] = tmpdir_path
 
     # execute the command
     if as_module:
-        program   = local_python if local_python else "python"
-        arguments = [program, "-m"] + sys.argv[1:]
+        if local_python:
+            program = local_python
+        else:
+            program = "python"
+
+        arguments = [program, "-m"] + argv
     else:
-        program   = sys.argv[1]
-        arguments = sys.argv[1:]
+        program   = argv[0]
+        arguments = argv
 
     execvp(program, arguments)
 
