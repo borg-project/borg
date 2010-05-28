@@ -89,16 +89,17 @@ def solve_task(
         trial_row   = session.merge(trial_row)
         task_row    = session.query(TaskRow).get(task_uuid)
 
-        if borg.solvers.base.module_flags.given.use_recycled_runs:
-            from borg.tasks import Task
+        # FIXME
+#         if borg.solvers.base.module_flags.given.use_recycled_runs:
+#             from borg.tasks import Task
 
-            full_solver = solver
-            task        = Task(row = task_row)
-        else:
-            from borg.solvers import UncompressingSolver
+#             full_solver = solver
+#             task        = Task(row = task_row)
+#         else:
+        from borg.solvers import UncompressingSolver
 
-            full_solver = UncompressingSolver(solver)
-            task        = task_row.get_task(environment)
+        full_solver = UncompressingSolver(solver)
+        task        = task_row.get_task(environment)
 
         # make the run
         log.info("running %s on %s", solver.name, task_row.uuid)

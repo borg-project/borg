@@ -8,8 +8,10 @@ from borg.solvers import (
     AbstractSolver,
     )
 
-# FIXME hack---shouldn't really be a run attempt
-
+# FIXME hack---shouldn't really be a RunAttempt
+# FIXME (if the *only* distinction between a run and non-run attempt
+# FIXME  is the presence of an associated process run, why bother with
+# FIXME  the distinction? just have a nullable column)
 class PortfolioAttempt(RunAttempt):
     """
     Result of a portfolio solver.
@@ -73,15 +75,28 @@ class PortfolioSolver(Rowed, AbstractSolver):
         remaining = budget
         nleft     = self.max_invocations
         record    = []
+        selector  = self.strategy.select(task, random)
 
         while remaining > TimeDelta() and nleft > 0:
-            (action, result)   = self._solve_once_on(task, remaining, random, environment)
-            nleft             -= 1
+            # select and take an action
+            from cargo.temporal                import TimeDelta
+            from borg.portfolio.decision_world import DecisionWorldOutcome
+
+            if remaining == budget:
+                action = selector.send(None)
+            else:
+                action = selector.send((outcome, remaining.as_s))
 
             if action is None:
                 break
+            elif action.cost > remaining.as_s:
+                raise RuntimeError("strategy selected an infeasible action")
             else:
-                remaining = TimeDelta.from_timedelta(remaining - action.budget)
+                calibrated = TimeDelta(seconds = action.cost * environment.time_ratio)
+                result     = action.solver.solve(task, calibrated, random, environment)
+                outcome    = DecisionWorldOutcome.from_result(result)
+                nleft     -= 1
+                remaining  = TimeDelta.from_timedelta(remaining - action.budget)
 
                 record.append((action.solver, result))
 
@@ -89,35 +104,6 @@ class PortfolioSolver(Rowed, AbstractSolver):
                     break
 
         return PortfolioAttempt(self, task, budget, budget - remaining, record)
-
-    def _solve_once_on(self, task, budget, random, environment):
-        """
-        Evaluate once on a specific task.
-        """
-
-        # select an action
-        action_generator = self.strategy.select(task, budget.as_s, random)
-        action           = action_generator.send(None)
-
-        if action is None:
-            return (None, None)
-        if action.budget > budget:
-            raise RuntimeError("strategy selected an infeasible action")
-
-        # take it, and provide the outcome
-        from cargo.temporal                import TimeDelta
-        from borg.portfolio.decision_world import DecisionWorldOutcome
-
-        calibrated = TimeDelta(seconds = action.cost * environment.time_ratio)
-        result     = action.solver.solve(task, calibrated, random, environment)
-        outcome    = DecisionWorldOutcome.from_result(result)
-
-        try:
-            action_generator.send(outcome)
-        except StopIteration:
-            pass
-
-        return (action, result)
 
     def get_new_row(self, session):
         """
