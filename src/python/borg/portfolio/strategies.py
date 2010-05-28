@@ -27,9 +27,9 @@ class AbstractStrategy(ABC):
     """
 
     @abstractmethod
-    def select(self, task, budget, random):
+    def select(self, budget, random):
         """
-        Select an action, yield it, and receive its outcome.
+        A generator that yields actions and receives (outcome, next_budget).
         """
 
 class SequenceStrategy(AbstractStrategy):
@@ -44,17 +44,18 @@ class SequenceStrategy(AbstractStrategy):
 
         self.action_sequence = iter(actions)
 
-    def select(self, task, budget, random):
+    def select(self, budget, random):
         """
-        Select an action, yield it, and receive its outcome.
+        A generator that yields actions and receives (outcome, next_budget).
         """
 
-        selected = self.action_sequence.next()
+        while True:
+            selected = self.action_sequence.next()
 
-        if selected.cost > budget:
-            yield None
-        else:
-            yield selected
+            if selected.cost > budget:
+                yield None
+            else:
+                yield selected
 
     @staticmethod
     def build(request, trainer):
@@ -98,21 +99,23 @@ class ModelingStrategy(AbstractStrategy):
 
         self.model   = model
         self.planner = planner
-        self.history = []
 
-    def select(self, task, budget, random):
+    def select(self, budget, random):
         """
         Select an action, yield it, and receive its outcome.
         """
 
-        # predict, then make a selection
-        predicted = self.model.predict(task, self.history, random)
-        selected  = self.planner.select(predicted, budget, random)
-        outcome   = yield selected
+        history = []
 
-        # remember its result
-        if outcome is not None:
-            self.history.append((task, selected, outcome))
+        while True:
+            # predict, then make a selection
+            predicted         = self.model.predict(history, random)
+            selected          = self.planner.select(predicted, budget, random)
+            (outcome, budget) = yield selected
+
+            # remember its result
+            if outcome is not None:
+                history.append((selected, outcome))
 
     @staticmethod
     def build(request, trainer):
@@ -123,9 +126,8 @@ class ModelingStrategy(AbstractStrategy):
         from borg.portfolio.models   import build_model
         from borg.portfolio.planners import build_planner
 
-        return \
-            ModelingStrategy(
-                build_model(request["model"], trainer),
-                build_planner(request["planner"], trainer),
-                )
+        model   = build_model(request["model"], trainer)
+        planner = build_planner(request["planner"], trainer, model)
+
+        return ModelingStrategy(model, planner)
 

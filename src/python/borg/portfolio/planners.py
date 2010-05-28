@@ -1,8 +1,4 @@
 """
-utexas/portfolio/planners.py
-
-Model-based action planning.
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
@@ -15,7 +11,7 @@ from cargo.sugar import ABC
 
 log = get_logger(__name__)
 
-def build_planner(request, trainer):
+def build_planner(request, trainer, model):
     """
     Build an action planner as requested.
     """
@@ -23,9 +19,10 @@ def build_planner(request, trainer):
     builders = {
         "hard_myopic" : HardMyopicPlanner.build,
         "soft_myopic" : SoftMyopicPlanner.build,
+        "bellman"     : BellmanPlanner.build,
         }
 
-    return builders[request["type"]](request, trainer)
+    return builders[request["type"]](request, trainer, model)
 
 class AbstractPlanner(ABC):
     """
@@ -69,7 +66,7 @@ class HardMyopicPlanner(AbstractPlanner):
             return None
 
     @staticmethod
-    def build(request, trainer):
+    def build(request, trainer, model):
         """
         Build a sequence strategy as requested.
         """
@@ -110,10 +107,77 @@ class SoftMyopicPlanner(AbstractPlanner):
         return action
 
     @staticmethod
-    def build(request, trainer):
+    def build(request, trainer, model):
         """
         Build a sequence strategy as requested.
         """
 
         return SoftMyopicPlanner(request["discount"], request["temperature"])
+
+class BellmanPlanner(AbstractPlanner):
+    """
+    An optimal, exponential-time finite-horizon cost-limited planner.
+    """
+
+    def __init__(self, model, horizon, budget):
+        """
+        Initialize.
+        """
+
+        from itertools import izip
+
+        actions = model._actions
+
+        def eu(history, depth, cost, plan):
+            """
+            Compute the expected utility of a state.
+            """
+
+            if depth == horizon or cost >= budget:
+                return (0.0, plan)
+            else:
+                best_e      = 0.0
+                best_action = None
+                predictions = model.predict(None, history, None)
+
+                for action in actions:
+                    e = 0.0
+
+                    for (o, p) in izip(action.outcomes, predictions[action]):
+                        if o.utility > 0.0:
+                            e += p * o.utility
+                        else:
+                            (t_e, t_plan) = eu(history + [(None, action, o)], depth + 1, cost + action.cost, plan)
+                            e += p * t_e
+
+                    if e >= best_e:
+                        best_e      = e
+                        best_action = action
+
+                    if depth <= 0:
+                        print depth, action.description, e
+
+                return (best_e, [best_action] + t_plan)
+
+        (_, plan) = eu([], 0, 0.0, [])
+
+        print "computed plan follows"
+
+        for action in plan:
+            print action.description
+
+    def select(self, predicted, actions, random):
+        """
+        Select an action given the probabilities of outcomes.
+        """
+
+        raise NotImplementedError()
+
+    @staticmethod
+    def build(request, trainer, model):
+        """
+        Build a sequence strategy as requested.
+        """
+
+        return BellmanPlanner(model, request["horizon"], request["budget"])
 

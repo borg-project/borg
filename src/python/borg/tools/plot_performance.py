@@ -128,7 +128,7 @@ def main():
             trial_rows = [session.query(TrialRow).get(u) for u in trial_uuids]
 
             if None in trial_rows:
-                raise ValueError("at least one trial could not be round")
+                raise ValueError("at least one trial could not be found")
 
             # and plot it
             plot_trial(session, trial_rows)

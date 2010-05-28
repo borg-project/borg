@@ -50,7 +50,7 @@ class AbstractModel(ABC):
     """
 
     @abstractmethod
-    def predict(self, task, history, random):
+    def predict(self, history, random):
         """
         Return a map between actions and (normalized) predicted probabilities.
         """
@@ -71,7 +71,7 @@ class FixedModel(AbstractModel):
         # members
         self._predictions = predictions
 
-    def predict(self, task, history, random):
+    def predict(self, history, random):
         """
         Return the fixed map.
         """
@@ -108,7 +108,7 @@ class RandomModel(AbstractModel):
 
         return predictions
 
-    def predict(self, task, history, random):
+    def predict(self, history, random):
         """
         Return the predicted probability of each outcome, given history.
         """
@@ -159,7 +159,7 @@ class MultinomialMixtureModel(AbstractModel):
             for k in xrange(K):
                 self.mix_MKD[m, k] = self.mixture.components[m, k].log_beta
 
-    def predict(self, task, history, feasible):
+    def predict(self, history, feasible):
         """
         Given history, return the probability of each outcome of each action.
 
@@ -312,8 +312,10 @@ class DCM_MixtureModel(AbstractModel):
 
         return post_pi_K
 
-#     def predict(self, task, history, feasible):
-    def predict(self, task, history, random):
+    def predict(self, history, random):
+        """
+        Return a prediction.
+        """
 
         # mise en place
         M = self.mixture.ndomains
@@ -325,10 +327,9 @@ class DCM_MixtureModel(AbstractModel):
         # get the task-specific history
         counts_MD = numpy.zeros((len(self._actions), 2), numpy.uint)
 
-        for (t, a, o) in history:
-            if t == task:
-                na = action_indices[a]
-                counts_MD[na, o.n] += 1
+        for (a, o) in history:
+            na = action_indices[a]
+            counts_MD[na, o.n] += 1
 
         # get the outcome probabilities
         post_pi_K = self.get_post_pi_K(counts_MD)
