@@ -40,9 +40,22 @@ def build_model(request, trainer):
         "multinomial" : MultinomialMixtureModel.build,
         "random"      : RandomModel.build,
         "fixed"       : FixedModel.build,
+        "load"        : load_model,
         }
 
     return builders[request["type"]](request, trainer)
+
+def load_model(request, trainer):
+    """
+    Load a model as requested.
+    """
+
+    import cPickle as pickle
+
+    from cargo.io import expandpath
+
+    with open(expandpath(request["path"])) as file:
+        return pickle.load(file)
 
 class AbstractModel(ABC):
     """

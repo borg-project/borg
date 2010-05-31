@@ -11,6 +11,23 @@ from cargo.log import get_logger
 
 log = get_logger(__name__)
 
+def build_request(request, trainer):
+    """
+    Build a portfolio object as requested.
+    """
+
+    from borg.solvers          import PortfolioSolver
+    from borg.portfolio.models import build_model
+
+    builders = {
+        "solver" : PortfolioSolver.build,
+        "model"  : build_model,
+        }
+
+    (_, kind) = request.keys()
+
+    return builders[kind](request[kind], trainer)
+
 def main():
     """
     Script entry point.
@@ -43,16 +60,15 @@ def main():
     # construct the solver
     from cargo.sql.alchemy    import make_session
     from borg.data            import research_connect
-    from borg.solvers         import PortfolioSolver
     from borg.portfolio.world import build_trainer
 
     ResearchSession = make_session(bind = research_connect())
     trainer         = build_trainer(request["domain"], train_uuids, ResearchSession)
-    solver          = PortfolioSolver.build(request, trainer)
+    requested       = build_request(request, trainer)
 
     # write it to disk
     import cPickle as pickle
 
     with open(solver_path, "w") as file:
-        pickle.dump(solver, file, -1)
+        pickle.dump(requested, file, -1)
 

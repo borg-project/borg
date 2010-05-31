@@ -138,7 +138,7 @@ class BellmanPlanner(AbstractPlanner):
             else:
                 best_e      = 0.0
                 best_action = None
-                predictions = model.predict(None, history, None)
+                predictions = model.predict(history, None)
 
                 for action in actions:
                     e = 0.0
@@ -147,7 +147,7 @@ class BellmanPlanner(AbstractPlanner):
                         if o.utility > 0.0:
                             e += p * o.utility
                         else:
-                            (t_e, t_plan) = eu(history + [(None, action, o)], depth + 1, cost + action.cost, plan)
+                            (t_e, t_plan) = eu(history + [(action, o)], depth + 1, cost + action.cost, plan)
                             e += p * t_e
 
                     if e >= best_e:
