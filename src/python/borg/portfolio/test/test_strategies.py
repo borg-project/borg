@@ -43,16 +43,14 @@ def test_sequence_strategy():
 
     assert_equal(selected.next().value, actions[0].value)
 
-    # verify basic behavior
+    # verify repeated behavior
     selected = yield_selected(strategy, 128.0)
 
     for (action, selected_action) in zip(actions, selected):
         assert_equal(selected_action.value, action.value)
 
     # verify budget awareness
-    selected = yield_selected(strategy, 2.0)
-
-    assert_equal(selected.next(), None)
+    assert_equal(yield_selected(strategy, 2.0).next(), None)
 
 def test_fixed_strategy():
     """
@@ -66,8 +64,12 @@ def test_fixed_strategy():
     strategy = FixedStrategy(FakeAction(42))
     selected = yield_selected(strategy, 128.0)
 
+    # verify basic behavior
     for (_, action) in zip(xrange(4), selected):
         assert_equal(action.value, 42)
+
+    # verify budget awareness
+    assert_equal(yield_selected(strategy, 2.0).next(), None)
 
 def test_modeling_selection_strategy():
     """

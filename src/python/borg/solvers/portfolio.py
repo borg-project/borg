@@ -75,21 +75,19 @@ class PortfolioSolver(Rowed, AbstractSolver):
         remaining = budget
         nleft     = self.max_invocations
         record    = []
-        selector  = self.strategy.select(task, random)
+        selector  = self.strategy.select(remaining.as_s, random)
+        message   = None
 
         while remaining > TimeDelta() and nleft > 0:
             # select and take an action
             from cargo.temporal                import TimeDelta
             from borg.portfolio.decision_world import DecisionWorldOutcome
 
-            if remaining == budget:
-                action = selector.send(None)
-            else:
-                action = selector.send((outcome, remaining.as_s))
+            action = selector.send(message)
 
             if action is None:
                 break
-            elif action.cost > remaining.as_s:
+            elif action.budget > remaining:
                 raise RuntimeError("strategy selected an infeasible action")
             else:
                 calibrated = TimeDelta(seconds = action.cost * environment.time_ratio)
@@ -97,6 +95,7 @@ class PortfolioSolver(Rowed, AbstractSolver):
                 outcome    = DecisionWorldOutcome.from_result(result)
                 nleft     -= 1
                 remaining  = TimeDelta.from_timedelta(remaining - action.budget)
+                message    = (outcome, remaining.as_s)
 
                 record.append((action.solver, result))
 
