@@ -15,14 +15,14 @@ def test_fixed_model():
 
     import numpy
 
-    from borg.portfolio.test.test_strategies import FakeAction
-    from borg.portfolio.models               import FixedModel
+    from borg.portfolio.test.support import FakeAction
+    from borg.portfolio.models       import FixedModel
 
     actions     = [FakeAction(i) for i in xrange(4)]
     predictions = dict((a, numpy.array([0.25, 0.125, 0.125, 0.50])) for a in actions)
     model       = FixedModel(predictions)
 
-    assert_equal(model.predict(None, [], None), predictions)
+    assert_equal(model.predict([], None), predictions)
 
 def test_random_model():
     """
@@ -40,7 +40,7 @@ def test_random_model():
     from numpy.random import RandomState
 
     random = RandomState(42)
-    maps   = [model.predict(None, [], random) for i in xrange(1024)]
+    maps   = [model.predict([], random) for i in xrange(1024)]
 
     # verify that they're valid probabilities
     import numpy
