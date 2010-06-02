@@ -16,22 +16,24 @@ def test_tools_portfolio_learn():
 
     solver_request = {
         "domain"  : "sat",
-        "type"    : "modeling",
-        "planner" : {
-            "type"     : "hard_myopic",
-            "discount" : 1.0,
+        "solver"  : {
+            "type"    : "modeling",
+            "planner" : {
+                "type"     : "hard_myopic",
+                "discount" : 1.0,
+                },
+            "model"   : {
+                "type"        : "random",
+                "actions"     : {
+                    "solvers" : [
+                        "foo",
+                        "bar",
+                        "baz",
+                        ],
+                    "budgets" : [1],
+                    },
+                },
             },
-        "model"   : {
-            "type"        : "random",
-            "actions"     : {
-                "solvers" : [
-                    "foo",
-                    "bar",
-                    "baz",
-                    ],
-                "budgets" : [1],
-                }
-            }
         }
 
     with mkdtemp_scoped() as sandbox_path:
