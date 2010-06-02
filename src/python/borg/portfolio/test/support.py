@@ -12,13 +12,17 @@ class FakeAction(AbstractAction):
     An action strictly for testing.
     """
 
-    def __init__(self, value):
+    def __init__(self, value, outcomes = None):
         """
         Initialize.
         """
 
-        self.value     = value
-        self._outcomes = map(FakeOutcome, [0.0, 1.0, 2.0, 3.0])
+        self.value = value
+
+        if outcomes is None:
+            self._outcomes = map(FakeOutcome, [0.0, 1.0, 2.0, 3.0])
+        else:
+            self._outcomes = outcomes
 
     @property
     def cost(self):
@@ -35,6 +39,14 @@ class FakeAction(AbstractAction):
         """
 
         return self._outcomes
+
+    @property
+    def description(self):
+        """
+        Describe this action.
+        """
+
+        return "%s" % self.value
 
 class FakeOutcome(AbstractOutcome):
     """

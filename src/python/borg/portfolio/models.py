@@ -40,6 +40,7 @@ def build_model(request, trainer):
         "multinomial" : MultinomialMixtureModel.build,
         "random"      : RandomModel.build,
         "fixed"       : FixedModel.build,
+        "table"       : TableModel.build,
         "load"        : load_model,
         }
 
@@ -90,6 +91,40 @@ class FixedModel(AbstractModel):
         """
 
         return self._predictions
+
+    @staticmethod
+    def build(request, trainer):
+        """
+        Build a model as requested.
+        """
+
+        raise NotImplementedError()
+
+class TableModel(AbstractModel):
+    """
+    Make fixed per-history predictions.
+
+    Works only with hashable histories.
+    """
+
+    def __init__(self, table):
+        """
+        Initialize.
+        """
+
+        # argument sanity
+        for predictions in table.itervalues():
+            assert_sane_predictions(predictions)
+
+        # members
+        self._table = table
+
+    def predict(self, history, random):
+        """
+        Return the fixed map.
+        """
+
+        return self._predictions[history]
 
     @staticmethod
     def build(request, trainer):
