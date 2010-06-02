@@ -84,10 +84,10 @@ def solve_task(
         # prepare the run
         import borg.solvers.base
 
-        from borg.data    import TaskRow
+        from borg.data import TaskRow
 
-        trial_row   = session.merge(trial_row)
-        task_row    = session.query(TaskRow).get(task_uuid)
+        trial_row = session.merge(trial_row)
+        task_row  = session.query(TaskRow).get(task_uuid)
 
         # FIXME
 #         if borg.solvers.base.module_flags.given.use_recycled_runs:
@@ -103,6 +103,8 @@ def solve_task(
 
         # make the run
         log.info("running %s on %s", solver.name, task_row.uuid)
+
+        session.commit()
 
         attempt = full_solver.solve(task, budget, random, environment)
 
