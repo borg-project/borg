@@ -11,9 +11,9 @@ def test_sat_portfolio_solver():
     """
 
     # set up the portfolio solver
-    from cargo.temporal            import TimeDelta
-    from borg.sat                  import Decision
-    from borg.solvers              import (
+    from cargo.temporal                import TimeDelta
+    from borg.sat                      import Decision
+    from borg.solvers                  import (
         Environment,
         PortfolioSolver,
         )

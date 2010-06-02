@@ -2,65 +2,72 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from nose.tools                  import assert_equal
-from borg.portfolio.test.support import FakeAction
 
-def get_action(strategy, task, budget, outcome):
+def yield_selected(strategy, budget):
     """
     Return a strategy's next action.
     """
 
-    import numpy
+    from itertools    import repeat
+    from numpy.random import RandomState
 
-    action_generator = strategy.select(task, budget, numpy.random)
-    action           = action_generator.send(None)
+    selected = strategy.select(budget, RandomState(42))
+    result   = None
 
-    try:
-        action_generator.send(outcome)
-    except StopIteration:
-        pass
+    for outcome in repeat(None):
+        action = selected.send(result)
 
-    return action
+        if action is not None:
+            budget -= action.cost
+
+        result = (outcome, budget)
+
+        yield action
 
 def test_sequence_strategy():
     """
     Test the sequence selection strategy.
     """
 
-    from itertools                 import cycle
-    from functools                 import partial
-    from borg.portfolio.strategies import SequenceStrategy
+    from nose.tools                  import assert_equal
+    from borg.portfolio.test.support import FakeAction
+    from borg.portfolio.strategies   import SequenceStrategy
 
     actions  = [FakeAction(i) for i in xrange(4)]
-    strategy = SequenceStrategy(cycle(actions))
-    getter   = partial(get_action, strategy, None, 128.0, None)
+    strategy = SequenceStrategy(actions * 2)
+    selected = yield_selected(strategy, 128.0)
 
     # verify basic behavior
-    for action in actions:
-        assert_equal(getter().value, action.value)
+    for (action, selected_action) in zip(actions, selected):
+        assert_equal(selected_action.value, action.value)
 
-    # verify repeated behavior
-    for action in actions:
-        assert_equal(getter().value, action.value)
+    assert_equal(selected.next().value, actions[0].value)
+
+    # verify basic behavior
+    selected = yield_selected(strategy, 128.0)
+
+    for (action, selected_action) in zip(actions, selected):
+        assert_equal(selected_action.value, action.value)
 
     # verify budget awareness
-    selected = get_action(strategy, None, 2.0, None)
+    selected = yield_selected(strategy, 2.0)
 
-    assert_equal(selected, None)
+    assert_equal(selected.next(), None)
 
 def test_fixed_strategy():
     """
     Test the fixed selection strategy.
     """
 
-    from functools                 import partial
-    from borg.portfolio.strategies import FixedStrategy
+    from nose.tools                  import assert_equal
+    from borg.portfolio.test.support import FakeAction
+    from borg.portfolio.strategies   import FixedStrategy
 
     strategy = FixedStrategy(FakeAction(42))
-    getter   = partial(get_action, strategy, None, 128.0, None)
+    selected = yield_selected(strategy, 128.0)
 
-    for i in xrange(4):
-        assert_equal(getter().value, 42)
+    for (_, action) in zip(xrange(4), selected):
+        assert_equal(action.value, 42)
 
 def test_modeling_selection_strategy():
     """
@@ -69,9 +76,11 @@ def test_modeling_selection_strategy():
 
     import numpy
 
-    from borg.portfolio.models     import FixedModel
-    from borg.portfolio.planners   import HardMyopicPlanner
-    from borg.portfolio.strategies import ModelingStrategy
+    from nose.tools                  import assert_equal
+    from borg.portfolio.test.support import FakeAction
+    from borg.portfolio.models       import FixedModel
+    from borg.portfolio.planners     import HardMyopicPlanner
+    from borg.portfolio.strategies   import ModelingStrategy
 
     # set up the strategy
     actions    = [FakeAction(i) for i in xrange(4)]
@@ -81,12 +90,12 @@ def test_modeling_selection_strategy():
     strategy   = ModelingStrategy(model, planner)
 
     # does it select the expected action?
-    selected = get_action(strategy, None, 42.0, None)
+    selected = yield_selected(strategy, 128.0).next()
 
     assert_equal(selected, actions[-1])
 
     # does it pay attention to feasibility?
-    selected = get_action(strategy, None, 1.0, None)
+    selected = yield_selected(strategy, 2.0).next()
 
     assert_equal(selected, None)
 

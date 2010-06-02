@@ -42,20 +42,18 @@ class SequenceStrategy(AbstractStrategy):
         Initialize.
         """
 
-        self.action_sequence = iter(actions)
+        self.actions = actions
 
     def select(self, budget, random):
         """
         A generator that yields actions and receives (outcome, next_budget).
         """
 
-        while True:
-            selected = self.action_sequence.next()
-
+        for selected in self.actions:
             if selected.cost > budget:
-                yield None
-            else:
-                yield selected
+                selected = None
+
+            (_, budget) = yield selected
 
     @staticmethod
     def build(request, trainer):
