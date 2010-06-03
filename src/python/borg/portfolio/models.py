@@ -4,7 +4,10 @@
 
 import numpy
 
-from abc         import abstractmethod
+from abc         import (
+    abstractmethod,
+    abstractproperty,
+    )
 from cargo.log   import get_logger
 from cargo.sugar import ABC
 # from cargo.statistics.dcm import DirichletCompoundMultinomial
@@ -40,8 +43,7 @@ def build_model(request, trainer):
         "multinomial" : MultinomialMixtureModel.build,
         "random"      : RandomModel.build,
         "fixed"       : FixedModel.build,
-        "table"       : TableModel.build,
-        "load"        : load_model,
+        "pickle"      : load_model,
         }
 
     return builders[request["type"]](request, trainer)
@@ -69,6 +71,12 @@ class AbstractModel(ABC):
         Return a map between actions and (normalized) predicted probabilities.
         """
 
+    @abstractproperty
+    def actions(self):
+        """
+        The actions associated with this model.
+        """
+
 class FixedModel(AbstractModel):
     """
     Stick to one prediction.
@@ -92,39 +100,13 @@ class FixedModel(AbstractModel):
 
         return self._predictions
 
-    @staticmethod
-    def build(request, trainer):
+    @property
+    def actions(self):
         """
-        Build a model as requested.
-        """
-
-        raise NotImplementedError()
-
-class TableModel(AbstractModel):
-    """
-    Make fixed per-history predictions.
-
-    Works only with hashable histories.
-    """
-
-    def __init__(self, table):
-        """
-        Initialize.
+        The actions associated with this model.
         """
 
-        # argument sanity
-        for predictions in table.itervalues():
-            assert_sane_predictions(predictions)
-
-        # members
-        self._table = table
-
-    def predict(self, history, random):
-        """
-        Return the fixed map.
-        """
-
-        return self._predictions[history]
+        return self._predictions.keys()
 
     @staticmethod
     def build(request, trainer):
@@ -144,7 +126,7 @@ class RandomModel(AbstractModel):
         Initialize.
         """
 
-        self.actions = actions
+        self._actions = actions
 
     def _random_prediction(self, action, random):
         """
@@ -161,7 +143,15 @@ class RandomModel(AbstractModel):
         Return the predicted probability of each outcome, given history.
         """
 
-        return dict((a, self._random_prediction(a, random)) for a in self.actions)
+        return dict((a, self._random_prediction(a, random)) for a in self._actions)
+
+    @property
+    def actions(self):
+        """
+        The actions associated with this model.
+        """
+
+        return self._actions
 
     @staticmethod
     def build(request, trainer):
@@ -416,6 +406,14 @@ class DCM_MixtureModel(AbstractModel):
         predicted = out[numpy.array([action_indices[a] for a in self._actions])]
 
         return dict(zip(self._actions, predicted))
+
+    @property
+    def actions(self):
+        """
+        The actions associated with this model.
+        """
+
+        return self._actions
 
     @staticmethod
     def build_with(training, k, em_restarts):

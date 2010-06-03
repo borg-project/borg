@@ -62,12 +62,12 @@ def test_compute_bellman():
         compute_bellman_utility,
         )
 
-    (expected_utility, best_plan) = compute_bellman_utility(model, 4, 128.0, [])
+    (expected_utility, best_plan) = compute_bellman_utility(model, 4, 128.0, 1.0, [])
 
     assert_equal(expected_utility, 0.99609375)
     assert_equal(best_plan, [model.actions[0]] * 4)
 
-    best_plan_again = compute_bellman_plan(model, 4, 128.0)
+    best_plan_again = compute_bellman_plan(model, 4, 128.0, 1.0)
 
     assert_equal(best_plan_again, [model.actions[0]] * 4)
 

@@ -53,9 +53,11 @@ def main():
 
     enable_default_logging()
 
-    get_logger("sqlalchemy.engine",        level = "WARNING")
-    get_logger("cargo.statistics.mixture", level = "DETAIL")
-    get_logger("borg.portfolio.sat_world", level = "DETAIL")
+    get_logger("sqlalchemy.engine",         level = "WARNING")
+    get_logger("cargo.statistics.mixture",  level = "DETAIL")
+    get_logger("borg.portfolio.bellman",    level = "DETAIL")
+    get_logger("borg.portfolio.sat_world",  level = "DETAIL")
+    get_logger("borg.portfolio.strategies", level = "DETAIL")
 
     # construct the solver
     from cargo.sql.alchemy    import make_session

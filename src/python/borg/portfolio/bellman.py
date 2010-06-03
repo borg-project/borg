@@ -3,14 +3,17 @@
 """
 
 from itertools               import izip
+from cargo.log               import get_logger
 from borg.portfolio.planners import AbstractPlanner
 
-def compute_bellman_utility(model, horizon, budget, history):
+log = get_logger(__name__)
+
+def compute_bellman_utility(model, horizon, budget, discount, history):
     """
     Compute the expected utility of a state.
     """
 
-    if horizon == 0 or budget <= 0:
+    if horizon == 0:
         return (0.0, [])
     else:
         best_e      = 0.0
@@ -19,64 +22,49 @@ def compute_bellman_utility(model, horizon, budget, history):
         predictions = model.predict(history, None)
 
         for action in model.actions:
-            e = 0.0
+            if action.cost <= budget:
+                e = 0.0
 
-            for (o, p) in izip(action.outcomes, predictions[action]):
-                if o.utility > 0.0:
-                    e += p * o.utility
-                else:
-                    (t_e, t_plan) = \
-                        compute_bellman_utility(
-                            model,
-                            horizon - 1,
-                            budget - action.cost,
-                            history + [(action, o)],
-                            )
+                for (o, p) in izip(action.outcomes, predictions[action]):
+                    if o.utility > 0.0:
+                        e += p * o.utility
+                    else:
+                        (t_e, t_plan) = \
+                            compute_bellman_utility(
+                                model,
+                                horizon - 1,
+                                budget - action.cost,
+                                discount,
+                                history + [(action, o)],
+                                )
 
-                    e += p * t_e
+                        e += p * discount * t_e
 
-            if e >= best_e:
-                best_e      = e
-                best_action = action
-                best_plan   = t_plan
+                if e >= best_e:
+                    best_e      = e
+                    best_action = action
+                    best_plan   = t_plan
 
-#         print horizon, [(a.description, b.utility) for (a, b) in history], best_e, best_action.description
+        if horizon >= 2:
+            log.info(
+                "%i: %s %f %s",
+                horizon,
+                str([a.description for (a, _) in history]),
+                best_e,
+                None if best_action is None else best_action.description,
+                )
 
-        return (best_e, [best_action] + best_plan)
+        if best_action is None:
+            return (0.0, [])
+        else:
+            return (best_e, [best_action] + best_plan)
 
-def compute_bellman_plan(model, horizon, budget):
+def compute_bellman_plan(model, horizon, budget, discount = 1.0):
     """
     Compute the Bellman-optimal plan.
     """
 
-    (_, plan) = compute_bellman_utility(model, horizon, budget, [])
+    (_, plan) = compute_bellman_utility(model, horizon, budget, discount, [])
 
     return plan
-
-class BellmanPlanner(AbstractPlanner):
-    """
-    An optimal, exponential-time, finite-horizon, cost-limited planner.
-    """
-
-    def __init__(self, model, horizon, budget):
-        """
-        Initialize.
-        """
-
-        compute_bellman_plan(model, horizon, budget)
-
-    def select(self, predicted, actions, random):
-        """
-        Select an action given the probabilities of outcomes.
-        """
-
-        raise NotImplementedError()
-
-    @staticmethod
-    def build(request, trainer, model):
-        """
-        Build a sequence strategy as requested.
-        """
-
-        return BellmanPlanner(model, request["horizon"], request["budget"])
 

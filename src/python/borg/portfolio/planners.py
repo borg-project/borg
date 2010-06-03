@@ -19,7 +19,6 @@ def build_planner(request, trainer, model):
     builders = {
         "hard_myopic" : HardMyopicPlanner.build,
         "soft_myopic" : SoftMyopicPlanner.build,
-        "bellman"     : BellmanPlanner.build,
         }
 
     return builders[request["type"]](request, trainer, model)
