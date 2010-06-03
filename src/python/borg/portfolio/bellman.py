@@ -18,7 +18,7 @@ def compute_bellman_utility(model, horizon, budget, history):
         best_plan   = None
         predictions = model.predict(history, None)
 
-        for action in model._actions:
+        for action in model.actions:
             e = 0.0
 
             for (o, p) in izip(action.outcomes, predictions[action]):
@@ -40,7 +40,7 @@ def compute_bellman_utility(model, horizon, budget, history):
                 best_action = action
                 best_plan   = t_plan
 
-        print horizon, [(a.description, b.utility) for (a, b) in history], best_e, best_action.description
+#         print horizon, [(a.description, b.utility) for (a, b) in history], best_e, best_action.description
 
         return (best_e, [best_action] + best_plan)
 
@@ -49,14 +49,9 @@ def compute_bellman_plan(model, horizon, budget):
     Compute the Bellman-optimal plan.
     """
 
-    actions = model._actions
+    (_, plan) = compute_bellman_utility(model, horizon, budget, [])
 
-    (_, plan) = compute_bellman_utility([], 0, 0.0, [])
-
-    print "computed plan follows"
-
-    for action in plan:
-        print action.description
+    return plan
 
 class BellmanPlanner(AbstractPlanner):
     """
