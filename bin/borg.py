@@ -28,11 +28,12 @@ def get_default_root():
     return abspath(sys.path[0])
 
 def execute_borg(
-    root      = get_default_root(),
-    support   = "",
-    submodule = "",
-    as_module = False,
-    argv      = sys.argv[1:],
+    root       = get_default_root(),
+    support    = "",
+    submodule  = "",
+    as_module  = False,
+    argv       = sys.argv[1:],
+    experiment = None,
     ):
     """
     Set up the solver environment, and run.
@@ -46,9 +47,12 @@ def execute_borg(
         join,
         isdir,
         exists,
+        abspath,
+        basename,
         normpath,
         )
 
+    # basic paths
     root_path      = normpath(root)
     support_path   = join(root, support)
     submodule_path = join(root, submodule)
@@ -56,11 +60,19 @@ def execute_borg(
     # provide the borg root path
     environ["BORG_ROOT"] = root_path
 
+    # provide the experiment path(s), if any
+    if experiment is not None:
+        experiment_root   = abspath(join(root_path, experiment))
+        experiment_suffix = basename(experiment_root)
+
+        environ["EXPERIMENT_ROOT"]   = experiment_root
+        environ["EXPERIMENT_SUFFIX"] = experiment_suffix
+
     # set up submodule paths for python
     python_paths = [
         join(root_path, "src/python"),
         join(submodule_path, "cargo/src/python"),
-        join(submodule_path, "borg/src/python"),
+        join(submodule_path, "borg/stage"),
         ]
 
     addenv("PYTHONPATH", ":".join(python_paths))

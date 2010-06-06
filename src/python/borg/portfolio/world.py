@@ -2,11 +2,15 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from abc         import (
+from abc                  import (
     abstractmethod,
     abstractproperty,
     )
-from cargo.sugar import ABC
+from cargo.sugar          import ABC
+from borg.portfolio._base import (
+    AbstractAction,
+    AbstractOutcome,
+    )
 
 def build_trainer(domain, task_uuids, Session):
     """
@@ -37,41 +41,5 @@ class AbstractTrainer(ABC):
     def get_data(self, action):
         """
         Provide per-task {outcome: count} maps to the trainee.
-        """
-
-class AbstractAction(ABC):
-    """
-    An action in the world.
-    """
-
-    @property
-    def description(self):
-        """
-        A human-readable description of this action.
-        """
-
-        raise NotImplementedError()
-
-    @abstractproperty
-    def cost(self):
-        """
-        The typical cost of taking this action.
-        """
-
-    @abstractproperty
-    def outcomes(self):
-        """
-        The possible outcomes of this action.
-        """
-
-class AbstractOutcome(ABC):
-    """
-    An outcome of an action in the world.
-    """
-
-    @abstractproperty
-    def utility(self):
-        """
-        The utility of this outcome.
         """
 

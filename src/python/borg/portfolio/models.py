@@ -68,7 +68,7 @@ class AbstractModel(ABC):
     @abstractmethod
     def predict(self, history, random):
         """
-        Return a map between actions and (normalized) predicted probabilities.
+        Return an array of per-action (normalized) outcome probabilities.
         """
 
     @abstractproperty
@@ -82,7 +82,7 @@ class FixedModel(AbstractModel):
     Stick to one prediction.
     """
 
-    def __init__(self, predictions):
+    def __init__(self, actions, predictions):
         """
         Initialize.
         """
@@ -90,7 +90,11 @@ class FixedModel(AbstractModel):
         # argument sanity
         assert_sane_predictions(predictions)
 
+        if len(actions) != predictions.shape[0]:
+            raise ValueError("actions/predictions shape mismatch")
+
         # members
+        self._actions     = actions
         self._predictions = predictions
 
     def predict(self, history, random):
@@ -106,7 +110,7 @@ class FixedModel(AbstractModel):
         The actions associated with this model.
         """
 
-        return self._predictions.keys()
+        return self._actions
 
     @staticmethod
     def build(request, trainer):
@@ -143,7 +147,19 @@ class RandomModel(AbstractModel):
         Return the predicted probability of each outcome, given history.
         """
 
-        return dict((a, self._random_prediction(a, random)) for a in self._actions)
+        predictions = \
+            numpy.empty(
+                len(self._actions),
+                max(len(a.outcomes) for a in self._actions),
+                )
+
+        for (i, a) in enumerate(self._actions):
+            p  = random.rand(len(a.outcomes))
+            p /= numpy.sum(p)
+
+            predictions[i, :p.size] = p
+
+        return predictions
 
     @property
     def actions(self):
@@ -324,88 +340,34 @@ class DCM_MixtureModel(AbstractModel):
         self._actions = training.keys()
 
         # cache mixture components as matrices
+        d_M   = numpy.array([len(a.outcomes) for a in self.actions])
+        max_d = numpy.max(self._d_M)
+
         M = self.mixture.ndomains
         K = self.mixture.ncomponents
-        D = 2 # FIXME
 
-        self.sum_MK  = numpy.empty((M, K))
-        self.mix_MKD = numpy.empty((M, K, D))
+        sum_MK  = numpy.empty((M, K))
+        mix_MKd = numpy.empty((M, K, max_d))
 
         for m in xrange(M):
             for k in xrange(K):
-                component          = self.mixture.components[m, k]
-                self.sum_MK[m, k]  = component.sum_alpha
-                self.mix_MKD[m, k] = component.alpha
+                component     = self.mixture.components[m, k]
+                sum_MK[m, k]  = component.sum_alpha
+                mix_MKd[m, k] = component.alpha
 
-    def get_post_pi_K(self, counts_MD):
-
-        post_pi_K = numpy.copy(self.mixture.pi)
-
-        dcm_post_pi_K(
-            post_pi_K,
-            self.sum_MK,
-            self.mix_MKD,
-            counts_MD,
-            )
-
-        return post_pi_K
+        # build the predictor core
+        self._predictor = DCM_MixturePredictor(d_M, self.mixture.pi, sum_MK, mix_MKd)
 
     def predict(self, history, random):
         """
         Return a prediction.
         """
 
-        # mise en place
-        M = self.mixture.ndomains
-        K = self.mixture.ncomponents
-        D = 2 # FIXME
+        out = numpy.empty((M, D))
 
-        action_indices = dict((a, i) for (i, a) in enumerate(self._actions))
+        self._predictor.predict(history, random, out)
 
-        # get the task-specific history
-        counts_MD = numpy.zeros((len(self._actions), 2), numpy.uint)
-
-        for (a, o) in history:
-            na = action_indices[a]
-            counts_MD[na, o.n] += 1
-
-        # get the outcome probabilities
-        post_pi_K = self.get_post_pi_K(counts_MD)
-        out       = numpy.empty((M, D))
-
-        dcm_model_predict(
-            post_pi_K,
-            numpy.copy(self.sum_MK),
-            numpy.copy(self.mix_MKD),
-            counts_MD,
-            out,
-            )
-
-        # log an outcome-probability table
-        rows = {}
-
-        for action in self._actions:
-            ps = rows.get(action.solver, [])
-
-            ps.append((action.cost, out[action_indices[action]]))
-
-            rows[action.solver] = ps
-
-        sorted_rows = [(k.name, sorted(v, key = lambda (c, p): c)) for (k, v) in rows.items()]
-        sorted_all  = sorted(sorted_rows, key = lambda (k, v): k)
-        longest     = max(len(s) for (s, _) in sorted_all)
-        table       = \
-            "\n".join(
-                "%s: %s" % (s.ljust(longest + 1), " ".join("%.4f" % p[0] for (c, p) in r)) \
-                for (s, r) in sorted_all \
-                )
-
-        log.debug("probabilities of action success (DCM model):\n%s", table)
-
-        # return predictions
-        predicted = out[numpy.array([action_indices[a] for a in self._actions])]
-
-        return dict(zip(self._actions, predicted))
+        return out
 
     @property
     def actions(self):
