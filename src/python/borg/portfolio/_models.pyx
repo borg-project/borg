@@ -45,7 +45,7 @@ cdef double ln_poch(double a, double x) except? -1:
     cdef int           status = gsl_sf_lnpoch_e(a, x, &result)
 
     if status != GSL_SUCCESS:
-        raise RuntimeError(gsl_strerror(status))
+        raise RuntimeError("%s (a = %f; x = %f)" % (gsl_strerror(status), a, x))
 
         return -1
 
@@ -103,6 +103,8 @@ cdef class DCM_MixturePredictor(Predictor):
 
         cdef numpy.ndarray[unsigned int, ndim = 2] counts_MD    = history
         cdef numpy.ndarray[double, ndim = 2] out_MD             = out
+        cdef numpy.ndarray[double, ndim = 1] pi_K               = self._pi_K
+        cdef numpy.ndarray[unsigned int, ndim = 1] d_M          = self._d_M
         cdef numpy.ndarray[double, ndim = 2] sum_MK             = self._sum_MK
         cdef numpy.ndarray[double, ndim = 3] mix_MKd            = self._mix_MKd
         cdef numpy.ndarray[double, ndim = 1] post_pi_K          = self._post_pi_K
@@ -116,21 +118,24 @@ cdef class DCM_MixturePredictor(Predictor):
         for m in xrange(M):
             counts_sum_M[m] = 0
 
-            for k in xrange(K):
-                for d in xrange(self._d_M[m]):
-                    counts_sum_M[m] += counts_MD[m, d]
+            for d in xrange(d_M[m]):
+                counts_sum_M[m] += counts_MD[m, d]
+
+#             print "counts_sum_M[%i] =" % m, counts_sum_M[m]
 
         # calculate posterior mixture parameters
         cdef double psigm
 
         for k in xrange(K):
-            post_pi_K[k] = 0.0
+            post_pi_K[k] = pi_K[k]
 
             for m in xrange(M):
                 psigm = 0.0
 
-                for d in xrange(counts_MD.shape[1]):
+                for d in xrange(d_M[m]):
                     psigm += ln_poch(mix_MKd[m, k, d], counts_MD[m, d])
+
+#                 print "psigm (%i, %i) =" % (k, m), psigm
 
                 post_pi_K[k] *= exp(psigm - ln_poch(sum_MK[m, k], counts_sum_M[m]))
 
@@ -139,25 +144,36 @@ cdef class DCM_MixturePredictor(Predictor):
         for k in xrange(K):
             post_pi_K_sum += post_pi_K[k]
 
+#             print "post_pi_K[%i] =" % k, post_pi_K[k]
+
+#         print "post_pi_K_sum =", post_pi_K_sum
+
         for k in xrange(K):
             post_pi_K[k] /= post_pi_K_sum
+#             print "post_pi_K[%i] =" % k, post_pi_K[k]
 
         # calculate outcome probabilities
         cdef double a
+        cdef double sum_a
         cdef double ll
 
         for m in xrange(M):
-            for d in xrange(self._d_M[m]):
+            for d in xrange(d_M[m]):
                 out_MD[m, d] = 0.0
 
                 for k in xrange(K):
-                    a  = mix_MKd[m, k, d] + counts_MD[m, d]
-                    ll = ln_poch(a, 1.0) - ln_poch(counts_sum_M[m], 1.0)
+                    a     = mix_MKd[m, k, d] + counts_MD[m, d]
+                    sum_a = sum_MK[m, k] + counts_sum_M[m]
+                    ll    = ln_poch(a, 1.0) - ln_poch(sum_a, 1.0)
 
                     out_MD[m, d] += post_pi_K[k] * exp(ll)
 
         # success
         return 0
+
+
+
+
 
 # log an outcome-probability table
 # rows = {}

@@ -132,16 +132,6 @@ class RandomModel(AbstractModel):
 
         self._actions = actions
 
-    def _random_prediction(self, action, random):
-        """
-        Return a random prediction.
-        """
-
-        predictions  = random.rand(len(action.outcomes))
-        predictions /= numpy.sum(predictions)
-
-        return predictions
-
     def predict(self, history, random):
         """
         Return the predicted probability of each outcome, given history.
@@ -149,8 +139,11 @@ class RandomModel(AbstractModel):
 
         predictions = \
             numpy.empty(
-                len(self._actions),
-                max(len(a.outcomes) for a in self._actions),
+                (
+                    len(self._actions),
+                    max(len(a.outcomes) for a in self._actions),
+                    ),
+#                 numpy.float64,
                 )
 
         for (i, a) in enumerate(self._actions):

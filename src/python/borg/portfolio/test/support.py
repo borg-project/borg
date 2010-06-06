@@ -17,7 +17,7 @@ class FakeAction(Action):
         Initialize.
         """
 
-        Action.__init__(self, cost)
+        Action.__init__(self, 16.0)
 
         self.value = value
 
@@ -25,14 +25,6 @@ class FakeAction(Action):
             self._outcomes = map(FakeOutcome, [0.0, 1.0, 2.0, 3.0])
         else:
             self._outcomes = outcomes
-
-    @property
-    def cost(self):
-        """
-        An arbitrary fixed cost.
-        """
-
-        return 16.0
 
     @property
     def outcomes(self):
