@@ -27,17 +27,14 @@ class BellmanTestModel(AbstractModel):
         Return the fixed map.
         """
 
+        import numpy
+
         (foo_action, bar_action) = self._actions
 
-        counts = {foo_action: 0, bar_action: 0}
-
-        for (a, o) in history:
-            counts[a] += 1
-
-        if counts[foo_action] >= counts[bar_action]:
-            return {foo_action: [0.25, 0.75], bar_action: [0.75, 0.25]}
+        if numpy.sum(history[0]) >= numpy.sum(history[1]):
+            return numpy.array([[0.25, 0.75], [0.75, 0.25]])
         else:
-            return {foo_action: [0.75, 0.25], bar_action: [0.25, 0.75]}
+            return numpy.array([[0.75, 0.25], [0.25, 0.75]])
 
     @property
     def actions(self):
@@ -53,7 +50,10 @@ def test_compute_bellman():
     """
 
     # set up the world
-    model = BellmanTestModel()
+    import numpy
+
+    model         = BellmanTestModel()
+    blank_history = numpy.zeros((2, 2), numpy.uint)
 
     # test the computation
     from nose.tools             import assert_equal
@@ -62,7 +62,7 @@ def test_compute_bellman():
         compute_bellman_utility,
         )
 
-    (expected_utility, best_plan) = compute_bellman_utility(model, 4, 128.0, 1.0, [])
+    (expected_utility, best_plan) = compute_bellman_utility(model, 4, 128.0, 1.0, blank_history)
 
     assert_equal(expected_utility, 0.99609375)
     assert_equal(best_plan, [model.actions[0]] * 4)

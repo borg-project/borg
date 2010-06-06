@@ -26,10 +26,8 @@ def assert_sane_predictions(predictions):
     Assert the a predictions map makes superficial sense.
     """
 
-    for (action, prediction) in predictions.iteritems():
-        if len(action.outcomes) != len(prediction):
-            raise ValueError("prediction count does not match outcome count")
-        if numpy.sum(prediction) != 1.0:
+    for row in predictions:
+        if numpy.sum(row) != 1.0:
             raise ValueError("non-normalized probability vector")
 
 def build_model(request, trainer):
@@ -76,6 +74,14 @@ class AbstractModel(ABC):
         """
         The actions associated with this model.
         """
+
+    @property
+    def predictor(self):
+        """
+        Get the fast predictor associated with this model, if any.
+        """
+
+        return None
 
 class FixedModel(AbstractModel):
     """
@@ -143,7 +149,6 @@ class RandomModel(AbstractModel):
                     len(self._actions),
                     max(len(a.outcomes) for a in self._actions),
                     ),
-#                 numpy.float64,
                 )
 
         for (i, a) in enumerate(self._actions):
@@ -355,7 +360,10 @@ class DCM_MixtureModel(AbstractModel):
 
         out = numpy.empty(history.shape)
 
-        self._predictor.predict(history, random, out)
+        self._predictor.predict(
+            numpy.ascontiguousarray(history),
+            numpy.ascontiguousarray(out),
+            )
 
         return out
 
@@ -366,6 +374,14 @@ class DCM_MixtureModel(AbstractModel):
         """
 
         return self._actions
+
+    @property
+    def predictor(self):
+        """
+        Get the fast predictor associated with this model, if any.
+        """
+
+        return self._predictor
 
     @staticmethod
     def build_with(training, k, em_restarts):

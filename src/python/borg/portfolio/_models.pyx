@@ -10,7 +10,17 @@ cdef class Predictor:
     Core of a performance-tuned model.
     """
 
-    cpdef int predict(self, history, random, out) except -1:
+    def predict(self, history, out):
+        """
+        Make a prediction.
+        """
+
+        cdef numpy.ndarray[unsigned int, ndim = 1, mode = "c"] history_ = history
+        cdef numpy.ndarray[double, ndim = 2, mode = "c"]       out_     = out
+
+        return self.predict_raw(<unsigned int*>history_.data, <double*>out_.data)
+
+    cdef int predict_raw(self, unsigned int* history, double* out) except -1:
         """
         Make a prediction.
         """
@@ -87,12 +97,7 @@ cdef class DCM_MixturePredictor(Predictor):
         self._post_pi_K    = numpy.empty_like(self._pi_K)
         self._counts_sum_M = numpy.empty_like(self._d_M)
 
-    cpdef int predict(
-        self,
-        history,
-        random,
-        out,
-        ) except -1:
+    cdef int predict_raw(self, unsigned int* counts_MD, double* out_MD) except -1:
         """
         Make a prediction.
         """
@@ -100,9 +105,8 @@ cdef class DCM_MixturePredictor(Predictor):
         # mise en place
         cdef Py_ssize_t M = self._sum_MK.shape[0]
         cdef Py_ssize_t K = self._sum_MK.shape[1]
+        cdef Py_ssize_t D = self._mix_MKd.shape[2]
 
-        cdef numpy.ndarray[unsigned int, ndim = 2] counts_MD    = history
-        cdef numpy.ndarray[double, ndim = 2] out_MD             = out
         cdef numpy.ndarray[double, ndim = 1] pi_K               = self._pi_K
         cdef numpy.ndarray[unsigned int, ndim = 1] d_M          = self._d_M
         cdef numpy.ndarray[double, ndim = 2] sum_MK             = self._sum_MK
@@ -119,9 +123,7 @@ cdef class DCM_MixturePredictor(Predictor):
             counts_sum_M[m] = 0
 
             for d in xrange(d_M[m]):
-                counts_sum_M[m] += counts_MD[m, d]
-
-#             print "counts_sum_M[%i] =" % m, counts_sum_M[m]
+                counts_sum_M[m] += counts_MD[m * D + d]
 
         # calculate posterior mixture parameters
         cdef double psigm
@@ -133,9 +135,7 @@ cdef class DCM_MixturePredictor(Predictor):
                 psigm = 0.0
 
                 for d in xrange(d_M[m]):
-                    psigm += ln_poch(mix_MKd[m, k, d], counts_MD[m, d])
-
-#                 print "psigm (%i, %i) =" % (k, m), psigm
+                    psigm += ln_poch(mix_MKd[m, k, d], counts_MD[m * D + d])
 
                 post_pi_K[k] *= exp(psigm - ln_poch(sum_MK[m, k], counts_sum_M[m]))
 
@@ -144,13 +144,8 @@ cdef class DCM_MixturePredictor(Predictor):
         for k in xrange(K):
             post_pi_K_sum += post_pi_K[k]
 
-#             print "post_pi_K[%i] =" % k, post_pi_K[k]
-
-#         print "post_pi_K_sum =", post_pi_K_sum
-
         for k in xrange(K):
             post_pi_K[k] /= post_pi_K_sum
-#             print "post_pi_K[%i] =" % k, post_pi_K[k]
 
         # calculate outcome probabilities
         cdef double a
@@ -159,14 +154,14 @@ cdef class DCM_MixturePredictor(Predictor):
 
         for m in xrange(M):
             for d in xrange(d_M[m]):
-                out_MD[m, d] = 0.0
+                out_MD[m * D + d] = 0.0
 
                 for k in xrange(K):
-                    a     = mix_MKd[m, k, d] + counts_MD[m, d]
+                    a     = mix_MKd[m, k, d] + counts_MD[m * D + d]
                     sum_a = sum_MK[m, k] + counts_sum_M[m]
                     ll    = ln_poch(a, 1.0) - ln_poch(sum_a, 1.0)
 
-                    out_MD[m, d] += post_pi_K[k] * exp(ll)
+                    out_MD[m * D + d] += post_pi_K[k] * exp(ll)
 
         # success
         return 0

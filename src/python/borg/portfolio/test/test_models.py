@@ -113,19 +113,31 @@ def test_dcm_model():
 
     # verify its a priori predictions
     import numpy
+    import numpy.random as r
 
-    from numpy.random import RandomState
+    from cargo.testing import assert_almost_equal_deep
 
-#     predicted = model.predict(numpy.zeros((2, 2), numpy.uint), RandomState(42))
-
-#     print predicted
+    assert_almost_equal_deep(
+        model.predict(numpy.zeros((2, 2), numpy.uint), r).tolist(),
+        [
+            [0.74995000499950015, 0.25004999500049996],
+            [0.25004999500049996, 0.74995000499950015],
+            ],
+        )
 
     # verify its a posteriori predictions
-    predicted = model.predict(numpy.array([[1, 0], [0, 1]], numpy.uint), RandomState(42))
-
-    print predicted
-
-#     predicted = model.predict(numpy.array([[0, 1], [1, 0]], numpy.uint), RandomState(42))
-
-#     print predicted
+    assert_almost_equal_deep(
+        model.predict(numpy.array([[1, 0], [0, 1]], numpy.uint), r).tolist(),
+        [
+            [0.99995000083345764, 4.9999166541667325e-05],
+            [4.9999166541667325e-05, 0.99995000083345764],
+            ],
+        )
+    assert_almost_equal_deep(
+        model.predict(numpy.array([[0, 1], [1, 0]], numpy.uint), r).tolist(),
+        [
+            [5.0012497874656265e-05, 0.9999499875021246],
+            [0.9999499875021246, 5.0012497874656265e-05],
+            ],
+        )
 
