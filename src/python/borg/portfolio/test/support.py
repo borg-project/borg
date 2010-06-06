@@ -3,11 +3,11 @@
 """
 
 from borg.portfolio.world import (
-    AbstractAction,
-    AbstractOutcome,
+    Action,
+    Outcome,
     )
 
-class FakeAction(AbstractAction):
+class FakeAction(Action):
     """
     An action strictly for testing.
     """
@@ -16,6 +16,8 @@ class FakeAction(AbstractAction):
         """
         Initialize.
         """
+
+        Action.__init__(self, cost)
 
         self.value = value
 
@@ -48,7 +50,7 @@ class FakeAction(AbstractAction):
 
         return "%s" % self.value
 
-class FakeOutcome(AbstractOutcome):
+class FakeOutcome(Outcome):
     """
     An outcome strictly for testing.
     """
@@ -58,13 +60,5 @@ class FakeOutcome(AbstractOutcome):
         Initialize.
         """
 
-        self._utility = utility
-
-    @property
-    def utility(self):
-        """
-        The utility of this outcome.
-        """
-
-        return self._utility
+        Outcome.__init__(self, utility)
 

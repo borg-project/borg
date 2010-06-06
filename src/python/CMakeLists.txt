@@ -1,5 +1,5 @@
 #
-# configure python dependencies
+# make cython easier
 #
 
 function(add_cython_module target_name base_name)
@@ -12,12 +12,18 @@ function(add_cython_module target_name base_name)
     set_target_properties(${target_name} PROPERTIES OUTPUT_NAME ${base_name} PREFIX "")
 endfunction(add_cython_module)
 
+#
+# configure python dependencies
+#
+
 find_package(Numpy REQUIRED)
 find_package(PythonLibs REQUIRED)
+find_package(GSL REQUIRED)
 
 include_directories(
     ${NUMPY_INCLUDE_DIRS}
     ${PYTHON_INCLUDE_DIRS}
+    ${GSL_INCLUDE_DIRS}
     )
 
 #

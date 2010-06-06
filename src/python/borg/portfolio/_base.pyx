@@ -2,12 +2,16 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-cdef class AbstractAction:
+cdef class Action:
     """
     An action in the world.
     """
 
-    def __cinit__(self, double cost):
+    def __init__(self, double cost):
+        """
+        Initialize.
+        """
+
         self.cost = cost
 
     def description(self):
@@ -24,8 +28,15 @@ cdef class AbstractAction:
 
         raise NotImplementedError()
 
-cdef class AbstractOutcome:
+cdef class Outcome:
     """
     An outcome of an action in the world.
     """
+
+    def __init__(self, double utility):
+        """
+        Initialize.
+        """
+
+        self.utility = utility
 

@@ -4,8 +4,8 @@
 
 from cargo.log            import get_logger
 from borg.portfolio.world import (
-    AbstractAction,
-    AbstractOutcome,
+    Action,
+    Outcome,
     AbstractTrainer,
     )
 
@@ -92,7 +92,7 @@ class DecisionTrainer(AbstractTrainer):
 
             return numpy.array([[s, a - s] for (s, a) in rows], numpy.uint)
 
-class DecisionWorldAction(AbstractAction):
+class DecisionWorldAction(Action):
     """
     An action in the world.
     """
@@ -101,6 +101,8 @@ class DecisionWorldAction(AbstractAction):
         """
         Initialize.
         """
+
+        Action.__init__(self, budget.as_s)
 
         self._solver = solver
         self._budget = budget
@@ -112,14 +114,6 @@ class DecisionWorldAction(AbstractAction):
         """
 
         return "%s_%ims" % (self.solver.name, int(self.cost * 1000))
-
-    @property
-    def cost(self):
-        """
-        The typical cost of taking this action.
-        """
-
-        return self._budget.as_s
 
     @property
     def budget(self):
@@ -145,7 +139,7 @@ class DecisionWorldAction(AbstractAction):
 
         return self._solver
 
-class DecisionWorldOutcome(AbstractOutcome):
+class DecisionWorldOutcome(Outcome):
     """
     An outcome of an action in the world.
     """
@@ -155,16 +149,7 @@ class DecisionWorldOutcome(AbstractOutcome):
         Initialize.
         """
 
-        self.n        = n
-        self._utility = utility
-
-    @property
-    def utility(self):
-        """
-        The utility of this outcome.
-        """
-
-        return self._utility
+        Outcome.__init__(self, utility)
 
     @staticmethod
     def from_result(attempt):

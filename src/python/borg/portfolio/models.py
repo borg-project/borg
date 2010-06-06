@@ -335,35 +335,32 @@ class DCM_MixtureModel(AbstractModel):
         Initialize.
         """
 
-        # model
-        self.mixture  = estimator.estimate(training.values())
-        self._actions = training.keys()
+        self.__setstate__((estimator.estimate(training.values()), training.keys()))
 
-        # cache mixture components as matrices
-        d_M   = numpy.array([len(a.outcomes) for a in self.actions])
-        max_d = numpy.max(self._d_M)
+    def __getstate__(self):
+        """
+        Return picklable state.
+        """
 
-        M = self.mixture.ndomains
-        K = self.mixture.ncomponents
+        return (self.mixture, self._actions)
 
-        sum_MK  = numpy.empty((M, K))
-        mix_MKd = numpy.empty((M, K, max_d))
+    def __setstate__(self, (mixture, actions)):
+        """
+        Apply unpickled state.
+        """
 
-        for m in xrange(M):
-            for k in xrange(K):
-                component     = self.mixture.components[m, k]
-                sum_MK[m, k]  = component.sum_alpha
-                mix_MKd[m, k] = component.alpha
+        from borg.portfolio._models import DCM_MixturePredictor
 
-        # build the predictor core
-        self._predictor = DCM_MixturePredictor(d_M, self.mixture.pi, sum_MK, mix_MKd)
+        self.mixture    = mixture
+        self._actions   = actions
+        self._predictor = DCM_MixturePredictor(actions, mixture)
 
     def predict(self, history, random):
         """
         Return a prediction.
         """
 
-        out = numpy.empty((M, D))
+        out = numpy.empty(history.shape)
 
         self._predictor.predict(history, random, out)
 

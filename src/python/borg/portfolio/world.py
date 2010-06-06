@@ -8,8 +8,8 @@ from abc                  import (
     )
 from cargo.sugar          import ABC
 from borg.portfolio._base import (
-    AbstractAction,
-    AbstractOutcome,
+    Action,
+    Outcome,
     )
 
 def build_trainer(domain, task_uuids, Session):
