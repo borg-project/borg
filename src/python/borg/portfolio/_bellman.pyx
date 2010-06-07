@@ -12,13 +12,20 @@ log = get_logger(__name__)
 
 cdef extern from "stdlib.h":
     ctypedef unsigned long size_t
-    void free(void *ptr)
-    void *malloc(size_t size)
 
-cdef struct BellmanStackEntry:
-#     double e
-#     double best_e
-#     Py_ssize_t best_action
+    void* malloc(size_t size)
+    void  free  (void *ptr)
+
+cdef struct BellmanCache:
+    double        discount
+    double*       costs
+    double*       utilities
+    size_t*       sizes
+    size_t        M
+    size_t        D
+    unsigned int* history
+
+cdef struct BellmanStackFrame:
     double* predictions
 
 def compute_bellman_utility(
@@ -33,9 +40,9 @@ def compute_bellman_utility(
     """
 
     # cache action costs and outcome utilities
-    cdef numpy.ndarray[double, ndim = 1] costs       = numpy.empty(len(model.actions))
-    cdef numpy.ndarray[double, ndim = 2] utilities   = numpy.empty(history.shape)
-    cdef numpy.ndarray[unsigned int, ndim = 1] sizes = numpy.empty(len(model.actions), numpy.uint)
+    cdef numpy.ndarray[double, ndim = 1, mode = "c"] costs       = numpy.empty(len(model.actions))
+    cdef numpy.ndarray[double, ndim = 2, mode = "c"] utilities   = numpy.empty(history.shape)
+    cdef numpy.ndarray[size_t, ndim = 1, mode = "c"] sizes = numpy.empty(len(model.actions), numpy.uint)
 
     for (i, action) in enumerate(model.actions):
         costs[i] = action.cost
@@ -44,118 +51,108 @@ def compute_bellman_utility(
         for (j, outcome) in enumerate(action.outcomes):
             utilities[i, j] = outcome.utility
 
-    # set up our fixed-size stack
-    cdef BellmanStackEntry* stack = <BellmanStackEntry*>malloc(horizon * sizeof(BellmanStackEntry))
+    # set up the fixed-size stack
+    cdef BellmanStackFrame* stack = <BellmanStackFrame*>malloc(horizon * sizeof(BellmanStackFrame))
 
     for i in xrange(horizon):
         stack[i].predictions = <double*>malloc(history.size * sizeof(double))
 
-    # invoke the inner loop
+    # set up common data
     cdef numpy.ndarray[unsigned int, ndim = 2, mode = "c"] fancy_history = history
+    cdef BellmanCache cache
 
-    (utility, plan) = \
-        compute_bellman_utility_inner(
-            model.predictor,
-            costs,
-            utilities,
-            sizes,
-            horizon,
-            budget,
-            discount,
-            <unsigned int*>fancy_history.data,
-            stack,
-            )
+#     cache.predictor = model.predictor
+    cache.discount  = discount
+    cache.costs     = <double*>costs.data
+    cache.utilities = <double*>utilities.data
+    cache.sizes     = <size_t*>sizes.data
+    cache.M         = history.shape[0]
+    cache.D         = history.shape[1]
+    cache.history   = <unsigned int*>fancy_history.data
 
+    # invoke the inner loop
+    (utility, plan) = compute_bellman_utility_inner(model.predictor, &cache, stack, horizon, budget)
+
+    # return the simple plan
     return (utility, [model.actions[i] for i in plan])
 
 cdef compute_bellman_utility_inner(
-    Predictor predictor,
-    py_costs,
-    py_utilities,
-    py_sizes,
-    unsigned int horizon,
-    double budget,
-    double discount,
-    unsigned int* history,
-    BellmanStackEntry* entry,
+    Predictor          predictor,
+    BellmanCache*      cache,
+    BellmanStackFrame* frame,
+    unsigned int       horizon,
+    double             budget,
     ):
     """
     Compute the expected utility of a state.
     """
 
+    # base case
     if horizon == 0:
         return (0.0, [])
 
-    # interpret parameters
-    cdef numpy.ndarray[double, ndim = 1] costs       = py_costs
-    cdef numpy.ndarray[double, ndim = 2] utilities   = py_utilities
-    cdef numpy.ndarray[unsigned int, ndim = 1] sizes = py_sizes
+    # mise en place
+    cdef size_t M = cache.M
+    cdef size_t D = cache.D
 
-    cdef size_t M = py_utilities.shape[0]
-    cdef size_t D = py_utilities.shape[1]
-
-    # prediction outcomes at this state
-    cdef double* predictions = entry.predictions
-
-    predictor.predict_raw(history, predictions)
+    # predict outcomes at this state
+    predictor.predict_raw(cache.history, frame.predictions)
 
     # used by the loop
-    cdef double e
-    cdef double best_e = -1.0
-    cdef Py_ssize_t best_action = 0
-
-    cdef double action_cost
-    cdef Py_ssize_t i
-    cdef Py_ssize_t j
+    cdef double expected
+    cdef double best_expected = -1.0
+    cdef size_t best_action   = 0
+    cdef double cost
+    cdef double utility
+    cdef size_t i
+    cdef size_t j
 
     best_plan = None
 
-    for i in xrange(costs.shape[0]):
-        action_cost = costs[i]
+    # for every action
+    for i in xrange(cache.M):
+        cost = cache.costs[i]
 
-        if action_cost <= budget:
-            e = 0.0
+        if cost <= budget:
+            expected = 0.0
 
-            for j in xrange(sizes[i]):
-                outcome_utility = utilities[i, j]
+            # for every outcome
+            for j in xrange(cache.sizes[i]):
+                utility = cache.utilities[i * D + j]
 
-                if outcome_utility > 0.0:
-                    e += predictions[i * D + j] * discount**action_cost * outcome_utility
+                if utility > 0.0:
+                    expected += frame.predictions[i * D + j] * cache.discount**cost * utility
                 else:
-                    history[i * D + j] += 1
+                    cache.history[i * D + j] += 1
 
                     (t_e, t_plan) = \
                         compute_bellman_utility_inner(
                             predictor,
-                            costs,
-                            utilities,
-                            sizes,
+                            cache,
+                            frame + 1,
                             horizon - 1,
-                            budget - action_cost,
-                            discount,
-                            history,
-                            entry + 1,
+                            budget - cost,
                             )
 
-                    history[i * D + j] -= 1
+                    cache.history[i * D + j] -= 1
 
-                    e += predictions[i * D + j] * discount**action_cost * t_e
+                    expected += frame.predictions[i * D + j] * cache.discount**cost * t_e
 
-            if e >= best_e:
-                best_e      = e
-                best_action = i
-                best_plan   = t_plan
+            if expected >= best_expected:
+                best_expected = expected
+                best_action   = i
+                best_plan     = t_plan
 
     if horizon >= 2:
         log.info(
             "%i: %f %s",
             horizon,
-            best_e,
-            None if best_e < 0.0 else best_action,
+            best_expected,
+            None if best_expected < 0.0 else best_action,
             )
 
-    if best_e < 0.0:
+    if best_expected < 0.0:
         return (0.0, [])
     else:
-        return (best_e, [best_action] + best_plan)
+        return (best_expected, [best_action] + best_plan)
 

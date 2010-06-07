@@ -2,8 +2,16 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+# FIXME don't leak memory
+
 import  numpy
 cimport numpy
+
+cdef extern from "stdlib.h":
+    ctypedef unsigned long size_t
+
+    void* malloc(size_t size)
+    void  free  (void *ptr)
 
 cdef class Predictor:
     """
@@ -66,12 +74,14 @@ cdef class DCM_MixturePredictor(Predictor):
     Core of a performance-tuned DCM mixture model.
     """
 
-    cdef _pi_K
-    cdef _d_M
-    cdef _sum_MK
-    cdef _mix_MKd
-    cdef _post_pi_K
-    cdef _counts_sum_M
+    cdef unsigned int  _M
+    cdef unsigned int  _K
+    cdef unsigned int  _D
+    cdef double*       _pi_K
+    cdef double*       _sum_MK
+    cdef double*       _mix_MKD
+    cdef double*       _post_pi_K
+    cdef unsigned int* _counts_sum_M
 
     def __init__(self, actions, mixture):
         """
@@ -79,40 +89,46 @@ cdef class DCM_MixturePredictor(Predictor):
         """
 
         # cache mixture components appropriately
-        M = mixture.ndomains
-        K = mixture.ncomponents
+        self._M = M = mixture.ndomains
+        self._K = K = mixture.ncomponents
+        self._D = D = len(actions[0].outcomes)
 
-        self._pi_K    = mixture.pi
-        self._d_M     = numpy.array([len(a.outcomes) for a in actions], numpy.uint)
-        self._sum_MK  = numpy.empty((M, K))
-        self._mix_MKd = numpy.empty((M, K, numpy.max(self._d_M)))
+        for action in actions:
+            assert len(action.outcomes) == self._D
+
+        cdef numpy.ndarray[double, ndim = 1, mode = "c"] mixture_pi = mixture.pi
+
+        self._pi_K    = <double*>mixture_pi.data
+        self._sum_MK  = <double*>malloc(M * K * sizeof(double))
+        self._mix_MKD = <double*>malloc(M * K * D * sizeof(double))
 
         for m in xrange(M):
             for k in xrange(K):
                 component           = mixture.components[m, k]
-                self._sum_MK[m, k]  = component.sum_alpha
-                self._mix_MKd[m, k] = component.alpha
+                self._sum_MK[m * K + k]  = component.sum_alpha
+
+                for d in xrange(D):
+                    self._mix_MKD[m * (K * D) + k * D + d] = component.alpha[d]
 
         # build persistent temporaries
-        self._post_pi_K    = numpy.empty_like(self._pi_K)
-        self._counts_sum_M = numpy.empty_like(self._d_M)
+        self._post_pi_K    = <double*>malloc(K * sizeof(double))
+        self._counts_sum_M = <unsigned int*>malloc(M * sizeof(unsigned int))
 
-    cdef int predict_raw(self, unsigned int* counts_MD, double* out_MD) except -1:
+    cdef int predict_raw(self, unsigned int* counts_MD, double* out_MD):
         """
         Make a prediction.
         """
 
         # mise en place
-        cdef Py_ssize_t M = self._sum_MK.shape[0]
-        cdef Py_ssize_t K = self._sum_MK.shape[1]
-        cdef Py_ssize_t D = self._mix_MKd.shape[2]
+        cdef size_t M = self._M
+        cdef size_t K = self._K
+        cdef size_t D = self._D
 
-        cdef numpy.ndarray[double, ndim = 1] pi_K               = self._pi_K
-        cdef numpy.ndarray[unsigned int, ndim = 1] d_M          = self._d_M
-        cdef numpy.ndarray[double, ndim = 2] sum_MK             = self._sum_MK
-        cdef numpy.ndarray[double, ndim = 3] mix_MKd            = self._mix_MKd
-        cdef numpy.ndarray[double, ndim = 1] post_pi_K          = self._post_pi_K
-        cdef numpy.ndarray[unsigned int, ndim = 1] counts_sum_M = self._counts_sum_M
+        cdef double*       pi_K         = self._pi_K
+        cdef double*       sum_MK       = self._sum_MK
+        cdef double*       mix_MKD      = self._mix_MKD
+        cdef double*       post_pi_K    = self._post_pi_K
+        cdef unsigned int* counts_sum_M = self._counts_sum_M
 
         # calculate per-action vector norms
         cdef Py_ssize_t m
@@ -122,7 +138,7 @@ cdef class DCM_MixturePredictor(Predictor):
         for m in xrange(M):
             counts_sum_M[m] = 0
 
-            for d in xrange(d_M[m]):
+            for d in xrange(D):
                 counts_sum_M[m] += counts_MD[m * D + d]
 
         # calculate posterior mixture parameters
@@ -134,10 +150,10 @@ cdef class DCM_MixturePredictor(Predictor):
             for m in xrange(M):
                 psigm = 0.0
 
-                for d in xrange(d_M[m]):
-                    psigm += ln_poch(mix_MKd[m, k, d], counts_MD[m * D + d])
+                for d in xrange(D):
+                    psigm += ln_poch(mix_MKD[m * (K * D) + k * D + d], counts_MD[m * D + d])
 
-                post_pi_K[k] *= exp(psigm - ln_poch(sum_MK[m, k], counts_sum_M[m]))
+                post_pi_K[k] *= exp(psigm - ln_poch(sum_MK[m * K + k], counts_sum_M[m]))
 
         cdef double post_pi_K_sum = 0.0
 
@@ -153,12 +169,12 @@ cdef class DCM_MixturePredictor(Predictor):
         cdef double ll
 
         for m in xrange(M):
-            for d in xrange(d_M[m]):
+            for d in xrange(D):
                 out_MD[m * D + d] = 0.0
 
                 for k in xrange(K):
-                    a     = mix_MKd[m, k, d] + counts_MD[m * D + d]
-                    sum_a = sum_MK[m, k] + counts_sum_M[m]
+                    a     = mix_MKD[m * (K * D) + k * D + d] + counts_MD[m * D + d]
+                    sum_a = sum_MK[m * K + k] + counts_sum_M[m]
                     ll    = ln_poch(a, 1.0) - ln_poch(sum_a, 1.0)
 
                     out_MD[m * D + d] += post_pi_K[k] * exp(ll)
