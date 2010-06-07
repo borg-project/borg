@@ -71,7 +71,7 @@ def execute_borg(
     # set up submodule paths for python
     python_paths = [
         join(root_path, "src/python"),
-        join(submodule_path, "cargo/src/python"),
+        join(submodule_path, "cargo/stage"),
         join(submodule_path, "borg/stage"),
         ]
 
