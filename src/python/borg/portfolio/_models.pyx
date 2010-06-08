@@ -54,7 +54,7 @@ cdef extern from "gsl/gsl_sf.h":
     int gsl_sf_lnpoch_e(double a, double x, gsl_sf_result* result)
     double gsl_sf_lnpoch(double a, double x)
 
-cdef double ln_poch(double a, double x) except? -1:
+cdef double ln_poch(double a, double x):
     """
     Compute the natural log of the Pochhammer function.
     """
