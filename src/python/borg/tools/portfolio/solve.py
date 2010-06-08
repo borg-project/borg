@@ -136,10 +136,20 @@ def main((solver_path, input_path, seed_string)):
     # solve
     from cargo.temporal import TimeDelta
     from borg.tasks     import FileTask
-    from borg.solvers   import UncompressingSolver
+    from borg.solvers   import (
+        LookupPreprocessor,
+        UncompressingSolver,
+        PreprocessingSolver,
+        )
 
     task        = FileTask(input_path)
-    full_solver = UncompressingSolver(solver)
+    full_solver = \
+        UncompressingSolver(
+            PreprocessingSolver(
+                LookupPreprocessor("sat/SatELite"),
+                solver,
+                ),
+            )
     attempt     = full_solver.solve(task, TimeDelta(seconds = 1e6), random, environment)
     answer      = attempt.answer
 
