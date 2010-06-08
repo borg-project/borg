@@ -132,11 +132,11 @@ class SatELitePreprocessor(Rowed, AbstractPreprocessor):
                     "+ext",
                     task.path,
                     certificate_file.name,
-                    join(task.output_path, "variable_map"),
+                    join(task.output_path, "variables_map"),
                     join(task.output_path, "eliminated_clauses"),
                     ]
 
-                log.note("model extension arguments are %s", arguments)
+                log.note("running: %s", self._command + arguments)
 
                 popened = None
 
@@ -181,7 +181,7 @@ class SatELitePreprocessor(Rowed, AbstractPreprocessor):
                     raised.re_raise()
                 else:
                     if popened.returncode != 10:
-                        raise SAT_PreprocessorError("model extension failed")
+                        raise RuntimeError("model extension failed (return code %s)" % popened.returncode)
 
                     return extended_answer
 

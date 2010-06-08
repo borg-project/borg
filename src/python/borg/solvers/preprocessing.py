@@ -63,12 +63,16 @@ class PreprocessingSolver(Rowed, AbstractSolver):
                                 random,
                                 environment,
                                 )
-                        answer    = \
-                            self._preprocessor.extend(
-                                p_attempt.output_task,
-                                s_attempt.answer,
-                                environment,
-                                )
+
+                        if s_attempt.answer is not None:
+                            answer = \
+                                self._preprocessor.extend(
+                                    p_attempt.output_task,
+                                    s_attempt.answer,
+                                    environment,
+                                    )
+                        else:
+                            answer = None
 
         # return the details of this attempt
         from borg.solvers import PreprocessingAttempt
