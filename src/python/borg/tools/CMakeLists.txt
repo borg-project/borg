@@ -11,6 +11,7 @@ install(
         plot_performance.py
         preprocess_tasks.py
         print_run.py
+        run_solvers.py
 	DESTINATION borg/tools
 	)
 
