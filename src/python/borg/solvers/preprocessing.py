@@ -47,7 +47,7 @@ class PreprocessingSolver(Rowed, AbstractSolver):
                 # the preprocessor did not solve the instance
                 from cargo.temporal import TimeDelta
 
-                remaining = max(TimeDelta(), budget - p_attempt.cost)
+                remaining = TimeDelta.from_timedelta(max(TimeDelta(), budget - p_attempt.cost))
 
                 if remaining > TimeDelta():
                     if p_attempt.output_task == task:
