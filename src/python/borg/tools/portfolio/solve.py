@@ -130,6 +130,7 @@ def main((solver_path, input_path, seed_string)):
     environment = \
         Environment(
             named_solvers = get_named_solvers(),
+            time_ratio    = 2.2 / flags.calibration,
             )
 
     # solve
