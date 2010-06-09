@@ -140,9 +140,13 @@ class BellmanStrategy(SequenceStrategy):
         Initialize.
         """
 
-        from borg.portfolio.bellman import compute_bellman_plan
+        from cargo.temporal                import TimeDelta
+        from borg.portfolio.bellman        import compute_bellman_plan
+        from borg.portfolio.decision_world import DecisionWorldAction
 
         plan = compute_bellman_plan(model, horizon, budget, discount)
+
+        plan[-1] = DecisionWorldAction(plan[-1].solver, TimeDelta(seconds = 1e6))
 
         log.info("Bellman plan follows (horizon %i, budget %f)", horizon, budget)
 
