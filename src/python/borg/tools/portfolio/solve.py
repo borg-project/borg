@@ -109,6 +109,7 @@ def main((solver_path, input_path, seed_string)):
     if flags.verbose:
         get_logger("cargo.unix.accounting", level = "DETAIL")
         get_logger("borg.portfolio.models", level = "NOTSET")
+        get_logger("borg.solvers.satelite", level = "INFO")
 
     # build our PRNG
     from numpy.random import RandomState
@@ -150,7 +151,7 @@ def main((solver_path, input_path, seed_string)):
                 solver,
                 ),
             )
-    attempt     = full_solver.solve(task, TimeDelta(seconds = 1e6), random, environment)
+    attempt     = full_solver.solve(task, TimeDelta(seconds = 2e6), random, environment)
     answer      = attempt.answer
 
     # tell the world

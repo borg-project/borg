@@ -47,7 +47,7 @@ class PreprocessingSolver(Rowed, AbstractSolver):
                 # the preprocessor did not solve the instance
                 from cargo.temporal import TimeDelta
 
-                remaining = max(TimeDelta(), budget - p_attempt.cost)
+                remaining = TimeDelta.from_timedelta(max(TimeDelta(), budget - p_attempt.cost))
 
                 if remaining > TimeDelta():
                     if p_attempt.output_task == task:
@@ -63,12 +63,16 @@ class PreprocessingSolver(Rowed, AbstractSolver):
                                 random,
                                 environment,
                                 )
-                        answer    = \
-                            self._preprocessor.extend(
-                                p_attempt.output_task,
-                                s_attempt.answer,
-                                environment,
-                                )
+
+                        if s_attempt.answer is not None:
+                            answer = \
+                                self._preprocessor.extend(
+                                    p_attempt.output_task,
+                                    s_attempt.answer,
+                                    environment,
+                                    )
+                        else:
+                            answer = None
 
         # return the details of this attempt
         from borg.solvers import PreprocessingAttempt

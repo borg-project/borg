@@ -18,14 +18,14 @@ def scan_sat_competition_output(lines, satisfiable = None, certificate = None):
     for line in lines:
         # reported sat
         if line.startswith("s SATISFIABLE"):
-            if satisfiable is not None:
-                raise RuntimeError("multiple solution lines in output")
+            if satisfiable is not None and not satisfiable:
+                raise RuntimeError("incompatible solution lines in output")
             else:
                 satisfiable = True
         # reported unsat
         elif line.startswith("s UNSATISFIABLE"):
-            if satisfiable is not None:
-                raise RuntimeError("multiple solution lines in output")
+            if satisfiable is not None and satisfiable:
+                raise RuntimeError("incompatible solution lines in output")
             else:
                 satisfiable = False
         # provided (part of) a sat certificate
