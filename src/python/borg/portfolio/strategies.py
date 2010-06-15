@@ -51,10 +51,10 @@ class SequenceStrategy(AbstractStrategy):
         """
 
         for selected in self.actions:
-            if selected.cost > budget:
-                selected = None
-
             (_, budget) = yield selected
+
+        while True:
+            yield None
 
     @staticmethod
     def build(request, trainer):

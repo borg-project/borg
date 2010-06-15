@@ -87,19 +87,21 @@ class PortfolioSolver(Rowed, AbstractSolver):
 
             if action is None:
                 break
-            elif action.budget > remaining:
-                raise RuntimeError("strategy selected an infeasible action")
             else:
-                calibrated = TimeDelta(seconds = action.cost * environment.time_ratio)
-                result     = action.solver.solve(task, calibrated, random, environment)
-                outcome    = DecisionWorldOutcome.from_result(result)
+                calibrated = \
+                    min(
+                        remaining,
+                        TimeDelta(seconds = action.cost * environment.time_ratio),
+                        )
+                attempt    = action.solver.solve(task, calibrated, random, environment)
+                outcome    = DecisionWorldOutcome.from_result(attempt)
                 nleft     -= 1
-                remaining  = TimeDelta.from_timedelta(remaining - action.budget)
+                remaining  = TimeDelta.from_timedelta(remaining - attempt.cost)
                 message    = (outcome, remaining.as_s)
 
-                record.append((action.solver, result))
+                record.append((action.solver, attempt))
 
-                if result.answer is not None:
+                if attempt.answer is not None:
                     break
 
         return PortfolioAttempt(self, task, budget, budget - remaining, record)

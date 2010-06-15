@@ -90,6 +90,8 @@ def plot_trial(session, trial_rows):
         pylab.plot(tick_x_values[False], tick_y_values[False], marker = "x", c = color, ls = "None")
 
     pylab.title("Solver Performance")
+    pylab.xlabel("Time (s)")
+    pylab.ylabel("Instances Solved")
     pylab.legend(loc = "lower right")
     pylab.show()
 

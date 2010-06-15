@@ -37,7 +37,20 @@ module_flags = \
             type    = int,
             default = 1,
             metavar = "INT",
-            help    = "make INT restarts [%default]",
+            help    = "make at least INT restarts of all solvers [%default]",
+            ),
+        Flag(
+            "-s",
+            "--seeded-restarts",
+            type    = int,
+            default = 1,
+            metavar = "INT",
+            help    = "make at least INT restarts of seeded solvers [%default]",
+            ),
+        Flag(
+            "--use-recycled-runs",
+            action = "store_true",
+            help   = "reuse past runs [%default]",
             ),
         )
 
@@ -50,6 +63,7 @@ def solve_task(
     random,
     named_solvers,
     collections,
+    use_recycled,
     ):
     """
     Make some number of solver runs on a task.
@@ -89,17 +103,16 @@ def solve_task(
         trial_row = session.merge(trial_row)
         task_row  = session.query(TaskRow).get(task_uuid)
 
-        # FIXME
-#         if borg.solvers.base.module_flags.given.use_recycled_runs:
-#             from borg.tasks import Task
+        if use_recycled:
+            from borg.tasks import Task
 
-#             full_solver = solver
-#             task        = Task(row = task_row)
-#         else:
-        from borg.solvers import UncompressingSolver
+            full_solver = solver
+            task        = Task(row = task_row)
+        else:
+            from borg.solvers import UncompressingSolver
 
-        full_solver = UncompressingSolver(solver)
-        task        = task_row.get_task(environment)
+            full_solver = UncompressingSolver(solver)
+            task        = task_row.get_task(environment)
 
         # make the run
         log.info("running %s on %s", solver.name, task_row.uuid)
@@ -134,33 +147,6 @@ def yield_solvers(session, solver_pairs):
         else:
             raise ValueError("unknown solver kind")
 
-def yield_jobs(session, trial_row, budget, solver_pairs, task_uuids, restarts, collections):
-    """
-    Generate a set of jobs to distribute.
-    """
-
-    # yield jobs
-    from cargo.labor.jobs import CallableJob
-    from cargo.random     import get_random_random
-    from borg.solvers     import get_named_solvers
-
-    named_solvers = get_named_solvers()
-
-    for solver in yield_solvers(session, solver_pairs):
-        for task_uuid in task_uuids:
-            for i in xrange(restarts):
-                yield CallableJob(
-                    solve_task,
-                    engine_url    = session.connection().engine.url,
-                    trial_row     = trial_row,
-                    solver        = solver,
-                    task_uuid     = task_uuid,
-                    budget        = budget,
-                    random        = get_random_random(),
-                    named_solvers = named_solvers,
-                    collections   = collections,
-                    )
-
 def main():
     """
     Run the script.
@@ -178,6 +164,7 @@ def main():
 
     (budget, arguments) = parse_given(usage = "%prog <budget> <args.json> [options]")
 
+    flags     = module_flags.given
     budget    = TimeDelta(seconds = float(budget))
     arguments = load_json(arguments)
 
@@ -228,22 +215,43 @@ def main():
 
             log.note("placing attempts in trial %s", trial_row.uuid)
 
-            # build jobs
-            from uuid       import UUID
-            from borg.tasks import get_collections
+            # build its jobs
+            def yield_jobs():
+                """
+                Generate a set of jobs to distribute.
+                """
 
-            jobs = \
-                list(
-                    yield_jobs(
-                        session,
-                        trial_row,
-                        budget,
-                        arguments["solvers"],
-                        map(UUID, arguments["tasks"]),
-                        module_flags.given.restarts,
-                        get_collections(),
-                        ),
-                    )
+                from uuid             import UUID
+                from cargo.labor.jobs import CallableJob
+                from cargo.random     import get_random_random
+                from borg.tasks       import get_collections
+                from borg.solvers     import get_named_solvers
+
+                named_solvers = get_named_solvers(use_recycled = flags.use_recycled_runs)
+                collections   = get_collections()
+
+                for solver in yield_solvers(session, arguments["solvers"]):
+                    for task_uuid in map(UUID, arguments["tasks"]):
+                        restarts = module_flags.given.restarts
+
+                        if solver.seeded:
+                            restarts = max(restarts, module_flags.given.seeded_restarts)
+
+                        for i in xrange(restarts):
+                            yield CallableJob(
+                                solve_task,
+                                engine_url    = session.connection().engine.url,
+                                trial_row     = trial_row,
+                                solver        = solver,
+                                task_uuid     = task_uuid,
+                                budget        = budget,
+                                random        = get_random_random(),
+                                named_solvers = named_solvers,
+                                collections   = collections,
+                                use_recycled  = flags.use_recycled_runs,
+                                )
+
+            jobs = list(yield_jobs())
 
         # run the jobs
         from cargo.labor.storage import outsource_or_run

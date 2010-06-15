@@ -21,11 +21,6 @@ module_flags = \
             metavar = "FILE",
             help    = "read solver descriptions from FILE [%default]",
             ),
-        Flag(
-            "--use-recycled-runs",
-            action = "store_true",
-            help   = "reuse past runs [%default]",
-            ),
         )
 
 def get_random_seed(random):
@@ -39,7 +34,7 @@ def get_random_seed(random):
 
     return random.randint(iinfo(numpy.int32).max)
 
-def get_named_solvers(paths = [], flags = {}):
+def get_named_solvers(paths = [], flags = {}, use_recycled = False):
     """
     Retrieve a list of named solvers.
     """
@@ -63,7 +58,7 @@ def get_named_solvers(paths = [], flags = {}):
         Load a competition solver.
         """
 
-        if flags.use_recycled_runs:
+        if use_recycled:
             return RecyclingSolver(name)
         else:
             return SAT_CompetitionSolver(attributes["command"], relative)
@@ -73,7 +68,7 @@ def get_named_solvers(paths = [], flags = {}):
         Load a competition solver.
         """
 
-        if flags.use_recycled_runs:
+        if use_recycled:
             return RecyclingSolver(name)
         else:
             return PB_CompetitionSolver(attributes["command"], relative)
@@ -83,7 +78,7 @@ def get_named_solvers(paths = [], flags = {}):
         Load a SatELite solver.
         """
 
-        if flags.use_recycled_runs:
+        if use_recycled:
             return RecyclingPreprocessor(name)
         else:
             return SatELitePreprocessor(attributes["command"], relative)
