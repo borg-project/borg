@@ -10,12 +10,7 @@ from abc         import (
     )
 from cargo.log   import get_logger
 from cargo.sugar import ABC
-# from cargo.statistics.dcm import DirichletCompoundMultinomial
-# from cargo.statistics.mixture import FiniteMixture
-# from utexas.portfolio.world import get_positive_counts
 from cargo.statistics._statistics import (
-    dcm_post_pi_K,
-    dcm_model_predict,
     multinomial_model_predict,
     )
 

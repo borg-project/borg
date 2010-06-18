@@ -23,17 +23,6 @@ set(CMAKE_CXX_FLAGS       "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_EXTRA}")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_EXTRA}")
 
 #
-# interaction with boost
-#
-
-set(Boost_USE_MULTITHREAD ON)
-set(Boost_ADDITIONAL_VERSIONS "1.42.0" "1.42")
-
-find_package(Boost "1.42" REQUIRED)
-
-include_directories(${Boost_INCLUDE_DIRS})
-
-#
 # interaction with cargo
 #
 
@@ -45,6 +34,5 @@ include_directories(${CARGO_INCLUDE_DIRS})
 # project contents
 #
 
-#add_subdirectory(cpp)
 add_subdirectory(python)
 
