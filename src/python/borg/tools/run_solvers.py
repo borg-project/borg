@@ -225,16 +225,20 @@ def main():
                 from cargo.labor.jobs import CallableJob
                 from cargo.random     import get_random_random
                 from borg.tasks       import get_collections
-                from borg.solvers     import get_named_solvers
+                from borg.solvers     import (
+                    Environment,
+                    get_named_solvers,
+                    )
 
                 named_solvers = get_named_solvers(use_recycled = flags.use_recycled_runs)
+                environment   = Environment(named_solvers = named_solvers)
                 collections   = get_collections()
 
                 for solver in yield_solvers(session, arguments["solvers"]):
                     for task_uuid in map(UUID, arguments["tasks"]):
                         restarts = module_flags.given.restarts
 
-                        if solver.seeded:
+                        if solver.get_seeded(environment):
                             restarts = max(restarts, module_flags.given.seeded_restarts)
 
                         for i in xrange(restarts):

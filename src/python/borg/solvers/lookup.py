@@ -72,6 +72,13 @@ class LookupSolver(Rowed, AbstractSolver):
 
         return self._name
 
+    def get_seeded(self, environment):
+        """
+        Is the solver seeded?
+        """
+
+        return self.look_up(environment).seeded
+
 class LookupPreprocessor(LookupSolver, AbstractPreprocessor):
     """
     A preprocessor which indirectly executes a named preprocessor.
