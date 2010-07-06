@@ -64,6 +64,13 @@ class LookupSolver(Rowed, AbstractSolver):
 
         return solver_row
 
+    def get_seeded(self, environment):
+        """
+        Is the solver seeded?
+        """
+
+        return self.look_up(environment).seeded
+
     @property
     def name(self):
         """
