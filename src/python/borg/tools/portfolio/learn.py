@@ -11,23 +11,6 @@ from cargo.log import get_logger
 
 log = get_logger(__name__)
 
-def build_request(request, trainer):
-    """
-    Build a portfolio object as requested.
-    """
-
-    from borg.solvers          import PortfolioSolver
-    from borg.portfolio.models import build_model
-
-    builders = {
-        "solver" : PortfolioSolver.build,
-        "model"  : build_model,
-        }
-
-    (_, kind) = request.keys()
-
-    return builders[kind](request[kind], trainer)
-
 def main():
     """
     Script entry point.
@@ -36,9 +19,8 @@ def main():
     # get command line arguments
     import borg.data
 
-    from cargo.sql.alchemy import SQL_Engines
-    from cargo.json        import load_json
-    from cargo.flags       import parse_given
+    from cargo.json  import load_json
+    from cargo.flags import parse_given
 
     (train_uuids_path, request_path, solver_path) = \
         parse_given(
@@ -64,10 +46,11 @@ def main():
     from cargo.sql.alchemy    import make_session
     from borg.data            import research_connect
     from borg.portfolio.world import build_trainer
+    from borg.solvers         import build_solver_request # FIXME support different types
 
     ResearchSession = make_session(bind = research_connect())
     trainer         = build_trainer(request["domain"], train_uuids, ResearchSession)
-    requested       = build_request(request, trainer)
+    requested       = build_solver_request(request, trainer)
 
     # write it to disk
     import cPickle as pickle

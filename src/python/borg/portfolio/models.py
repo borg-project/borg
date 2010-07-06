@@ -18,7 +18,7 @@ log = get_logger(__name__)
 
 def assert_sane_predictions(predictions):
     """
-    Assert the a predictions map makes superficial sense.
+    Assert that a predictions map makes superficial sense.
     """
 
     for row in predictions:
@@ -361,6 +361,121 @@ class DCM_MixtureModel(AbstractModel):
             )
 
         return out
+
+    @property
+    def actions(self):
+        """
+        The actions associated with this model.
+        """
+
+        return self._actions
+
+    @property
+    def predictor(self):
+        """
+        Get the fast predictor associated with this model, if any.
+        """
+
+        return self._predictor
+
+    @staticmethod
+    def build_with(training, k, em_restarts):
+        """
+        Build a model as specified.
+        """
+
+        log.info("building a DCM mixture model")
+
+        from cargo.statistics.dcm     import (
+            DCM_Estimator,
+            smooth_dcm_mixture,
+            )
+        from cargo.statistics.mixture import (
+            RestartedEstimator,
+            EM_MixtureEstimator,
+            )
+
+        model = \
+            DCM_MixtureModel(
+                training,
+                RestartedEstimator(
+                    EM_MixtureEstimator(
+                        [[DCM_Estimator()] * k] * len(training),
+                        ),
+                    nrestarts = em_restarts,
+                    ),
+                )
+
+        smooth_dcm_mixture(model.mixture)
+
+        return model
+
+    @staticmethod
+    def build(request, trainer):
+        """
+        Build a model as requested.
+        """
+
+        # get actions and training samples
+        actions = trainer.build_actions(request["actions"])
+        samples = dict((a, trainer.get_data(a)) for a in actions)
+
+        # verify samples sanity
+        length = None
+
+        for (_, v) in samples.iteritems():
+            if length is None:
+                length = len(v)
+            else:
+                assert len(v) == length
+
+        # build the action model
+        return \
+            DCM_MixtureModel.build_with(
+                samples,
+                request["components"],
+                request["em_restarts"],
+                )
+
+class DistributionModel(AbstractModel):
+    """
+    A general conditional-prediction model.
+    """
+
+    def __init__(self, distribution, actions):
+        """
+        Initialize.
+        """
+
+        self.__setstate__((distribution, actions))
+
+    def __getstate__(self):
+        """
+        Return picklable state.
+        """
+
+        return (self._distribution, self._actions)
+
+    def __setstate__(self, (distribution, actions)):
+        """
+        Apply unpickled state.
+        """
+
+        from borg.portfolio._models import DistributionPredictor
+
+        self._distribution = distribution
+        self._actions      = actions
+        self._predictor    = DistributionPredictor(actions, mixture)
+
+    def predict(self, history, random):
+        """
+        Return a prediction.
+        """
+
+        # essentially:
+        # self._distribution.log_likelihood_given([success for every action], history)
+
+        raise NotImplementedError()
 
     @property
     def actions(self):

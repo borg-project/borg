@@ -23,6 +23,32 @@ module_flags = \
             ),
         )
 
+def solver_from_request(request, trainer):
+    """
+    Build a portfolio object as requested.
+    """
+
+    from borg.solvers import (
+        LookupSolver,
+        PortfolioSolver,
+        )
+
+    builders = {
+        "portfolio" : PortfolioSolver.build,
+        "lookup"    : LookupSolver.build,
+        }
+
+    return builders[request["type"]](request, trainer)
+
+def model_from_request(request, trainer):
+    """
+    Build a portfolio object as requested.
+    """
+
+    from borg.portfolio.models import build_model
+
+    return build_model(request, trainer)
+
 def get_random_seed(random):
     """
     Return a random solver seed.

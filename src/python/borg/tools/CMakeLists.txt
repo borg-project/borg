@@ -12,6 +12,7 @@ install(
         preprocess_tasks.py
         print_run.py
         run_solvers.py
+        run_validation.py
 	DESTINATION borg/tools
 	)
 

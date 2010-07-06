@@ -219,6 +219,32 @@ class TrialRow(DatumBase):
             .filter(TrialRow.uuid == TrialRow.RECYCLABLE_UUID) \
             .one()
 
+    @staticmethod
+    def as_specified(session, trial, parent_trial, label):
+        """
+        Create a trial as specified (typically by the command line).
+        """
+
+        if parent_trial is None:
+            parent_trial = None
+        else:
+            parent_trial = session.query(TrialRow).get(parent_trial)
+
+            assert parent_trial is not None
+
+        if trial == "random":
+            trial_row = TrialRow(label = label, parent = parent_trial)
+
+            session.add(trial_row)
+        else:
+            assert parent_trial is None
+
+            trial_row = session.query(TrialRow).get(trial)
+
+            assert trial_row is not None
+
+        return trial_row
+
 TrialRow.parent = \
     relationship(
         TrialRow,

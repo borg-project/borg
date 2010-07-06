@@ -138,5 +138,5 @@ class PortfolioSolver(Rowed, AbstractSolver):
 
         from borg.portfolio.strategies import build_strategy
 
-        return PortfolioSolver(build_strategy(request, trainer))
+        return PortfolioSolver(build_strategy(request["strategy"], trainer))
 
