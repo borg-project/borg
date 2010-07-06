@@ -235,12 +235,14 @@ def main():
                 collections   = get_collections()
 
                 for solver in yield_solvers(session, arguments["solvers"]):
+                    restarts = module_flags.given.restarts
+
+                    if solver.get_seeded(environment):
+                        restarts = max(restarts, module_flags.given.seeded_restarts)
+
+                    log.info("making %i restarts of %s", restarts, solver.name)
+
                     for task_uuid in map(UUID, arguments["tasks"]):
-                        restarts = module_flags.given.restarts
-
-                        if solver.get_seeded(environment):
-                            restarts = max(restarts, module_flags.given.seeded_restarts)
-
                         for i in xrange(restarts):
                             yield CallableJob(
                                 solve_task,
