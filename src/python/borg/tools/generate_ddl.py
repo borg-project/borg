@@ -1,13 +1,9 @@
 """
-utexas/tools/generate_ddl.py
-
-Print or apply the research data schema.
-
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
 if __name__ == "__main__":
-    from utexas.tools.generate_ddl import main
+    from borg.tools.generate_ddl import main
 
     raise SystemExit(main())
 
@@ -54,7 +50,7 @@ def generate_ddl(engine):
         metadata.reflect(bind = engine)
     else:
         # use the project-defined schema
-        from utexas.data import DatumBase
+        from borg.data import DatumBase
 
         metadata = DatumBase.metadata
 
@@ -80,7 +76,7 @@ def main():
     """
 
     # get command line arguments
-    import utexas.data
+    import borg.data
 
     from cargo.sql.alchemy import SQL_Engines
     from cargo.flags       import parse_given
@@ -102,7 +98,7 @@ def main():
 
     # connect to the database and go
     with SQL_Engines.default:
-        from utexas.data import research_connect
+        from borg.data import research_connect
 
         generate_ddl(research_connect())
 

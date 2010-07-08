@@ -9,6 +9,7 @@ from uuid                       import (
 from sqlalchemy                 import (
     Enum,
     Table,
+    Float,
     Column,
     String,
     Integer,
@@ -23,6 +24,8 @@ from sqlalchemy.orm             import (
 from sqlalchemy.ext.declarative import declarative_base
 from cargo.log                  import get_logger
 from cargo.sql.alchemy          import (
+    SQL_List,
+    SQL_JSON,
     SQL_UUID,
     SQL_Engines,
     UTC_DateTime,
@@ -669,4 +672,23 @@ class PreprocessorAttemptRow(RunAttemptRow):
     output_task_uuid  = Column(SQL_UUID, ForeignKey("tasks.uuid"), nullable = False)
 
     output_task = relationship(TaskRow)
+
+class ValidationRunRow(DatumBase):
+    """
+    Place a task in the context of a collection.
+    """
+
+    __tablename__ = "validation_runs"
+
+    uuid             = Column(SQL_UUID, primary_key = True, default = uuid4)
+    solver_name      = Column(String, ForeignKey("solvers.name"), nullable = False)
+    solver_request   = Column(SQL_JSON)
+    train_task_uuids = Column(SQL_List(SQL_UUID))
+    test_task_uuids  = Column(SQL_List(SQL_UUID))
+    group            = Column(String)
+    score            = Column(Float)
+    components       = Column(Integer)
+    model_type       = Column(String)
+
+    solver = relationship(SolverRow)
 

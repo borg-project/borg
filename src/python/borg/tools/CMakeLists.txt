@@ -13,6 +13,8 @@ install(
         print_run.py
         run_solvers.py
         run_validation.py
+        plot_validation.py
+        beamer_sfmath.tex
 	DESTINATION borg/tools
 	)
 

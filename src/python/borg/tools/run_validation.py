@@ -47,11 +47,15 @@ module_flags = \
             metavar = "FLOAT",
             help    = "use fraction FLOAT of tasks for training [%default]",
             )
+        Flag(
+            "--cache-path",
+            metavar = "PATH",
+            help    = "read data from PATH when possible [%default]",
+            )
         )
 
 def make_validation_run(
     engine_url,
-    trial_row,
     request,
     domain,
     fraction,
@@ -59,6 +63,8 @@ def make_validation_run(
     budget,
     random,
     named_solvers,
+    group,
+    cache_path,
     ):
     """
     Train and test a solver.
@@ -69,11 +75,13 @@ def make_validation_run(
 
     enable_default_logging()
 
+    get_logger("cargo.statistics.mixture", level = "DETAIL")
+
     # generate train-test splits
     from cargo.iterators import shuffled
 
     shuffled_uuids = shuffled(task_uuids, random)
-    len_train      = int(fraction * len(shuffled_uuids))
+    len_train      = int(round(fraction * len(shuffled_uuids)))
     train_uuids    = shuffled_uuids[:len_train]
     test_uuids     = shuffled_uuids[len_train:]
 
@@ -88,6 +96,21 @@ def make_validation_run(
     main_engine = SQL_Engines.default.get(engine_url)
     MainSession = make_session(bind = main_engine)
 
+    # retrieve the local cache
+    from cargo.io import cache_file
+
+    cache_engine  = SQL_Engines.default.get("sqlite:///%s" % cache_file(cache_path))
+    CacheSession  = make_session(bind = cache_engine)
+
+    # build the solver
+    from borg.portfolio.world import build_trainer
+    from borg.solvers         import solver_from_request
+
+    trainer = build_trainer(domain, train_uuids, MainSession)
+    solver  = solver_from_request(request, trainer)
+
+    log.info("built solver from request")
+
     with MainSession() as session:
         # set up the environment
         from borg.solvers import Environment
@@ -99,18 +122,8 @@ def make_validation_run(
                 named_solvers = named_solvers,
                 )
 
-        # build the solver
-        from borg.portfolio.world import build_trainer
-        from borg.solvers         import solver_from_request
-
-        trainer = build_trainer(domain, train_uuids, environment.CacheSession)
-        solver  = solver_from_request(request, trainer)
-
-        log.info("built solver from request")
-
         # run over specified tasks
-        trial_row = session.merge(trial_row)
-        solved    = 0
+        solved = 0
 
         for test_uuid in test_uuids:
             from borg.data  import TaskRow
@@ -118,6 +131,8 @@ def make_validation_run(
 
             task_row = session.query(TaskRow).get(test_uuid)
             task     = Task(row = task_row)
+
+            session.commit()
 
             # run on this task
             attempt = solver.solve(task, budget, random, environment)
@@ -127,41 +142,97 @@ def make_validation_run(
 
             log.info("ran on %s (success? %s)", task_row.uuid, attempt.answer is not None)
 
-        # store the attempt
+        # store the result
+        from borg.data import ValidationRunRow
+
         log.info("solver succeeded on %i of %i task(s)", solved, len(test_uuids))
 
-        # FIXME store result
+        if solver.name == "portfolio":
+            components = request["strategy"]["model"]["components"]
+            model_type = request["strategy"]["model"]["type"]
+        else:
+            components = None
+            model_type = None
+
+        run = \
+            ValidationRunRow(
+                solver           = solver.get_row(session),
+                solver_request   = request,
+                train_task_uuids = train_uuids,
+                test_task_uuids  = test_uuids,
+                group            = group,
+                score            = solved,
+                components       = components,
+                model_type       = model_type,
+                )
+
+        session.add(run)
+        session.commit()
 
 def yield_solver_requests():
     """
     Build the solvers as configured.
     """
 
-#     yield { "type" : "lookup", "name" : "sat/2009/CirCUs" }
-#     yield { "type" : "lookup", "name" : "sat/2009/adaptg2wsat2009++" }
-#     yield { "type" : "lookup", "name" : "sat/2009/CirCUs" }
-#     yield { "type" : "lookup", "name" : "sat/2009/clasp" }
-#     yield { "type" : "lookup", "name" : "sat/2009/glucose" }
-#     yield { "type" : "lookup", "name" : "sat/2009/gnovelty+2" }
-#     yield { "type" : "lookup", "name" : "sat/2009/gNovelty+-T" }
-#     yield { "type" : "lookup", "name" : "sat/2009/hybridGM3" }
-#     yield { "type" : "lookup", "name" : "sat/2009/iPAWS" }
-#     yield { "type" : "lookup", "name" : "sat/2009/IUT_BMB_SAT" }
-#     yield { "type" : "lookup", "name" : "sat/2009/LySAT_c" }
-#     yield { "type" : "lookup", "name" : "sat/2009/LySAT_i" }
-#     yield { "type" : "lookup", "name" : "sat/2009/ManySAT" }
-#     yield { "type" : "lookup", "name" : "sat/2009/march_hi" }
-#     yield { "type" : "lookup", "name" : "sat/2009/minisat_09z" }
-#     yield { "type" : "lookup", "name" : "sat/2009/minisat_cumr_p" }
-#     yield { "type" : "lookup", "name" : "sat/2009/mxc_09" }
-#     yield { "type" : "lookup", "name" : "sat/2009/precosat" }
-#     yield { "type" : "lookup", "name" : "sat/2009/rsat_09" }
-    yield { "type" : "lookup", "name" : "sat/2009/SApperloT" }
-#     yield { "type" : "lookup", "name" : "sat/2009/SATzilla2009_C" }
-#     yield { "type" : "lookup", "name" : "sat/2009/SATzilla2009_I" }
-#     yield { "type" : "lookup", "name" : "sat/2009/SATzilla2009_R" }
-#     yield { "type" : "lookup", "name" : "sat/2009/TNM" }
-#     yield { "type" : "lookup", "name" : "sat/2009/VARSAT-industrial" }
+    import numpy
+
+    from itertools import product
+
+    sat_2009_subsolvers = [
+        "sat/2009/adaptg2wsat2009++",
+        "sat/2009/CirCUs",
+        "sat/2009/clasp",
+        "sat/2009/glucose",
+        "sat/2009/gnovelty+2",
+        "sat/2009/gNovelty+-T",
+        "sat/2009/hybridGM3",
+        "sat/2009/iPAWS",
+        "sat/2009/IUT_BMB_SAT",
+        "sat/2009/LySAT_c",
+        "sat/2009/LySAT_i",
+        "sat/2009/ManySAT",
+        "sat/2009/march_hi",
+        "sat/2009/minisat_09z",
+        "sat/2009/minisat_cumr_p",
+        "sat/2009/mxc_09",
+        "sat/2009/precosat",
+        "sat/2009/rsat_09",
+        "sat/2009/SApperloT",
+        "sat/2009/TNM",
+        "sat/2009/VARSAT-industrial"
+        ]
+    sat_2009_satzillas = [
+        "sat/2009/SATzilla2009_R"
+        "sat/2009/SATzilla2009_C",
+        "sat/2009/SATzilla2009_I",
+        ]
+
+    # the individual solvers
+#     for name in sat_2009_subsolvers + sat_2009_satzillas:
+#         yield { "type" : "lookup", "name" : name }
+
+    # the DCM portfolio solver(s)
+    for (k, _) in product(xrange(1, 65), xrange(1)):
+#     for k in [1]:
+        yield {
+            "type"     : "portfolio",
+            "strategy" : {
+                "type"     : "modeling",
+                "model"    : {
+                    "type"        : "dcm",
+                    "components"  : int(k),
+                    "em_restarts" : 4,
+                    "actions"     : {
+                        "solvers" : sat_2009_subsolvers,
+                        "budgets" : list(numpy.r_[25.0:4000.0:10j]),
+                        },
+                    },
+                "planner" : {
+                    "type"     : "hard_myopic",
+                    "discount" : 1.0 - 1e-4,
+                    },
+                },
+            }
 
 def main():
     """
@@ -179,7 +250,8 @@ def main():
     from cargo.flags    import parse_given
     from cargo.temporal import TimeDelta
 
-    (budget, fraction, uuids) = parse_given(usage = "%prog [options] <budget> <fraction> <uuids.json>")
+    (group, budget, fraction, uuids) = \
+        parse_given(usage = "%prog [options] <group> <budget> <fraction> <uuids.json>")
 
     budget   = TimeDelta(seconds = float(budget))
     fraction = float(fraction)
@@ -204,22 +276,6 @@ def main():
         ResearchSession = make_session(bind = research_connect())
 
         with ResearchSession() as session:
-            # create a trial
-            from cargo.temporal import utc_now
-            from borg.data      import TrialRow
-
-            trial_row = \
-                TrialRow.as_specified(
-                    session,
-                    module_flags.given.trial,
-                    module_flags.given.parent_trial, 
-                    "validation runs (at %s)" % utc_now(),
-                    )
-
-            session.flush()
-
-            log.note("placing attempts in trial %s", trial_row.uuid)
-
             # build its jobs
             def yield_jobs():
                 """
@@ -237,7 +293,6 @@ def main():
                         yield CallableJob(
                             make_validation_run,
                             engine_url    = session.connection().engine.url,
-                            trial_row     = trial_row,
                             request       = request,
                             domain        = "sat",
                             fraction      = fraction,
@@ -245,12 +300,15 @@ def main():
                             budget        = budget,
                             random        = get_random_random(),
                             named_solvers = named_solvers,
+                            group         = group,
+                            cache_path    = module_flags.given.cache_path,
                             )
 
             jobs = list(yield_jobs())
 
         # run the jobs
+        from cargo.temporal      import utc_now
         from cargo.labor.storage import outsource_or_run
 
-        outsource_or_run(jobs, trial_row.label)
+        outsource_or_run(jobs, "validation runs (at %s)" % utc_now())
 

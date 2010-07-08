@@ -98,13 +98,17 @@ class ModelingStrategy(AbstractStrategy):
 
         self.model   = model
         self.planner = planner
+        self._action_indices = dict((a, i) for (i, a) in enumerate(self.model.actions))
 
     def select(self, budget, random):
         """
         Select an action, yield it, and receive its outcome.
         """
 
-        history = []
+        import numpy
+
+        dimensions = (len(self.model.actions), max(len(a.outcomes) for a in self.model.actions))
+        history    = numpy.zeros(dimensions, numpy.uint)
 
         while True:
             # predict, then make a selection
@@ -112,9 +116,7 @@ class ModelingStrategy(AbstractStrategy):
             selected          = self.planner.select(predicted, budget, random)
             (outcome, budget) = yield selected
 
-            # remember its result
-            if outcome is not None:
-                history.append((selected, outcome))
+            history[self.model.actions.index(selected), selected.outcomes.index(outcome)] += 1
 
     @staticmethod
     def build(request, trainer):

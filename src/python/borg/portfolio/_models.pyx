@@ -23,7 +23,7 @@ cdef class Predictor:
         Make a prediction.
         """
 
-        cdef numpy.ndarray[unsigned int, ndim = 1, mode = "c"] history_ = history
+        cdef numpy.ndarray[unsigned int, ndim = 2, mode = "c"] history_ = history
         cdef numpy.ndarray[double, ndim = 2, mode = "c"]       out_     = out
 
         return self.predict_raw(<unsigned int*>history_.data, <double*>out_.data)

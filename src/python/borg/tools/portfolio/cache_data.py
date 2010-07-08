@@ -3,11 +3,11 @@
 """
 
 if __name__ == "__main__":
-    from utexas.tools.portfolio.cache_data import main
+    from borg.tools.portfolio.cache_data import main
 
     raise SystemExit(main())
 
-import utexas.data
+import borg.data
 
 from cargo.flags    import (
     Flag,
@@ -37,8 +37,8 @@ def main((cache_path,)):
     """
 
     # basic flag handling
-    from cargo.log   import enable_default_logging
-    from utexas.data import (
+    from cargo.log import enable_default_logging
+    from borg.data import (
         DatumBase,
         research_connect,
         )
@@ -46,13 +46,13 @@ def main((cache_path,)):
     flags = module_flags.given
 
     if flags.verbose:
-        get_logger("utexas.cache", level = "DEBUG")
+        get_logger("borg.cache", level = "DEBUG")
 
     enable_default_logging()
 
     # write the cache
-    from sqlalchemy   import create_engine
-    from utexas.cache import copy_tables
+    from sqlalchemy import create_engine
+    from borg.cache import copy_tables
 
     from_engine     = research_connect()
     from_connection = from_engine.contextual_connect()

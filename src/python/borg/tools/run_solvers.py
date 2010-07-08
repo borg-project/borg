@@ -74,6 +74,10 @@ def solve_task(
 
     enable_default_logging()
 
+    get_logger("cargo.unix.accounting",      level = "DEBUG")
+    get_logger("borg.solvers.competition",   level = "DEBUG")
+    get_logger("borg.solvers.uncompressing", level = "DEBUG")
+
     # connect to the database
     from cargo.sql.alchemy import (
         SQL_Engines,
@@ -173,9 +177,7 @@ def main():
 
     enable_default_logging()
 
-    get_logger("sqlalchemy.engine",        level = "WARNING")
-    get_logger("cargo.unix.accounting",    level = "WARNING")
-    get_logger("borg.solvers.competition", level = "NOTE")
+    get_logger("sqlalchemy.engine", level = "WARNING")
 
     # connect to the database and go
     from cargo.sql.alchemy import SQL_Engines

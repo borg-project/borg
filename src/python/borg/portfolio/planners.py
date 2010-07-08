@@ -39,11 +39,12 @@ class HardMyopicPlanner(AbstractPlanner):
     Deterministic greedy action selection.
     """
 
-    def __init__(self, discount):
+    def __init__(self, actions, discount):
         """
         Initialize.
         """
 
+        self.actions  = actions
         self.discount = discount
 
     def select(self, predicted, budget, random):
@@ -51,18 +52,21 @@ class HardMyopicPlanner(AbstractPlanner):
         Select an action given the probabilities of outcomes.
         """
 
-        feasible = [(a, ps) for (a, ps) in predicted.iteritems() if a.cost <= budget]
+        best_action      = None
+        best_expectation = None
 
-        if feasible:
-            (selected, _) = \
-                max(
-                    feasible,
-                    key = lambda (a, ps): sum(p*o.utility*self.discount**a.cost for (p, o) in zip(ps, a.outcomes)),
-                    )
+        for (i, action) in enumerate(self.actions):
+            if action.cost <= budget:
+                e = predicted[i, 0] * self.discount**action.cost
 
-            return selected
-        else:
-            return None
+                if best_action is None or best_expectation < e:
+                    best_action      = action
+                    best_expectation = e
+
+        if best_action is not None:
+            print "selected", best_action.solver.name, best_action.cost
+
+        return best_action
 
     @staticmethod
     def build(request, trainer, model):
@@ -70,7 +74,7 @@ class HardMyopicPlanner(AbstractPlanner):
         Build a sequence strategy as requested.
         """
 
-        return HardMyopicPlanner(request["discount"])
+        return HardMyopicPlanner(model.actions, request["discount"])
 
 class SoftMyopicPlanner(AbstractPlanner):
     """

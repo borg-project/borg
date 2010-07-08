@@ -57,7 +57,7 @@ class UncompressingSolver(Rowed, AbstractSolver):
                 sandboxed_path    = join(sandbox_path, "uncompressed.cnf")
                 uncompressed_path = decompress_if(task.path, sandboxed_path)
 
-                log.info("uncompressed task file is %s", uncompressed_path)
+                log.info("maybe-decompressed %s to %s", task.path, uncompressed_path)
 
                 # provide the task
                 from borg.tasks import UncompressedFileTask
