@@ -46,12 +46,12 @@ module_flags = \
             default = 0.0,
             metavar = "FLOAT",
             help    = "use fraction FLOAT of tasks for training [%default]",
-            )
+            ),
         Flag(
             "--cache-path",
             metavar = "PATH",
             help    = "read data from PATH when possible [%default]",
-            )
+            ),
         )
 
 def make_validation_run(
@@ -99,14 +99,17 @@ def make_validation_run(
     # retrieve the local cache
     from cargo.io import cache_file
 
-    cache_engine  = SQL_Engines.default.get("sqlite:///%s" % cache_file(cache_path))
-    CacheSession  = make_session(bind = cache_engine)
+    if cache_path is None:
+        CacheSession = MainSession
+    else:
+        cache_engine = SQL_Engines.default.get("sqlite:///%s" % cache_file(cache_path))
+        CacheSession = make_session(bind = cache_engine)
 
     # build the solver
     from borg.portfolio.world import build_trainer
     from borg.solvers         import solver_from_request
 
-    trainer = build_trainer(domain, train_uuids, MainSession)
+    trainer = build_trainer(domain, train_uuids, CacheSession)
     solver  = solver_from_request(request, trainer)
 
     log.info("built solver from request")
@@ -118,7 +121,7 @@ def make_validation_run(
         environment = \
             Environment(
                 MainSession   = MainSession,
-                CacheSession  = MainSession, # FIXME
+                CacheSession  = CacheSession,
                 named_solvers = named_solvers,
                 )
 
@@ -158,8 +161,8 @@ def make_validation_run(
             ValidationRunRow(
                 solver           = solver.get_row(session),
                 solver_request   = request,
-                train_task_uuids = train_uuids,
-                test_task_uuids  = test_uuids,
+#                 train_task_uuids = train_uuids,
+#                 test_task_uuids  = test_uuids,
                 group            = group,
                 score            = solved,
                 components       = components,
@@ -202,37 +205,36 @@ def yield_solver_requests():
         "sat/2009/VARSAT-industrial"
         ]
     sat_2009_satzillas = [
-        "sat/2009/SATzilla2009_R"
+        "sat/2009/SATzilla2009_R",
         "sat/2009/SATzilla2009_C",
         "sat/2009/SATzilla2009_I",
         ]
 
     # the individual solvers
-#     for name in sat_2009_subsolvers + sat_2009_satzillas:
-#         yield { "type" : "lookup", "name" : name }
+    for name in sat_2009_subsolvers + sat_2009_satzillas:
+        yield { "type" : "lookup", "name" : name }
 
     # the DCM portfolio solver(s)
-    for (k, _) in product(xrange(1, 65), xrange(1)):
-#     for k in [1]:
-        yield {
-            "type"     : "portfolio",
-            "strategy" : {
-                "type"     : "modeling",
-                "model"    : {
-                    "type"        : "dcm",
-                    "components"  : int(k),
-                    "em_restarts" : 4,
-                    "actions"     : {
-                        "solvers" : sat_2009_subsolvers,
-                        "budgets" : list(numpy.r_[25.0:4000.0:10j]),
-                        },
-                    },
-                "planner" : {
-                    "type"     : "hard_myopic",
-                    "discount" : 1.0 - 1e-4,
-                    },
-                },
-            }
+#     for (k, _) in product(xrange(1, 65), xrange(1)):
+#         yield {
+#             "type"     : "portfolio",
+#             "strategy" : {
+#                 "type"     : "modeling",
+#                 "model"    : {
+#                     "type"        : "dcm",
+#                     "components"  : int(k),
+#                     "em_restarts" : 4,
+#                     "actions"     : {
+#                         "solvers" : sat_2009_subsolvers,
+#                         "budgets" : list(numpy.r_[25.0:4000.0:10j]),
+#                         },
+#                     },
+#                 "planner" : {
+#                     "type"     : "hard_myopic",
+#                     "discount" : 1.0 - 1e-4,
+#                     },
+#                 },
+#             }
 
 def main():
     """
@@ -246,6 +248,7 @@ def main():
     import borg.solvers
 
     from uuid           import UUID
+    from os.path        import abspath
     from cargo.json     import load_json
     from cargo.flags    import parse_given
     from cargo.temporal import TimeDelta
@@ -256,6 +259,11 @@ def main():
     budget   = TimeDelta(seconds = float(budget))
     fraction = float(fraction)
     uuids    = map(UUID, load_json(uuids))
+
+    if module_flags.given.cache_path is None:
+        cache_path = None
+    else:
+        cache_path = abspath(module_flags.given.cache_path)
 
     # set up logging
     from cargo.log import enable_default_logging
@@ -301,7 +309,7 @@ def main():
                             random        = get_random_random(),
                             named_solvers = named_solvers,
                             group         = group,
-                            cache_path    = module_flags.given.cache_path,
+                            cache_path    = cache_path,
                             )
 
             jobs = list(yield_jobs())
