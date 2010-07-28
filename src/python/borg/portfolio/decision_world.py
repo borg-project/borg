@@ -16,13 +16,14 @@ class DecisionTrainer(AbstractTrainer):
     Grant a decision portfolio access to training data.
     """
 
-    def __init__(self, task_uuids, Session):
+    def __init__(self, task_uuids, Session, extrapolation = 1):
         """
         Initialize.
         """
 
-        self._task_uuids = task_uuids
-        self._Session    = Session
+        self._task_uuids    = task_uuids
+        self._Session       = Session
+        self._extrapolation = extrapolation
 
     def build_actions(self, request):
         """
@@ -90,7 +91,9 @@ class DecisionTrainer(AbstractTrainer):
             # packaged as an array
             import numpy
 
-            return numpy.array([[s, a - s] for (s, a) in rows], numpy.uint)
+            e = self._extrapolation
+
+            return numpy.array([[s * e, (a - s) * e] for (s, a) in rows], numpy.uint)
 
 class DecisionWorldAction(Action):
     """

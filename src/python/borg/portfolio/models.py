@@ -206,12 +206,9 @@ class MultinomialMixtureModel(AbstractModel):
             for k in xrange(K):
                 self.mix_MKD[m, k] = self.mixture.components[m, k].log_beta
 
-    def predict(self, history, feasible):
+    def predict(self, history, random):
         """
         Given history, return the probability of each outcome of each action.
-
-        @param history: [outcome counts array for each action]
-        @return: [outcome probabilities array for each action]
         """
 
         # mise en place
@@ -221,14 +218,6 @@ class MultinomialMixtureModel(AbstractModel):
 
         action_indices = dict((a, i) for (i, a) in enumerate(self._actions))
 
-        # get the task-specific history
-        counts_MD = numpy.zeros((len(self._actions), 2), numpy.uint)
-
-        for (t, a, o) in history:
-            if t == task:
-                na = action_indices[a]
-                counts_MD[na, o.n] += 1
-
         # get the outcome probabilities
         out = numpy.empty((M, D))
         pi  = numpy.copy(self._mixture.pi)
@@ -236,35 +225,19 @@ class MultinomialMixtureModel(AbstractModel):
         multinomial_model_predict(
             pi,
             self.mix_MKD,
-            counts_MD,
+            numpy.copy(history),
             out,
             )
 
-        # log an outcome-probability table
-        rows = {}
+        return out
 
-        for action in self._actions:
-            ps = rows.get(action.solver, [])
+    @property
+    def actions(self):
+        """
+        Actions associated with this model.
+        """
 
-            ps.append((action.cost, out[action_indices[action]]))
-
-            rows[action.solver] = ps
-
-        sorted_rows = [(k.name, sorted(v, key = lambda (c, p): c)) for (k, v) in rows.items()]
-        sorted_all  = sorted(sorted_rows, key = lambda (k, v): k)
-        longest     = max(len(s) for (s, _) in sorted_all)
-        table       = \
-            "\n".join(
-                "%s: %s" % (s.ljust(longest + 1), " ".join("%.4f" % p[0] for (c, p) in r)) \
-                for (s, r) in sorted_all \
-                )
-
-        log.debug("probabilities of action success (multinomial model):\n%s", table)
-
-        # return predictions
-        predicted = out[numpy.array([action_indices[a] for a in feasible])]
-
-        return dict(zip(feasible, predicted))
+        return self._actions
 
     @staticmethod
     def build_with(training, k, em_restarts):
@@ -277,19 +250,20 @@ class MultinomialMixtureModel(AbstractModel):
         from cargo.statistics.mixture     import (
             RestartedEstimator,
             EM_MixtureEstimator,
+            )
+        from cargo.statistics.multinomial import (
+            MultinomialEstimator,
             smooth_multinomial_mixture,
             )
-        from cargo.statistics.multinomial import MultinomialEstimator
-        from borg.portfolio.models        import MultinomialMixtureActionModel
 
         model = \
             MultinomialMixtureModel(
                 training,
                 RestartedEstimator(
                     EM_MixtureEstimator(
-                        [[MultinomialEstimator()] * ncomponents] * len(training),
+                        [[MultinomialEstimator()] * k] * len(training),
                         ),
-                    nrestarts = nrestarts,
+                    nrestarts = em_restarts,
                     ),
                 )
 

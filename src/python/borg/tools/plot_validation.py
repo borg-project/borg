@@ -11,39 +11,39 @@ from cargo.log import get_logger
 
 log = get_logger(__name__, default_level = "INFO")
 
-# import matplotlib
+import matplotlib.lines
 
-# markers = [
-#     "+",
-#     ",",
-#     ".",
-#     "1",
-#     "2",
-#     "3",
-#     "4",
-#     "<",
-#     ">",
-#     "D",
-#     "H",
-#     "^",
-#     "_",
-#     "d",
-#     "h",
-#     "o",
-#     "p",
-#     "s",
-#     "v",
-#     "x",
-#     "|",
-#     matplotlib.lines.TICKUP,
-#     matplotlib.lines.TICKDOWN,
-#     matplotlib.lines.TICKLEFT,
-#     matplotlib.lines.TICKRIGHT,
-#     matplotlib.lines.CARETLEFT,
-#     matplotlib.lines.CARETRIGHT,
-#     matplotlib.lines.CARETUP,
-#     matplotlib.lines.CARETDOWN,
-#     ]
+markers = [
+    "+",
+    ",",
+    ".",
+    "1",
+    "2",
+    "3",
+    "4",
+    "<",
+    ">",
+    "D",
+    "H",
+    "^",
+    "_",
+    "d",
+    "h",
+    "o",
+    "p",
+    "s",
+    "v",
+    "x",
+    "|",
+    matplotlib.lines.TICKUP,
+    matplotlib.lines.TICKDOWN,
+    matplotlib.lines.TICKLEFT,
+    matplotlib.lines.TICKRIGHT,
+    matplotlib.lines.CARETLEFT,
+    matplotlib.lines.CARETRIGHT,
+    matplotlib.lines.CARETUP,
+    matplotlib.lines.CARETDOWN,
+    ]
 
 def get_mean_scores(session, solver_name, group, model_type = None):
     """
@@ -113,7 +113,7 @@ def plot_validation(session, output_path):
     # prepare series properties
     from cargo.plot import get_color_list
 
-    colors = get_color_list(3)
+    colors = get_color_list(4)
 
     # set up the plot
     import pylab
@@ -122,7 +122,7 @@ def plot_validation(session, output_path):
     pylab.axes(pylab.axes([0.12, 0.15, 0.85, 0.80]))
 
     # plot the series
-    def plot_mean_scores(label, color, solver_name, model_type = None):
+    def plot_mean_scores(label, n, solver_name, model_type = None):
         """
         Plot a specific series.
         """
@@ -131,22 +131,23 @@ def plot_validation(session, output_path):
         (x_values, y_values) = zip(*xy_values)
 
         if x_values == (None,):
-            pylab.plot([0, 65], y_values * 2, label = label, marker = "+", c = color)
+            pylab.plot([0, 65], y_values * 2, label = label, marker = markers[n], c = colors[n])
         else:
-            pylab.plot(x_values, y_values, label = label, marker = "+", c = color)
+            pylab.plot(x_values, y_values, label = label, marker = markers[n], c = colors[n])
 
-    plot_mean_scores("DCM", colors[0], "portfolio", "dcm")
-    plot_mean_scores("SATzilla", colors[1], "sat/2009/SATzilla2009_R")
-    plot_mean_scores("Best Single", colors[2], "sat/2009/TNM")
+    plot_mean_scores("DCM", 0, "portfolio", "dcm")
+    plot_mean_scores("Multinomial", 1, "portfolio", "multinomial")
+    plot_mean_scores("Best Single", 2, "sat/2009/TNM")
+    plot_mean_scores("SATzilla", 3, "sat/2009/SATzilla2009_R")
 
     # final plot formatting
     pylab.xlim(0, 65)
 #     pylab.ylim(200, 360)
     pylab.xticks(range(0, 70, 5))
-    pylab.xlabel("Number of mixture components $(K)$")
+    pylab.xlabel("Number of latent classes $(K)$")
     pylab.ylabel("SAT instances solved")
 
-    legend = pylab.legend(loc = "lower right", ncol = 2)
+    legend = pylab.legend(loc = "lower right", ncol = 1)
 
     legend.get_frame().set_alpha(0.75)
     legend.get_frame().set_edgecolor("none")

@@ -28,7 +28,7 @@ def copy_table(from_connection, to_connection, table):
 
     column_names = [c.name for c in columns]
 
-    log.detail("from %s, retreving %s", table.name, column_names)
+    log.detail("from %s, retrieving %s", table.name, column_names)
 
     result    = from_connection.execute(select(columns))
     statement = table.insert(dict((c, None) for c in columns))

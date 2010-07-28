@@ -16,6 +16,7 @@ from sqlalchemy                 import (
     Boolean,
     ForeignKey,
     LargeBinary,
+    UniqueConstraint,
     )
 from sqlalchemy.orm             import (
     deferred,
@@ -550,6 +551,7 @@ attempts_trials_table = \
         DatumBase.metadata,
         Column("attempt_uuid", SQL_UUID, ForeignKey("attempts.uuid")),
         Column("trial_uuid", SQL_UUID, ForeignKey("trials.uuid")),
+        UniqueConstraint("trial_uuid", "attempt_uuid"),
         )
 
 class AttemptRow(DatumBase):
@@ -570,7 +572,7 @@ class AttemptRow(DatumBase):
     type        = Column(attempt_type)
     budget      = Column(SQL_TimeDelta)
     cost        = Column(SQL_TimeDelta)
-    task_uuid   = Column(SQL_UUID, ForeignKey("tasks.uuid"))
+    task_uuid   = Column(SQL_UUID, ForeignKey("tasks.uuid"), index = True)
     answer_uuid = Column(SQL_UUID, ForeignKey("answers.uuid"))
 
     __mapper_args__ = {"polymorphic_on": type}

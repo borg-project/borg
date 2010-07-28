@@ -109,7 +109,7 @@ def make_validation_run(
     from borg.portfolio.world import build_trainer
     from borg.solvers         import solver_from_request
 
-    trainer = build_trainer(domain, train_uuids, CacheSession)
+    trainer = build_trainer(domain, train_uuids, CacheSession, extrapolation = 6)
     solver  = solver_from_request(request, trainer)
 
     log.info("built solver from request")
@@ -179,8 +179,6 @@ def yield_solver_requests():
 
     import numpy
 
-    from itertools import product
-
     sat_2009_subsolvers = [
         "sat/2009/adaptg2wsat2009++",
         "sat/2009/CirCUs",
@@ -211,22 +209,45 @@ def yield_solver_requests():
         ]
 
     # the individual solvers
-    for name in sat_2009_subsolvers + sat_2009_satzillas:
-        yield { "type" : "lookup", "name" : name }
+#     for name in sat_2009_subsolvers + sat_2009_satzillas:
+#         yield { "type" : "lookup", "name" : name }
 
     # the DCM portfolio solver(s)
-#     for (k, _) in product(xrange(1, 65), xrange(1)):
+#     for k in xrange(1, 65):
+    for k in [63]:
+        yield {
+            "type"     : "portfolio",
+            "strategy" : {
+                "type"     : "modeling",
+                "model"    : {
+                    "type"        : "dcm",
+                    "components"  : int(k),
+                    "em_restarts" : 4,
+                    "actions"     : {
+                        "solvers" : sat_2009_subsolvers,
+                        "budgets" : numpy.r_[25.0:4000.0:10j].tolist(),
+                        },
+                    },
+                "planner" : {
+                    "type"     : "hard_myopic",
+                    "discount" : 1.0 - 1e-4,
+                    },
+                },
+            }
+
+    # the multinomial portfolio solver(s)
+#     for k in xrange(1, 65):
 #         yield {
 #             "type"     : "portfolio",
 #             "strategy" : {
 #                 "type"     : "modeling",
 #                 "model"    : {
-#                     "type"        : "dcm",
+#                     "type"        : "multinomial",
 #                     "components"  : int(k),
 #                     "em_restarts" : 4,
 #                     "actions"     : {
 #                         "solvers" : sat_2009_subsolvers,
-#                         "budgets" : list(numpy.r_[25.0:4000.0:10j]),
+#                         "budgets" : numpy.r_[25.0:4000.0:10j].tolist(),
 #                         },
 #                     },
 #                 "planner" : {

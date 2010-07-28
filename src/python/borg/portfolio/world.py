@@ -12,7 +12,7 @@ from borg.portfolio._base import (
     Outcome,
     )
 
-def build_trainer(domain, task_uuids, Session):
+def build_trainer(domain, task_uuids, Session, extrapolation = 1):
     """
     Build a trainer as requested.
     """
@@ -24,7 +24,7 @@ def build_trainer(domain, task_uuids, Session):
         "pb"  : DecisionTrainer,
         }
 
-    return trainer_builders[domain](task_uuids, Session)
+    return trainer_builders[domain](task_uuids, Session, extrapolation = extrapolation)
 
 class AbstractTrainer(ABC):
     """

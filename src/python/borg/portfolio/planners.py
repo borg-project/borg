@@ -63,9 +63,6 @@ class HardMyopicPlanner(AbstractPlanner):
                     best_action      = action
                     best_expectation = e
 
-        if best_action is not None:
-            print "selected", best_action.solver.name, best_action.cost
-
         return best_action
 
     @staticmethod
