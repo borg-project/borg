@@ -20,7 +20,7 @@ install(
     DESTINATION borg/portfolio
     )
 install(
-	FILES
+    FILES
         __init__.py
         bellman.py
         decision_world.py
@@ -28,8 +28,8 @@ install(
         planners.py
         strategies.py
         world.py
-	DESTINATION borg/portfolio
-	)
+    DESTINATION borg/portfolio
+    )
 
 #
 # descend
