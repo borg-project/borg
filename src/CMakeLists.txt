@@ -23,14 +23,6 @@ set(CMAKE_CXX_FLAGS       "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_EXTRA}")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_EXTRA}")
 
 #
-# interaction with cargo
-#
-
-find_package(Cargo REQUIRED)
-
-include_directories(${CARGO_INCLUDE_DIRS})
-
-#
 # project contents
 #
 

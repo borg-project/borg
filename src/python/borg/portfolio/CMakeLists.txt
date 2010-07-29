@@ -17,7 +17,7 @@ install(
         borg_portfolio_base
         borg_portfolio_bellman
         borg_portfolio_models
-    DESTINATION borg/portfolio
+    DESTINATION lib/borg/portfolio
     )
 install(
     FILES
@@ -28,7 +28,7 @@ install(
         planners.py
         strategies.py
         world.py
-    DESTINATION borg/portfolio
+    DESTINATION lib/borg/portfolio
     )
 
 #

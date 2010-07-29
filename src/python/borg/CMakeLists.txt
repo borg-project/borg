@@ -3,14 +3,14 @@
 #
 
 install(
-	FILES
+    FILES
         __init__.py
         cache.py
         data.py
         rowed.py
         tasks.py
-	DESTINATION borg
-	)
+    DESTINATION lib/borg
+    )
 
 #
 # descend

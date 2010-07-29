@@ -10,9 +10,6 @@ from abc         import (
     )
 from cargo.log   import get_logger
 from cargo.sugar import ABC
-from cargo.statistics._statistics import (
-    multinomial_model_predict,
-    )
 
 log = get_logger(__name__)
 

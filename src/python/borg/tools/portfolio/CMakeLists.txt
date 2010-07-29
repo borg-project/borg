@@ -10,7 +10,7 @@ install(
         practice.py
         solve.py
         split.py
-	DESTINATION borg/tools/portfolio
+	DESTINATION lib/borg/tools/portfolio
 	)
 
 #

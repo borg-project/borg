@@ -91,6 +91,8 @@ class SoftMyopicPlanner(AbstractPlanner):
         Select an action given the probabilities of outcomes.
         """
 
+        # FIXME does this respect budget? (clearly not: the signature isn't even correct)
+
         # convert to expectation
         import numpy
 

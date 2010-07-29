@@ -51,7 +51,10 @@ class SequenceStrategy(AbstractStrategy):
         """
 
         for selected in self.actions:
-            (_, budget) = yield selected
+            if selected.cost <= budget:
+                (_, budget) = yield selected
+            else:
+                break
 
         while True:
             yield None

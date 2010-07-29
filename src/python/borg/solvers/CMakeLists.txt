@@ -15,7 +15,7 @@ install(
         sanitizing.py
         satelite.py
         uncompressing.py
-	DESTINATION borg/solvers
+	DESTINATION lib/borg/solvers
 	)
 
 #

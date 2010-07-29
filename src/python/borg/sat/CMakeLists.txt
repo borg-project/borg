@@ -7,7 +7,7 @@ install(
         __init__.py
         answer.py
         cnf.py
-	DESTINATION borg/sat
+	DESTINATION lib/borg/sat
 	)
 
 #

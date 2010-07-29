@@ -11,6 +11,6 @@ install(
         test_sanitizing.py
         test_satelite.py
         test_uncompressing.py
-	DESTINATION borg/solvers/test
+	DESTINATION lib/borg/solvers/test
 	)
 

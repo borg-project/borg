@@ -2,6 +2,6 @@ install(
 	FILES
         __init__.py
         support.py
-	DESTINATION borg/sat/test
+	DESTINATION lib/borg/sat/test
 	)
 

@@ -15,7 +15,7 @@ install(
         run_validation.py
         plot_validation.py
         beamer_sfmath.tex
-	DESTINATION borg/tools
+	DESTINATION lib/borg/tools
 	)
 
 #

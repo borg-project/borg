@@ -5,6 +5,6 @@ install(
         test_bellman.py
         test_models.py
         test_strategies.py
-	DESTINATION borg/portfolio/test
+	DESTINATION lib/borg/portfolio/test
 	)
 
