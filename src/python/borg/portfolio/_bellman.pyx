@@ -38,7 +38,7 @@ def compute_bellman_utility(
     """
 
     # cache action costs and outcome utilities
-    cdef numpy.ndarray[double, ndim = 1, mode = "c"] costs       = numpy.empty(len(model.actions))
+    cdef numpy.ndarray[double, ndim = 1, mode = "c"] costs = numpy.empty(len(model.actions))
 
     for (i, action) in enumerate(model.actions):
         costs[i] = action.cost
