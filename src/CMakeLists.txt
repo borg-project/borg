@@ -1,14 +1,4 @@
 #
-# project basics
-#
-
-project(borg)
-
-cmake_minimum_required(VERSION 2.8)
-
-set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake CACHE PATH "")
-
-#
 # default compiler flags
 #
 
@@ -23,8 +13,9 @@ set(CMAKE_CXX_FLAGS       "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_EXTRA}")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_EXTRA}")
 
 #
-# project contents
+# descend
 #
 
 add_subdirectory(python)
+add_subdirectory(scripts)
 

@@ -27,16 +27,6 @@ include_directories(
     )
 
 #
-# outer scripts
-#
-
-install(
-    PROGRAMS
-        run_borg.py
-    DESTINATION lib
-    )
-
-#
 # descend
 #
 
