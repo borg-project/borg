@@ -15,6 +15,7 @@ def test_fixed_model():
 
     import numpy
 
+    from cargo.testing               import assert_almost_equal_deep
     from borg.portfolio.test.support import FakeAction
     from borg.portfolio.models       import FixedModel
 
@@ -22,7 +23,7 @@ def test_fixed_model():
     predictions = numpy.array([[0.25, 0.125, 0.125, 0.50] for a in actions])
     model       = FixedModel(actions, predictions)
 
-    assert_equal(model.predict([], None), predictions)
+    assert_almost_equal_deep(model.predict([], None).tolist(), predictions.tolist())
 
 def test_random_model():
     """
