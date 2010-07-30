@@ -87,7 +87,7 @@ def test_modeling_selection_strategy():
     # set up the strategy
     actions    = [FakeAction(i) for i in xrange(4)]
     model      = FixedModel(actions, numpy.eye(4))
-    planner    = HardMyopicPlanner(1.0)
+    planner    = HardMyopicPlanner(actions, 1.0)
     strategy   = ModelingStrategy(model, planner)
 
     # does it select the expected action?

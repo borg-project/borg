@@ -52,12 +52,15 @@ class HardMyopicPlanner(AbstractPlanner):
         Select an action given the probabilities of outcomes.
         """
 
+        from itertools import izip
+
         best_action      = None
         best_expectation = None
 
         for (i, action) in enumerate(self.actions):
             if action.cost <= budget:
-                e = predicted[i, 0] * self.discount**action.cost
+                e  = sum(p * o.utility for (p, o) in izip(predicted[i], action.outcomes))
+                e *= self.discount**action.cost
 
                 if best_action is None or best_expectation < e:
                     best_action      = action
