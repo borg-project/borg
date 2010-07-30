@@ -31,6 +31,13 @@ module_flags = \
             help    = "assume machine speed FLOAT [%default]",
             ),
         Flag(
+            "-p",
+            "--preprocessor",
+            default = None,
+            metavar = "NAME",
+            help    = "use preprocessor NAME [%default]",
+            ),
+        Flag(
             "-v",
             "--verbose",
             action  = "store_true",
@@ -143,16 +150,15 @@ def main((solver_path, input_path, seed_string)):
         PreprocessingSolver,
         )
 
-    task        = FileTask(input_path)
-    full_solver = \
-        UncompressingSolver(
-            PreprocessingSolver(
-                LookupPreprocessor("sat/SatELite"),
-                solver,
-                ),
-            )
-    attempt     = full_solver.solve(task, TimeDelta(seconds = 2e6), random, environment)
-    answer      = attempt.answer
+    if flags.preprocessor is None:
+        secondary = solver
+    else:
+        secondary = PreprocessingSolver(LookupPreprocessor(flags.preprocessor), solver)
+
+    primary = UncompressingSolver(secondary)
+    task    = FileTask(input_path)
+    attempt = primary.solve(task, TimeDelta(seconds = 2e6), random, environment)
+    answer  = attempt.answer
 
     # tell the world
     # FIXME should be domain-specific

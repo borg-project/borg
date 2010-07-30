@@ -9,6 +9,12 @@ def test_tools_portfolio_solve():
     Test the portfolio solver execution script.
     """
 
+    # output we care about
+    from cargo.log import get_logger
+
+    get_logger("borg.solvers.competition", level = "NOTSET")
+    get_logger("cargo.unix.accounting", level = "NOTSET")
+
     # build a solver
     from tempfile                  import NamedTemporaryFile
     from borg.sat                  import Decision
@@ -48,6 +54,7 @@ def test_tools_portfolio_solve():
                 Environment,
                 SAT_CompetitionSolver,
                 )
+
 
             script_solver = \
                 SAT_CompetitionSolver(

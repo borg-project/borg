@@ -12,11 +12,15 @@ def test_tools_portfolio_learn():
     # fork; build a random-model solver
     from os.path    import join
     from cargo.io   import mkdtemp_scoped
+    from cargo.log  import get_logger
     from cargo.json import save_json
 
+    log = get_logger(__name__, level = "NOTSET")
+
     solver_request = {
-        "domain"  : "sat",
-        "solver"  : {
+        "domain"   : "sat",
+        "type"     : "portfolio",
+        "strategy" : {
             "type"    : "modeling",
             "planner" : {
                 "type"     : "hard_myopic",
@@ -38,7 +42,8 @@ def test_tools_portfolio_learn():
 
     with mkdtemp_scoped() as sandbox_path:
         # invoke the script
-        from subprocess                        import check_call
+        from tempfile                          import TemporaryFile
+        from subprocess                        import call
         from borg.tools.portfolio.test.support import clean_up_environment
 
         uuids_json_path    = join(sandbox_path, "train_uuids.json")
@@ -48,20 +53,27 @@ def test_tools_portfolio_learn():
         save_json([], uuids_json_path)
         save_json(solver_request, solver_json_path)
 
-        with open("/dev/null", "w") as null_file:
-            check_call(
-                [
-                    "python",
-                    "-m",
-                    "borg.tools.portfolio.learn",
-                    uuids_json_path,
-                    solver_json_path,
-                    solver_pickle_path,
-                    ],
-                stdout     = null_file,
-                stderr     = null_file,
-                preexec_fn = clean_up_environment,
-                )
+        with TemporaryFile() as temporary:
+            code = \
+                call(
+                    [
+                        "python",
+                        "-m",
+                        "borg.tools.portfolio.learn",
+                        uuids_json_path,
+                        solver_json_path,
+                        solver_pickle_path,
+                        ],
+                    stdout     = temporary,
+                    stderr     = temporary,
+                    preexec_fn = clean_up_environment,
+                    )
+
+            temporary.seek(0)
+
+            log.debug("call output follows:\n%s", temporary.read())
+
+            assert_equal(code, 0)
 
         # and load the solver file
         import cPickle as pickle
