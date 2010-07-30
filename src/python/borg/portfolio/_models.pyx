@@ -69,6 +69,42 @@ cdef double ln_poch(double a, double x):
 
     return result.val
 
+cdef class SlowPredictor(Predictor):
+    """
+    Provide an interface to slow Python-implemented prediction routines.
+    """
+
+    def __init__(self, predict, M, D):
+        """
+        Initialize.
+        """
+
+        self._predict = predict
+        self._M       = M
+        self._D       = D
+
+    cdef int predict_raw(self, unsigned int* history, double* out) except -1:
+        """
+        Make a prediction.
+        """
+
+        cdef size_t M = self._M
+        cdef size_t D = self._D
+
+        history_ = numpy.empty((M, D), numpy.uint)
+
+        for i in xrange(M):
+            for j in xrange(D):
+                history_[i, j] = history[i * D + j]
+
+        cdef numpy.ndarray[double, ndim = 2, mode = "c"] prediction = self._predict(history_, None)
+
+        for i in xrange(M):
+            for j in xrange(D):
+                out[i * D + j] = prediction[i, j]
+
+        return 0
+
 cdef class DCM_MixturePredictor(Predictor):
     """
     Core of a performance-tuned DCM mixture model.
@@ -181,29 +217,4 @@ cdef class DCM_MixturePredictor(Predictor):
 
         # success
         return 0
-
-
-
-
-
-# log an outcome-probability table
-# rows = {}
-
-# for action in self._actions:
-#     ps = rows.get(action.solver, [])
-
-#     ps.append((action.cost, out[action_indices[action]]))
-
-#     rows[action.solver] = ps
-
-# sorted_rows = [(k.name, sorted(v, key = lambda (c, p): c)) for (k, v) in rows.items()]
-# sorted_all  = sorted(sorted_rows, key = lambda (k, v): k)
-# longest     = max(len(s) for (s, _) in sorted_all)
-# table       = \
-#     "\n".join(
-#         "%s: %s" % (s.ljust(longest + 1), " ".join("%.4f" % p[0] for (c, p) in r)) \
-#         for (s, r) in sorted_all \
-#         )
-
-# log.debug("probabilities of action success (DCM model):\n%s", table)
 

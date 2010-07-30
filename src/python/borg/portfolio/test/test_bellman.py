@@ -31,7 +31,7 @@ class BellmanTestModel(AbstractModel):
 
         (foo_action, bar_action) = self._actions
 
-        if numpy.sum(history[1]) >= numpy.sum(history[0]):
+        if numpy.sum(history[0]) >= numpy.sum(history[1]):
             return numpy.array([[0.75, 0.25], [0.25, 0.75]])
         else:
             return numpy.array([[0.25, 0.75], [0.75, 0.25]])
@@ -67,7 +67,7 @@ def test_compute_bellman():
     assert_equal(expected_utility, 0.99609375)
     assert_equal(best_plan, [model.actions[0]] * 4)
 
-#     best_plan_again = compute_bellman_plan(model, 4, 128.0, 1.0)
+    best_plan_again = compute_bellman_plan(model, 4, 128.0, 1.0)
 
-#     assert_equal(best_plan_again, [model.actions[0]] * 4)
+    assert_equal(best_plan_again, [model.actions[0]] * 4)
 

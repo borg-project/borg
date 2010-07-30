@@ -6,7 +6,7 @@ import  numpy
 cimport numpy
 
 from cargo.log import  get_logger
-from _models   cimport Predictor
+from _models   cimport Predictor, SlowPredictor
 
 log = get_logger(__name__)
 
@@ -60,15 +60,20 @@ def compute_bellman_utility(
     cdef numpy.ndarray[unsigned int, ndim = 2, mode = "c"] fancy_history = history
     cdef BellmanCache cache
 
-#     cache.predictor = model.predictor
     cache.discount  = discount
     cache.costs     = <double*>costs.data
-    cache.M         = history.shape[0]
-    cache.D         = history.shape[1]
+    cache.M         = M = history.shape[0]
+    cache.D         = D = history.shape[1]
     cache.history   = <unsigned int*>fancy_history.data
 
+    # grab the predictor
+    if model.predictor is None:
+        predictor = SlowPredictor(model.predict, M, D)
+    else:
+        predictor = model.predictor
+
     # invoke the inner loop
-    (expected, plan) = compute_bellman_expected_inner(model.predictor, &cache, stack, horizon, budget)
+    (expected, plan) = compute_bellman_expected_inner(predictor, &cache, stack, horizon, budget)
 
     # return the simple plan
     return (expected, [model.actions[i] for i in plan])
