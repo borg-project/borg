@@ -7,6 +7,8 @@
 import  numpy
 cimport numpy
 
+from borg.portfolio._base cimport AbstractAction # for testing cmake
+
 cdef extern from "stdlib.h":
     ctypedef unsigned long size_t
 
