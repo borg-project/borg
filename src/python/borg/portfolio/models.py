@@ -418,35 +418,27 @@ class DistributionModel(AbstractModel):
         Initialize.
         """
 
-        self.__setstate__((distribution, actions))
-
-    def __getstate__(self):
-        """
-        Return picklable state.
-        """
-
-        return (self._distribution, self._actions)
-
-    def __setstate__(self, (distribution, actions)):
-        """
-        Apply unpickled state.
-        """
-
-        from borg.portfolio._models import DistributionPredictor
-
         self._distribution = distribution
         self._actions      = actions
-        self._predictor    = DistributionPredictor(actions, mixture)
 
     def predict(self, history, random):
         """
         Return a prediction.
         """
 
-        # essentially:
-        # self._distribution.log_likelihood_given([success for every action], history)
+        posterior = self._distribution.given([history])
+        indicator = numpy.zeros(history.shape, numpy.uint)
+        predicted = numpy.empty(history.shape)
 
-        raise NotImplementedError()
+        for i in xrange(predicted.shape[0]):
+            for j in xrange(predicted.shape[1]):
+                indicator[i, j] = 1
+                predicted[i, j] = numpy.exp(posterior.log_likelihood(indicator))
+                indicator[i, j] = 0
+
+        predicted /= numpy.sum(predicted, 1)
+
+        return predicted
 
     @property
     def actions(self):
@@ -455,14 +447,6 @@ class DistributionModel(AbstractModel):
         """
 
         return self._actions
-
-    @property
-    def predictor(self):
-        """
-        Get the fast predictor associated with this model, if any.
-        """
-
-        return self._predictor
 
     @staticmethod
     def build_with(training, k, em_restarts):

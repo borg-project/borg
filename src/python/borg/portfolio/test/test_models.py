@@ -78,48 +78,51 @@ class FakeDCM_Estimator(object):
 
         return self._mixture
 
-def test_dcm_model():
+def test_distribution_model():
     """
-    Test the DCM-mixture portfolio model.
+    Test the probability-distribution portfolio model.
     """
 
     # set up the model
     from cargo.statistics.dcm        import DirichletCompoundMultinomial
+    from cargo.statistics.tuple      import TupleDistribution
     from cargo.statistics.mixture    import FiniteMixture
-    from borg.portfolio.models       import DCM_MixtureModel
+    from borg.portfolio.models       import DistributionModel
     from borg.portfolio.test.support import (
         FakeAction,
         FakeOutcome,
         )
 
-    foo_action = FakeAction("foo", map(FakeOutcome, [0.0, 1.0]))
-    bar_action = FakeAction("bar", map(FakeOutcome, [0.0, 1.0]))
-    mixture    = \
+    actions = [
+        FakeAction("foo", map(FakeOutcome, [0.0, 1.0])),
+        FakeAction("bar", map(FakeOutcome, [0.0, 1.0])),
+        ]
+    mixture = \
         FiniteMixture(
             [0.25, 0.75],
             [
-                [
-                    DirichletCompoundMultinomial([1e-4, 1.0]),
-                    DirichletCompoundMultinomial([1.0,  1e-4]),
-                    ],
-                [
-                    DirichletCompoundMultinomial([1.0,  1e-4]),
-                    DirichletCompoundMultinomial([1e-4, 1.0]),
-                    ],
+                TupleDistribution((
+                    DirichletCompoundMultinomial([1e-4, 1.0],  1),
+                    DirichletCompoundMultinomial([1.0,  1e-4], 1),
+                    )),
+                TupleDistribution((
+                    DirichletCompoundMultinomial([1.0,  1e-4], 1),
+                    DirichletCompoundMultinomial([1e-4, 1.0],  1),
+                    )),
                 ],
             )
-    estimator = FakeDCM_Estimator(mixture)
-    training  = {foo_action: [], bar_action: []}
-    model     = DCM_MixtureModel(training, estimator)
+    model   = DistributionModel(mixture, actions)
 
     # verify its a priori predictions
     import numpy
-    import numpy.random as r
 
+    from numpy.random  import RandomState
     from cargo.testing import assert_almost_equal_deep
 
+    rs = RandomState(42)
+
     assert_almost_equal_deep(
-        model.predict(numpy.zeros((2, 2), numpy.uint), r).tolist(),
+        model.predict(numpy.zeros((2, 2), numpy.uint), rs).tolist(),
         [
             [0.74995000499950015, 0.25004999500049996],
             [0.25004999500049996, 0.74995000499950015],
@@ -128,17 +131,17 @@ def test_dcm_model():
 
     # verify its a posteriori predictions
     assert_almost_equal_deep(
-        model.predict(numpy.array([[1, 0], [0, 1]], numpy.uint), r).tolist(),
+        model.predict(numpy.array([[1, 0], [0, 1]], numpy.uint), rs).tolist(),
         [
-            [0.99995000083345764, 4.9999166541667325e-05],
-            [4.9999166541667325e-05, 0.99995000083345764],
+            [0.99990000666633339, 0.00010001999499990015],
+            [0.00010001999499990015, 0.99990000666633339],
             ],
         )
     assert_almost_equal_deep(
-        model.predict(numpy.array([[0, 1], [1, 0]], numpy.uint), r).tolist(),
+        model.predict(numpy.array([[0, 1], [1, 0]], numpy.uint), rs).tolist(),
         [
-            [5.0012497874656265e-05, 0.9999499875021246],
-            [0.9999499875021246, 5.0012497874656265e-05],
+            [0.00010001999499990015, 0.99990000666633339],
+            [0.99990000666633339, 0.00010001999499990015],
             ],
         )
 
