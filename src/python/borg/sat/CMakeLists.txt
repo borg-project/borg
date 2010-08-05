@@ -9,6 +9,11 @@ install(
         cnf.py
 	DESTINATION lib/borg/sat
 	)
+install(
+	PROGRAMS
+		features1s
+	DESTINATION lib/borg/sat
+	)
 
 #
 # descend

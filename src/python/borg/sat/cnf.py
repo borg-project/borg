@@ -111,3 +111,24 @@ class DIMACS_GraphFile(object):
     N = property(lambda self: self.__N)
     M = property(lambda self: self.__M)
 
+def compute_features(path):
+    """
+    Compute relevant features of the specified DIMACS-format file.
+    """
+
+    # find the associated feature computation binary
+    from os.path import (
+        join,
+        dirname,
+        )
+
+    features1s = join(dirname(__file__), "features1s")
+
+    # execute the helper
+    from cargo.io import check_call_capturing
+
+    (output, _)     = check_call_capturing([features1s, path])
+    (names, values) = [l.split(",") for l in output.splitlines()]
+
+    return dict((n, float(v)) for (n, v) in zip(names, values))
+
