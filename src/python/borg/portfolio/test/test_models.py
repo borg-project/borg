@@ -38,14 +38,15 @@ def test_random_model():
     model   = RandomModel(actions)
 
     # generate a bunch of predictions
+    import numpy
+
     from numpy.random import RandomState
 
     random    = RandomState(42)
-    predicted = [model.predict([], random) for i in xrange(1024)]
+    history   = numpy.zeros((4, 4), numpy.uint)
+    predicted = [model.predict(history, random) for i in xrange(1024)]
 
     # verify that they're valid probabilities
-    import numpy
-
     for predictions in predicted:
         for p in predictions:
             assert_almost_equal(numpy.sum(p), 1.0)
@@ -58,25 +59,6 @@ def test_random_model():
         mean /= len(predicted)
 
         assert_true(numpy.sum(numpy.abs(mean - expected)) < 0.05)
-
-class FakeDCM_Estimator(object):
-    """
-    Estimate some fixed mixture.
-    """
-
-    def __init__(self, mixture):
-        """
-        Initialize.
-        """
-
-        self._mixture = mixture
-
-    def estimate(self, samples):
-        """
-        Pretend to estimate.
-        """
-
-        return self._mixture
 
 def test_distribution_model():
     """
