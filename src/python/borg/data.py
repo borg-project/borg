@@ -275,6 +275,7 @@ class TaskRow(DatumBase):
     __mapper_args__ = {"polymorphic_on": type}
 
     # backref "names" from TaskNameRow
+    # backref "features" from TaskFeatureRow
 
     def get_task(self, environment):
         """
@@ -415,59 +416,18 @@ class TaskNameRow(DatumBase):
 
     task = relationship(TaskRow, backref = "names")
 
-# class TaskFeaturesRow(DatumBase):
-#     """
-#     Record the features of a task.
-#     """
+class TaskFeatureRow(DatumBase):
+    """
+    Record the features of a task.
+    """
 
-#     variables                = Column(Integer)
-#     clauses                  = Column(Integer)
-#     cv_ratio                 = Column(Float)
-#     vcg_variable_mean        = Column(Float)
-#     vcg_variable_cev         = Column(Float)
-#     vcg_variable_min         = Column(Float)
-#     vcg_variable_max         = Column(Float)
-#     vcg_variable_entropy     = Column(Float)
-#     vcg_clause_mean          = Column(Float)
-#     vcg_clause_cev           = Column(Float)
-#     vcg_clause_min           = Column(Float)
-#     vcg_clause_max           = Column(Float)
-#     vcg_clause_entropy       = Column(Float)
-#     clause_balance_mean      = Column(Float)
-#     clause_balance_cev       = Column(Float)
-#     clause_balance_min       = Column(Float)
-#     clause_balance_max       = Column(Float)
-#     clause_balance_entropy   = Column(Float)
-#     variable_balance_mean    = Column(Float)
-#     variable_balance_std     = Column(Float)
-#     variable_balance_min     = Column(Float)
-#     variable_balance_max     = Column(Float)
-#     variable_balance_entropy = Column(Float)
-#     unary_fraction           = Column(Float)
-#     binary_fraction          = Column(Float)
-#     ternary_fraction         = Column(Float)
-#     variable_horn_mean       = Column(Float)
-#     variable_horn_cev        = Column(Float)
-#     variable_horn_min        = Column(Float)
-#     variable_horn_max        = Column(Float)
-#     variable_horn_entropy    = Column(Float)
-#     horn_fraction            = Column(Float)
-#     vg_degree_mean           = Column(Float)
-#     vg_degree_cev            = Column(Float)
-#     vg_degree_min            = Column(Float)
-#     vg_degree_max            = Column(Float)
-#     klb_time                 = Column(Float)
-#     cg_degree_mean           = Column(Float)
-#     cg_degree_cev            = Column(Float)
-#     cg_degree_min            = Column(Float)
-#     cg_degree_max            = Column(Float)
-#     cg_degree_entropy        = Column(Float)
-#     cluster_mean             = Column(Float)
-#     cluster_cev              = Column(Float)
-#     cluster_min              = Column(Float)
-#     cluster_max              = Column(Float)
-#     cluster_entropy          = Column(Float)
-#     features1s_time          = Column(Float)
+    __tablename__ = "task_features"
+
+    name      = Column(String, primary_key = True)
+    task_uuid = Column(SQL_UUID, ForeignKey("tasks.uuid"), primary_key = True)
+    value     = Column(Boolean)
+
+    task = relationship(TaskRow, backref = "features")
 
 class AnswerRow(DatumBase):
     """

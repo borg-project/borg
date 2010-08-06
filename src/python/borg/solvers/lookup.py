@@ -80,7 +80,7 @@ class LookupSolver(Rowed, AbstractSolver):
         return self._name
 
     @staticmethod
-    def build(request, trainer):
+    def build(trainer, request):
         """
         Build a solver as requested.
         """

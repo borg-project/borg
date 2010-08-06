@@ -16,7 +16,7 @@ cdef class Action:
 
     def description(self):
         """
-        A human-readable description of this action.
+        A human-readable name for this action.
         """
 
         raise NotImplementedError()

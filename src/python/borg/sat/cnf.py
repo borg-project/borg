@@ -111,7 +111,58 @@ class DIMACS_GraphFile(object):
     N = property(lambda self: self.__N)
     M = property(lambda self: self.__M)
 
-def compute_features(path):
+feature_names = [
+    "nvars",
+    "nclauses",
+    "vars-clauses-ratio",
+    "VCG-VAR-mean",
+    "VCG-VAR-coeff-variation",
+    "VCG-VAR-min",
+    "VCG-VAR-max",
+    "VCG-VAR-entropy",
+    "VCG-CLAUSE-mean",
+    "VCG-CLAUSE-coeff-variation",
+    "VCG-CLAUSE-min",
+    "VCG-CLAUSE-max",
+    "VCG-CLAUSE-entropy",
+    "POSNEG-RATIO-CLAUSE-mean",
+    "POSNEG-RATIO-CLAUSE-coeff-variation",
+    "POSNEG-RATIO-CLAUSE-min",
+    "POSNEG-RATIO-CLAUSE-max",
+    "POSNEG-RATIO-CLAUSE-entropy",
+    "POSNEG-RATIO-VAR-mean",
+    "POSNEG-RATIO-VAR-stdev",
+    "POSNEG-RATIO-VAR-min",
+    "POSNEG-RATIO-VAR-max",
+    "POSNEG-RATIO-VAR-entropy",
+    "UNARY",
+    "BINARY+",
+    "TRINARY+",
+    "HORNY-VAR-mean",
+    "HORNY-VAR-coeff-variation",
+    "HORNY-VAR-min",
+    "HORNY-VAR-max",
+    "HORNY-VAR-entropy",
+    "horn-clauses-fraction",
+    "VG-mean",
+    "VG-coeff-variation",
+    "VG-min",
+    "VG-max",
+    "KLB-featuretime",
+    "CG-mean",
+    "CG-coeff-variation",
+    "CG-min",
+    "CG-max",
+    "CG-entropy",
+    "cluster-coeff-mean",
+    "cluster-coeff-coeff-variation",
+    "cluster-coeff-min",
+    "cluster-coeff-max",
+    "cluster-coeff-entropy",
+    "CG-featuretime",
+    ]
+
+def compute_raw_features(path):
     """
     Compute relevant features of the specified DIMACS-format file.
     """
@@ -130,5 +181,8 @@ def compute_features(path):
     (output, _)     = check_call_capturing([features1s, path])
     (names, values) = [l.split(",") for l in output.splitlines()]
 
-    return dict((n, float(v)) for (n, v) in zip(names, values))
+    if names != feature_names:
+        raise RuntimeError("unexpected or missing feature names from features1s")
+    else:
+        return dict((n, float(v)) for (n, v) in zip(names, values))
 

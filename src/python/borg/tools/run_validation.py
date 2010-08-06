@@ -110,7 +110,7 @@ def make_validation_run(
     from borg.solvers         import solver_from_request
 
     trainer = build_trainer(domain, train_uuids, CacheSession, extrapolation = 6)
-    solver  = solver_from_request(request, trainer)
+    solver  = solver_from_request(trainer, request)
 
     log.info("built solver from request")
 

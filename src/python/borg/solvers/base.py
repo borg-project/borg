@@ -23,7 +23,7 @@ module_flags = \
             ),
         )
 
-def solver_from_request(request, trainer):
+def solver_from_request(trainer, request):
     """
     Build a portfolio object as requested.
     """
@@ -38,7 +38,7 @@ def solver_from_request(request, trainer):
         "lookup"    : LookupSolver.build,
         }
 
-    return builders[request["type"]](request, trainer)
+    return builders[request["type"]](trainer, request)
 
 def model_from_request(request, trainer):
     """
@@ -174,6 +174,19 @@ class AbstractPreprocessor(AbstractSolver):
     def make_task(self, seed, input_task, output_path, environment, row = None):
         """
         Construct an appropriate preprocessed task from its output directory.
+        """
+
+class TaskAnalyzer(ABC):
+    """
+    Abstract base for task feature acquisition classes.
+    """
+
+    @abstractmethod
+    def analyze(self, task, environment):
+        """
+        Acquire features of the specified task.
+
+        @return: Mapping from feature names to feature values.
         """
 
 class Environment(object):

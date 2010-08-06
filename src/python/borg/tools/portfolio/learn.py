@@ -24,7 +24,7 @@ def main():
 
     (train_uuids_path, request_path, solver_path) = \
         parse_given(
-            usage = "%prog <train_uuids.json> <request.json> <out.pickle> [options]",
+            usage = "%prog <uuids.json> <request.json> <out.pickle> [options]",
             )
 
     train_uuids = load_json(train_uuids_path)
@@ -45,12 +45,12 @@ def main():
     # construct the solver
     from cargo.sql.alchemy    import make_session
     from borg.data            import research_connect
-    from borg.portfolio.world import build_trainer
-    from borg.solvers         import solver_from_request # FIXME support different types
+    from borg.portfolio.world import Trainer
+    from borg.solvers         import solver_from_request
 
     ResearchSession = make_session(bind = research_connect())
-    trainer         = build_trainer(request["domain"], train_uuids, ResearchSession)
-    requested       = solver_from_request(request, trainer)
+    trainer         = Trainer.build(ResearchSession, train_uuids, request["trainer"])
+    requested       = solver_from_request(trainer, request["solver"])
 
     # write it to disk
     import cPickle as pickle

@@ -69,9 +69,12 @@ class PortfolioSolver(Rowed, AbstractSolver):
         Execute the solver and return its outcome, given an input path.
         """
 
+        # first, compute features
+        features = environment.analyzer.analyze(task)
+
+        # then invoke solvers
         from cargo.temporal import TimeDelta
 
-        # solve the instance
         remaining = budget
         nleft     = self.max_invocations
         record    = []
@@ -80,29 +83,27 @@ class PortfolioSolver(Rowed, AbstractSolver):
 
         while remaining > TimeDelta() and nleft > 0:
             # select and take an action
-            from cargo.temporal                import TimeDelta
-            from borg.portfolio.decision_world import DecisionSolverOutcome
+            from cargo.temporal import TimeDelta
 
             action = selector.send(message)
 
             if action is None:
                 break
-            else:
-                calibrated = \
-                    min(
-                        remaining,
-                        TimeDelta(seconds = action.cost * environment.time_ratio),
-                        )
-                attempt    = action.solver.solve(task, calibrated, random, environment)
-                outcome    = DecisionSolverOutcome.from_result(attempt)
+            elif isinstance(action, FeatureAction):
+                outcome = action.take(features)
+            elif isinstance(action, SolverAction):
+                outcome    = action.take(task, calibrated, random, environment)
                 nleft     -= 1
                 remaining  = TimeDelta.from_timedelta(remaining - attempt.cost)
-                message    = (outcome, remaining.as_s)
 
                 record.append((action.solver, attempt))
 
-                if attempt.answer is not None:
+                if outcome.utility > 0.0:
                     break
+            else:
+                raise TypeError("cannot handle unexpected action type")
+
+            message = (outcome, remaining.as_s)
 
         return PortfolioAttempt(self, task, budget, budget - remaining, record)
 
@@ -131,7 +132,7 @@ class PortfolioSolver(Rowed, AbstractSolver):
         return "portfolio"
 
     @staticmethod
-    def build(request, trainer):
+    def build(trainer, request):
         """
         Build a solver as requested.
         """
