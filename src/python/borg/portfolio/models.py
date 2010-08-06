@@ -198,38 +198,6 @@ class DistributionModel(AbstractModel):
         return self._actions
 
     @staticmethod
-    def build_with(samples, k, em_restarts):
-        """
-        Build a model as specified.
-        """
-
-        log.info("building a DCM mixture model")
-
-        from cargo.statistics.dcm     import (
-            DCM_Estimator,
-            smooth_dcm_mixture,
-            )
-        from cargo.statistics.mixture import (
-            RestartedEstimator,
-            EM_MixtureEstimator,
-            )
-
-        model = \
-            DCM_MixtureModel(
-                training,
-                RestartedEstimator(
-                    EM_MixtureEstimator(
-                        [[DCM_Estimator()] * k] * len(training),
-                        ),
-                    nrestarts = em_restarts,
-                    ),
-                )
-
-        smooth_dcm_mixture(model.mixture)
-
-        return model
-
-    @staticmethod
     def build(request, trainer):
         """
         Build a model as requested.

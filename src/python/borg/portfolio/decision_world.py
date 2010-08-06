@@ -16,31 +16,13 @@ class DecisionTrainer(AbstractTrainer):
     Grant a decision portfolio access to training data.
     """
 
-    def __init__(self, task_uuids, Session, extrapolation = 1):
+    def __init__(self, task_uuids, Session):
         """
         Initialize.
         """
 
-        self._task_uuids    = task_uuids
-        self._Session       = Session
-        self._extrapolation = extrapolation
-
-    def build_actions(self, request):
-        """
-        Build a list of actions from a configuration request.
-        """
-
-        # build the solvers and cutoffs
-        from cargo.temporal import TimeDelta
-        from borg.solvers   import LookupSolver
-
-        solvers = [LookupSolver(s) for s in request["solvers"]]
-        budgets = [TimeDelta(seconds = s) for s in request["budgets"]]
-
-        # build the actions
-        from itertools import product
-
-        return [DecisionWorldAction(*a) for a in product(solvers, budgets)]
+        self._task_uuids = task_uuids
+        self._Session    = Session
 
     def get_data(self, action):
         """
@@ -88,14 +70,25 @@ class DecisionTrainer(AbstractTrainer):
 
             log.detail("got %i rows for action %s", len(rows), action.description)
 
-            # packaged as an array
-            import numpy
+    @staticmethod
+    def build(request):
+        """
+        Build this trainer from a request.
+        """
 
-            e = self._extrapolation
+        # build the solvers and cutoffs
+        from cargo.temporal import TimeDelta
+        from borg.solvers   import LookupSolver
 
-            return numpy.array([[s * e, (a - s) * e] for (s, a) in rows], numpy.uint)
+        solvers = [LookupSolver(s) for s in request["solvers"]]
+        budgets = [TimeDelta(seconds = s) for s in request["budgets"]]
 
-class DecisionWorldAction(Action):
+        # build the actions
+        from itertools import product
+
+        return [DecisionSolverAction(*a) for a in product(solvers, budgets)]
+
+class DecisionSolverAction(Action):
     """
     An action in the world.
     """
@@ -132,7 +125,7 @@ class DecisionWorldAction(Action):
         The possible outcomes of this action.
         """
 
-        return DecisionWorldOutcome.BY_INDEX
+        return DecisionSolverOutcome.BY_INDEX
 
     @property
     def solver(self):
@@ -142,7 +135,7 @@ class DecisionWorldAction(Action):
 
         return self._solver
 
-class DecisionWorldOutcome(Outcome):
+class DecisionSolverOutcome(Outcome):
     """
     An outcome of an action in the world.
     """
@@ -161,9 +154,9 @@ class DecisionWorldOutcome(Outcome):
         """
 
         if attempt.answer is None:
-            return DecisionWorldOutcome.UNSOLVED
+            return DecisionSolverOutcome.UNSOLVED
         else:
-            return DecisionWorldOutcome.from_bool(attempt.answer.satisfiable)
+            return DecisionSolverOutcome.from_bool(attempt.answer.satisfiable)
 
     @staticmethod
     def from_bool(bool):
@@ -171,18 +164,18 @@ class DecisionWorldOutcome(Outcome):
         Return an outcome from True, False, or None.
         """
 
-        return DecisionWorldOutcome.BY_VALUE[bool]
+        return DecisionSolverOutcome.BY_VALUE[bool]
 
 # outcome constants
-DecisionWorldOutcome.SOLVED   = DecisionWorldOutcome(0, 1.0)
-DecisionWorldOutcome.UNSOLVED = DecisionWorldOutcome(1, 0.0)
-DecisionWorldOutcome.BY_VALUE = {
-    True:  DecisionWorldOutcome.SOLVED,
-    False: DecisionWorldOutcome.SOLVED,
-    None:  DecisionWorldOutcome.UNSOLVED,
+DecisionSolverOutcome.SOLVED   = DecisionSolverOutcome(0, 1.0)
+DecisionSolverOutcome.UNSOLVED = DecisionSolverOutcome(1, 0.0)
+DecisionSolverOutcome.BY_VALUE = {
+    True:  DecisionSolverOutcome.SOLVED,
+    False: DecisionSolverOutcome.SOLVED,
+    None:  DecisionSolverOutcome.UNSOLVED,
     }
-DecisionWorldOutcome.BY_INDEX = [
-    DecisionWorldOutcome.SOLVED,
-    DecisionWorldOutcome.UNSOLVED,
+DecisionSolverOutcome.BY_INDEX = [
+    DecisionSolverOutcome.SOLVED,
+    DecisionSolverOutcome.UNSOLVED,
     ]
 

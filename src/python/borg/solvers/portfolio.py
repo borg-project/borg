@@ -81,7 +81,7 @@ class PortfolioSolver(Rowed, AbstractSolver):
         while remaining > TimeDelta() and nleft > 0:
             # select and take an action
             from cargo.temporal                import TimeDelta
-            from borg.portfolio.decision_world import DecisionWorldOutcome
+            from borg.portfolio.decision_world import DecisionSolverOutcome
 
             action = selector.send(message)
 
@@ -94,7 +94,7 @@ class PortfolioSolver(Rowed, AbstractSolver):
                         TimeDelta(seconds = action.cost * environment.time_ratio),
                         )
                 attempt    = action.solver.solve(task, calibrated, random, environment)
-                outcome    = DecisionWorldOutcome.from_result(attempt)
+                outcome    = DecisionSolverOutcome.from_result(attempt)
                 nleft     -= 1
                 remaining  = TimeDelta.from_timedelta(remaining - attempt.cost)
                 message    = (outcome, remaining.as_s)
