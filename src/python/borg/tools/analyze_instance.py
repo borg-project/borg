@@ -91,12 +91,12 @@ def main():
 
     enable_default_logging()
 
-    get_logger("sqlalchemy.engine",      level = "WARNING")
-    get_logger("borg.solvers.analyzers", level = "DETAIL")
+    get_logger("sqlalchemy.engine", level = "WARNING")
+    get_logger("borg.analyzers",    level = "DETAIL")
 
     # analyze the instance
-    from borg.tasks             import FileTask
-    from borg.solvers.analyzers import SATzillaAnalyzer
+    from borg.tasks     import FileTask
+    from borg.analyzers import SATzillaAnalyzer
 
     task     = FileTask(instance_path)
     analyzer = SATzillaAnalyzer()

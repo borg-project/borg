@@ -89,7 +89,7 @@ def test_get_tasks():
                     ],
                 stdout     = null_file,
                 stderr     = null_file,
-                preexec_fn = partial(unset_all, "CARGO_FLAGS_EXTRA"),
+                preexec_fn = partial(unset_all, "CARGO_FLAGS_EXTRA_FILE"),
                 )
 
         # success?

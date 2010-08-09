@@ -46,11 +46,11 @@ def main():
     from cargo.sql.alchemy    import make_session
     from borg.data            import research_connect
     from borg.portfolio.world import Trainer
-    from borg.solvers         import solver_from_request
+    from borg.solvers         import AbstractSolver
 
     ResearchSession = make_session(bind = research_connect())
     trainer         = Trainer.build(ResearchSession, train_uuids, request["trainer"])
-    requested       = solver_from_request(trainer, request["solver"])
+    requested       = AbstractSolver.build(trainer, request["solver"])
 
     # write it to disk
     import cPickle as pickle

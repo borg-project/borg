@@ -55,7 +55,7 @@ class PortfolioSolver(Rowed, AbstractSolver):
     Solve tasks with a portfolio.
     """
 
-    def __init__(self, strategy, analyzer = NoAnalyzer()):
+    def __init__(self, strategy, analyzer):
         """
         Initialize.
         """
@@ -75,7 +75,11 @@ class PortfolioSolver(Rowed, AbstractSolver):
         features = self._analyzer.analyze(task, environment)
 
         # then invoke solvers
-        from cargo.temporal import TimeDelta
+        from cargo.temporal       import TimeDelta
+        from borg.portfolio.world import (
+            SolverAction,
+            FeatureAction,
+            )
 
         remaining = budget
         nleft     = self._max_invocations
@@ -85,8 +89,6 @@ class PortfolioSolver(Rowed, AbstractSolver):
 
         while remaining > TimeDelta() and nleft > 0:
             # select and take an action
-            from cargo.temporal import TimeDelta
-
             action = selector.send(message)
 
             if action is None:
@@ -94,9 +96,9 @@ class PortfolioSolver(Rowed, AbstractSolver):
             elif isinstance(action, FeatureAction):
                 outcome = action.take(features)
             elif isinstance(action, SolverAction):
-                outcome    = action.take(task, calibrated, random, environment)
-                nleft     -= 1
-                remaining  = TimeDelta.from_timedelta(remaining - attempt.cost)
+                (attempt, outcome)  = action.take(task, remaining, random, environment)
+                nleft              -= 1
+                remaining           = TimeDelta.from_timedelta(remaining - action.budget)
 
                 record.append((action.solver, attempt))
 

@@ -18,24 +18,31 @@ def test_tools_portfolio_learn():
     log = get_logger(__name__, level = "NOTSET")
 
     solver_request = {
-        "domain"   : "sat",
-        "type"     : "portfolio",
-        "strategy" : {
-            "type"    : "modeling",
-            "planner" : {
-                "type"     : "hard_myopic",
-                "discount" : 1.0,
-                },
-            "model"   : {
-                "type"        : "random",
-                "actions"     : {
-                    "solvers" : [
-                        "foo",
-                        "bar",
-                        "baz",
-                        ],
-                    "budgets" : [1],
+        "solver" : {
+            "type"     : "portfolio",
+            "strategy" : {
+                "type"    : "modeling",
+                "planner" : {
+                    "type"     : "hard_myopic",
+                    "discount" : 1.0,
                     },
+                "model"   : {
+                    "type" : "random",
+                    },
+                },
+            "analyzer" : {
+                "type" : "no",
+                },
+            },
+        "trainer" : {
+            "type" : "sat",
+            "actions"     : {
+                "solvers" : [
+                    "foo",
+                    "bar",
+                    "baz",
+                    ],
+                "budgets" : [1],
                 },
             },
         }
@@ -67,7 +74,7 @@ def test_tools_portfolio_learn():
                         ],
                     stdout     = temporary,
                     stderr     = temporary,
-                    preexec_fn = partial(unset_all, "CARGO_FLAGS_EXTRA"),
+                    preexec_fn = partial(unset_all, "CARGO_FLAGS_EXTRA_FILE"),
                     )
 
             temporary.seek(0)

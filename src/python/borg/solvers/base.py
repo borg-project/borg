@@ -23,23 +23,6 @@ module_flags = \
             ),
         )
 
-def solver_from_request(trainer, request):
-    """
-    Build a portfolio object as requested.
-    """
-
-    from borg.solvers import (
-        LookupSolver,
-        PortfolioSolver,
-        )
-
-    builders = {
-        "portfolio" : PortfolioSolver.build,
-        "lookup"    : LookupSolver.build,
-        }
-
-    return builders[request["type"]](trainer, request)
-
 def get_random_seed(random):
     """
     Return a random solver seed.
@@ -143,6 +126,24 @@ class AbstractSolver(AbstractRowed):
         """
         Attempt to solve the specified instance.
         """
+
+    @staticmethod
+    def build(trainer, request):
+        """
+        Build a portfolio object as requested.
+        """
+
+        from borg.solvers import (
+            LookupSolver,
+            PortfolioSolver,
+            )
+
+        builders = {
+            "portfolio" : PortfolioSolver.build,
+            "lookup"    : LookupSolver.build,
+            }
+
+        return builders[request["type"]](trainer, request)
 
 class AbstractPreprocessor(AbstractSolver):
     """

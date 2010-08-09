@@ -110,6 +110,8 @@ class ModelingStrategy(AbstractStrategy):
 
         import numpy
 
+        print self.model.actions
+
         dimensions = (len(self.model.actions), max(len(a.outcomes) for a in self.model.actions))
         history    = numpy.zeros(dimensions, numpy.uint)
 

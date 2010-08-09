@@ -9,9 +9,9 @@ def test_compute_features():
 
     from nose.tools   import assert_equal
     from borg         import get_support_path
-    from borg.sat.cnf import compute_features
+    from borg.sat.cnf import compute_raw_features
 
-    features = compute_features(get_support_path("s57-100.cnf"))
+    features = compute_raw_features(get_support_path("s57-100.cnf"))
 
     assert_equal(len(features), 48)
 

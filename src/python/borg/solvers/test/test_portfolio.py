@@ -11,14 +11,14 @@ def test_sat_portfolio_solver():
     """
 
     # set up the portfolio solver
-    from cargo.temporal                import TimeDelta
-    from borg.sat                      import Decision
-    from borg.solvers                  import (
+    from cargo.temporal            import TimeDelta
+    from borg.sat                  import Decision
+    from borg.solvers              import (
         Environment,
         PortfolioSolver,
         )
-    from borg.portfolio.decision_world import SolverAction
-    from borg.portfolio.strategies     import SequenceStrategy
+    from borg.portfolio.world      import SolverAction
+    from borg.portfolio.strategies import SequenceStrategy
 
     certificate = [1, 2, 3, 4, 0]
     subsolvers  = [
@@ -37,10 +37,12 @@ def test_sat_portfolio_solver():
 
         import numpy
 
-        from borg.tasks import FileTask
+        from borg.tasks     import FileTask
+        from borg.analyzers import NoAnalyzer
 
         strategy = SequenceStrategy(actions)
-        solver   = PortfolioSolver(strategy)
+        analyzer = NoAnalyzer()
+        solver   = PortfolioSolver(strategy, analyzer)
         task     = FileTask("/tmp/arbitrary_path.cnf")
         attempt  = solver.solve(task, TimeDelta(seconds = seconds), numpy.random, environment)
 

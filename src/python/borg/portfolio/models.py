@@ -152,7 +152,7 @@ class RandomModel(AbstractModel):
         Build a model as requested.
         """
 
-        return RandomModel(trainer.build_actions(request["actions"]))
+        return RandomModel(trainer.actions)
 
 class DistributionModel(AbstractModel):
     """
@@ -206,7 +206,7 @@ class DistributionModel(AbstractModel):
         from cargo.statistics.base  import Estimator
         from cargo.statistics.tuple import TupleSamples
 
-        actions   = trainer.build_actions(request["actions"])
+        actions   = trainer.actions
         samples   = TupleSamples([trainer.get_data(a) for a in actions])
         estimator = build_estimator(request["estimator"])
         estimated = estimator.estimate(samples)

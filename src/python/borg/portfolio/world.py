@@ -12,36 +12,6 @@ from borg.portfolio._base import (
     Outcome,
     )
 
-class Trainer(ABC):
-    """
-    Grant a portfolio access to training data.
-    """
-
-    @abstractmethod
-    def build_actions(request):
-        """
-        Build a list of actions from a configuration request.
-        """
-
-    @abstractmethod
-    def get_data(self, action):
-        """
-        Provide task-outcomes counts to the trainee.
-        """
-
-    @staticmethod
-    def build(Session, task_uuids, request)
-        """
-        Build a trainer as requested.
-        """
-
-        builders = {
-            "pb"  : PB_Trainer,
-            "sat" : SAT_Trainer,
-            }
-
-        return builders[request["type"]](Session, task_uuids, request)
-
 class SolverAction(Action):
     """
     An action that executes a solver under some budget constraint.
@@ -123,9 +93,9 @@ class SolverAction(Action):
         attempt    = self._solver.solve(task, min(remaining, calibrated), random, environment)
 
         if attempt.answer is None:
-            return SolverAction.unsolved_outcome
+            return (attempt, SolverAction.unsolved_outcome)
         else:
-            return SolverAction.solved_outcome
+            return (attempt, SolverAction.solved_outcome)
 
     @property
     def description(self):
@@ -264,6 +234,36 @@ class FeatureAction(Action):
 
         return self._feature_name
 
+class Trainer(ABC):
+    """
+    Grant a portfolio access to training data.
+    """
+
+    @abstractmethod
+    def get_data(self, action):
+        """
+        Provide task-outcomes counts to the trainee.
+        """
+
+    @abstractproperty
+    def actions(self):
+        """
+        Return the associated actions.
+        """
+
+    @staticmethod
+    def build(Session, task_uuids, request):
+        """
+        Build a trainer as requested.
+        """
+
+        builders = {
+            "pb"  : PB_Trainer.build,
+            "sat" : SAT_Trainer.build,
+            }
+
+        return builders[request["type"]](Session, task_uuids, request)
+
 class PB_Trainer(Trainer):
     """
     Grant a decision portfolio access to training data.
@@ -286,13 +286,21 @@ class PB_Trainer(Trainer):
         with self._Session() as session:
             return action.get_training(session, self._task_uuids)
 
+    @property
+    def actions(self):
+        """
+        Return the associated actions.
+        """
+
+        return self._actions
+
     @staticmethod
     def build(Session, task_uuids, request):
         """
         Build this trainer from a request.
         """
 
-        actions = SolverAction.build_actions(request)
+        actions = SolverAction.build_actions(request["actions"])
 
         return PB_Trainer(Session, task_uuids, actions)
 
@@ -318,6 +326,14 @@ class SAT_Trainer(Trainer):
         with self._Session() as session:
             return action.get_training(session, self._task_uuids)
 
+    @property
+    def actions(self):
+        """
+        Return the associated actions.
+        """
+
+        return self._actions
+
     @staticmethod
     def build(Session, task_uuids, request):
         """
@@ -326,7 +342,9 @@ class SAT_Trainer(Trainer):
 
         from borg.sat.cnf import feature_names
 
-        actions  = SolverAction.build_actions(request)
+        # FIXME action construction doesn't belong here...?
+
+        actions  = SolverAction.build_actions(request["actions"])
         actions += [FeatureAction(name) for name in feature_names]
 
         return SAT_Trainer(Session, task_uuids, actions)
