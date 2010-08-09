@@ -5,6 +5,7 @@
 install(
     FILES
         __init__.py
+		analyzers.py
         cache.py
         data.py
         rowed.py

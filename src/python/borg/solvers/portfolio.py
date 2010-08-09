@@ -2,11 +2,12 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from borg.rowed   import Rowed
-from borg.solvers import (
+from borg.rowed     import Rowed
+from borg.solvers   import (
     RunAttempt,
     AbstractSolver,
     )
+from borg.analyzers import NoAnalyzer
 
 # FIXME hack---shouldn't really be a RunAttempt
 # FIXME (if the *only* distinction between a run and non-run attempt
@@ -54,15 +55,16 @@ class PortfolioSolver(Rowed, AbstractSolver):
     Solve tasks with a portfolio.
     """
 
-    def __init__(self, strategy):
+    def __init__(self, strategy, analyzer = NoAnalyzer()):
         """
         Initialize.
         """
 
         Rowed.__init__(self)
 
-        self.strategy        = strategy
-        self.max_invocations = 50
+        self._strategy        = strategy
+        self._analyzer        = analyzer
+        self._max_invocations = 50
 
     def solve(self, task, budget, random, environment):
         """
@@ -70,15 +72,15 @@ class PortfolioSolver(Rowed, AbstractSolver):
         """
 
         # first, compute features
-        features = environment.analyzer.analyze(task)
+        features = self._analyzer.analyze(task, environment)
 
         # then invoke solvers
         from cargo.temporal import TimeDelta
 
         remaining = budget
-        nleft     = self.max_invocations
+        nleft     = self._max_invocations
         record    = []
-        selector  = self.strategy.select(remaining.as_s, random)
+        selector  = self._strategy.select(remaining.as_s, random)
         message   = None
 
         while remaining > TimeDelta() and nleft > 0:
@@ -137,7 +139,11 @@ class PortfolioSolver(Rowed, AbstractSolver):
         Build a solver as requested.
         """
 
+        from borg.analyzers            import TaskAnalyzer
         from borg.portfolio.strategies import build_strategy
 
-        return PortfolioSolver(build_strategy(request["strategy"], trainer))
+        strategy = build_strategy(request["strategy"], trainer)
+        analyzer = TaskAnalyzer.build(request["analyzer"], trainer)
+
+        return PortfolioSolver(strategy, analyzer)
 

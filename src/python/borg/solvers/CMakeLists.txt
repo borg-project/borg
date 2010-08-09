@@ -5,7 +5,6 @@
 install(
 	FILES
         __init__.py
-		analyzers.py
         attempts.py
         base.py
         competition.py

@@ -8,7 +8,6 @@ from cargo.flags import (
     Flag,
     Flags,
     )
-from cargo.sugar import ABC
 from borg.rowed  import AbstractRowed
 
 log          = get_logger(__name__)
@@ -40,15 +39,6 @@ def solver_from_request(trainer, request):
         }
 
     return builders[request["type"]](trainer, request)
-
-def model_from_request(request, trainer):
-    """
-    Build a portfolio object as requested.
-    """
-
-    from borg.portfolio.models import build_model
-
-    return build_model(request, trainer)
 
 def get_random_seed(random):
     """
@@ -175,19 +165,6 @@ class AbstractPreprocessor(AbstractSolver):
     def make_task(self, seed, input_task, output_path, environment, row = None):
         """
         Construct an appropriate preprocessed task from its output directory.
-        """
-
-class TaskAnalyzer(ABC):
-    """
-    Abstract base for task feature acquisition classes.
-    """
-
-    @abstractmethod
-    def analyze(self, task, environment):
-        """
-        Acquire features of the specified task.
-
-        @return: Mapping from feature names to feature values.
         """
 
 class Environment(object):
