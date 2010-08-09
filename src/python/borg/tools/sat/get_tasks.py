@@ -7,7 +7,6 @@ if __name__ == "__main__":
 
     raise SystemExit(main())
 
-from collections import namedtuple
 from cargo.log   import get_logger
 from cargo.flags import (
     Flag,
@@ -34,8 +33,6 @@ module_flags = \
             help    = "find NAME tasks [%default]",
             ),
         )
-
-DomainProperties = namedtuple("DomainProperties", ["patterns", "extension", "sanitizer"])
 
 def get_task(
     engine_url,
@@ -65,17 +62,17 @@ def get_task(
     with ResearchSession() as session:
         # has this task already been stored?
         from sqlalchemy import and_
-        from borg.data  import TaskNameRow as TN
+        from borg.data  import TaskNameRow as TNR
 
-        task_name_row =                          \
-            session                              \
-            .query(TN)                           \
+        task_name_row =                           \
+            session                               \
+            .query(TNR)                           \
             .filter(
                 and_(
-                    TN.name       == name,
-                    TN.collection == collection,
+                    TNR.name       == name,
+                    TNR.collection == collection,
                 ),
-            )                                    \
+            )                                     \
             .first()
 
         if task_name_row is not None:
@@ -83,43 +80,25 @@ def get_task(
 
             return
 
-        # hash the task file
-        from os.path      import join
-        from cargo.io     import (
-            decompress_if,
-            mkdtemp_scoped,
-            hash_yielded_bytes,
-            )
-
-        log.note("hashing %s", name)
-
-        with mkdtemp_scoped(prefix = "%s." % domain.extension) as sandbox_path:
-            uncompressed_path = \
-                decompress_if(
-                    task_path,
-                    join(sandbox_path, "uncompressed.%s" % domain.extension),
-                    )
-
-            with open(uncompressed_path) as file:
-                (_, file_hash) = hash_yielded_bytes(domain.sanitizer(file), "sha512")
-
         # find or create the task row
         from cargo.sql.alchemy import lock_table
-        from borg.data         import FileTaskRow as FT
+        from borg.data         import FileTaskRow as FTR
+        from borg.tasks        import get_task_file_hash
 
-        lock_table(session.connection().engine, FT.__tablename__, "share row exclusive")
+        lock_table(session.connection(), FTR.__tablename__, "share row exclusive")
 
-        task_row = session.query(FT).filter(FT.hash == buffer(file_hash)).first()
+        file_hash = get_task_file_hash(task_path, domain)
+        task_row  = session.query(FTR).filter(FTR.hash == buffer(file_hash)).first()
 
         if task_row is None:
-            task_row = FT(hash = buffer(file_hash))
+            task_row = FTR(hash = buffer(file_hash))
 
             session.add(task_row)
 
         session.commit()
 
         # create the task name row
-        task_name_row = TN(task = task_row, name = name, collection = collection)
+        task_name_row = TNR(task = task_row, name = name, collection = collection)
 
         session.add(task_name_row)
         session.commit()
@@ -129,34 +108,13 @@ def yield_get_task_jobs(session, tasks_path, relative_to, collection, domain_nam
     Find tasks to hash and name.
     """
 
-    # build the domain
-    from borg.sat.cnf import yield_sanitized_cnf
-    from borg.pb.opb  import yield_sanitized_opb
-
-    domain_properties = {
-        "sat" : \
-            DomainProperties(
-                ["*.cnf", "*.cnf.gz", "*.cnf.bz2", "*.cnf.xz"],
-                "cnf",
-                yield_sanitized_cnf,
-                ),
-        "pb" : \
-            DomainProperties(
-                ["*.opb", "*.opb.gz", "*.opb.bz2", "*.opb.xz"],
-                "opb",
-                yield_sanitized_opb,
-                ),
-        }
-
-    domain = domain_properties[domain_name]
-
     # build tasks
-    from os.path          import (
-        join,
-        relpath,
-        )
+    from os.path          import relpath
     from cargo.io         import files_under
     from cargo.labor.jobs import CallableJob
+    from borg.tasks       import builtin_domains
+
+    domain = builtin_domains[domain_name]
 
     for task_path in files_under(tasks_path, domain.patterns):
         yield CallableJob(

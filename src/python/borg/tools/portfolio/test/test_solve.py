@@ -31,10 +31,6 @@ def test_tools_portfolio_solve():
         pickle_file.flush()
 
         # prepare to invoke the "solve" script
-        from borg.tools.portfolio.test.support import clean_up_environment
-
-        clean_up_environment() # suboptimal, since we modify our own environment; whatever
-
         with NamedTemporaryFile(suffix = ".cnf") as cnf_file:
             # write a SAT instance to disk
             cnf_file.write(
@@ -54,7 +50,6 @@ def test_tools_portfolio_solve():
                 Environment,
                 SAT_CompetitionSolver,
                 )
-
 
             script_solver = \
                 SAT_CompetitionSolver(

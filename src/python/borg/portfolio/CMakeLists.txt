@@ -21,13 +21,12 @@ install(
     )
 install(
     FILES
-        __init__.py
-        bellman.py
-        decision_world.py
-        models.py
-        planners.py
-        strategies.py
-        world.py
+		__init__.py
+		bellman.py
+		models.py
+		planners.py
+		strategies.py
+		world.py
     DESTINATION lib/borg/portfolio
     )
 

@@ -42,9 +42,10 @@ def test_tools_portfolio_learn():
 
     with mkdtemp_scoped() as sandbox_path:
         # invoke the script
-        from tempfile                          import TemporaryFile
-        from subprocess                        import call
-        from borg.tools.portfolio.test.support import clean_up_environment
+        from tempfile   import TemporaryFile
+        from subprocess import call
+        from functools  import partial
+        from cargo.io   import unset_all
 
         uuids_json_path    = join(sandbox_path, "train_uuids.json")
         solver_json_path   = join(sandbox_path, "solver.json")
@@ -66,7 +67,7 @@ def test_tools_portfolio_learn():
                         ],
                     stdout     = temporary,
                     stderr     = temporary,
-                    preexec_fn = clean_up_environment,
+                    preexec_fn = partial(unset_all, "CARGO_FLAGS_EXTRA"),
                     )
 
             temporary.seek(0)

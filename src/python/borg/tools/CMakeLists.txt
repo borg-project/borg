@@ -5,6 +5,7 @@
 install(
 	FILES
         __init__.py
+		analyze_instance.py
         calibrate.py
         delete_trial.py
         generate_ddl.py
@@ -14,7 +15,6 @@ install(
         run_solvers.py
         run_validation.py
         plot_validation.py
-        beamer_sfmath.tex
 	DESTINATION lib/borg/tools
 	)
 
@@ -24,4 +24,5 @@ install(
 
 add_subdirectory(portfolio)
 add_subdirectory(sat)
+add_subdirectory(test)
 

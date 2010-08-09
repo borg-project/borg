@@ -168,12 +168,9 @@ def compute_raw_features(path):
     """
 
     # find the associated feature computation binary
-    from os.path import (
-        join,
-        dirname,
-        )
+    from borg import get_support_path
 
-    features1s = join(dirname(__file__), "features1s")
+    features1s = get_support_path("features1s")
 
     # execute the helper
     from cargo.io import check_call_capturing

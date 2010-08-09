@@ -22,4 +22,5 @@ add_subdirectory(sat)
 add_subdirectory(solvers)
 add_subdirectory(test)
 add_subdirectory(tools)
+add_subdirectory(_files)
 

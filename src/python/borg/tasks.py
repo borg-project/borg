@@ -6,6 +6,7 @@ from abc         import (
     abstractmethod,
     abstractproperty,
     )
+from collections import namedtuple
 from cargo.log   import get_logger
 from cargo.flags import (
     Flag,
@@ -26,6 +27,54 @@ module_flags = \
             help    = "read collection paths from PATH [%default]",
             )
         )
+
+DomainProperties = namedtuple("DomainProperties", ["patterns", "extension", "sanitizer"])
+
+def get_builtin_domains():
+    """
+    Return the properties of built-in domains.
+    """
+
+    from borg.sat.cnf import yield_sanitized_cnf
+    from borg.pb.opb  import yield_sanitized_opb
+
+    return {
+        "sat" : \
+            DomainProperties(
+                ["*.cnf", "*.cnf.gz", "*.cnf.bz2", "*.cnf.xz"],
+                "cnf",
+                yield_sanitized_cnf,
+                ),
+        "pb" : \
+            DomainProperties(
+                ["*.opb", "*.opb.gz", "*.opb.bz2", "*.opb.xz"],
+                "opb",
+                yield_sanitized_opb,
+                ),
+        }
+
+builtin_domains = get_builtin_domains()
+
+def get_task_file_hash(path, domain):
+    """
+    Return the hash of the specified task file.
+    """
+
+    from os.path  import join
+    from cargo.io import (
+        decompress_if,
+        mkdtemp_scoped,
+        hash_yielded_bytes,
+        )
+
+    with mkdtemp_scoped(prefix = "borg.tasks.") as sandbox_path:
+        uncompressed_name = "uncompressed.%s" % domain.extension
+        uncompressed_path = decompress_if(path, join(sandbox_path, uncompressed_name))
+
+        with open(uncompressed_path) as file:
+            (_, file_hash) = hash_yielded_bytes(domain.sanitizer(file), "sha512")
+
+            return file_hash
 
 def get_collections(path = None, default = {None: "."}):
     """

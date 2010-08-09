@@ -13,20 +13,20 @@ def assert_tasks_stored(session):
     """
 
     from borg.data import (
-        TaskRow     as T,
-        TaskNameRow as TN,
+        TaskRow     as TR,
+        TaskNameRow as TNR,
         )
 
     # we should have eight unique tasks
-    assert_equal(session.query(T).count(), 8)
+    assert_equal(session.query(TR).count(), 8)
 
     for i in xrange(8):
         for j in xrange(8):
             task_row =                                   \
                 session                                  \
-                .query(TN)                               \
-                .filter(TN.name == "tasks/%i/%i.cnf" % (i, j)) \
-                .filter(TN.collection == "sat/")         \
+                .query(TNR)                               \
+                .filter(TNR.name == "tasks/%i/%i.cnf" % (i, j)) \
+                .filter(TNR.collection == "sat/")         \
                 .first()
 
             assert_true(task_row is not None)
@@ -45,10 +45,10 @@ def test_get_tasks():
     """
 
     # scan a fake path
-    from cargo.io   import mkdtemp_scoped
+    from cargo.io import mkdtemp_scoped
 
     with mkdtemp_scoped() as sandbox_path:
-        # populate a directory of tasks
+        # populate a directory with tasks
         from os      import makedirs
         from os.path import join
 
@@ -67,10 +67,11 @@ def test_get_tasks():
                     file.write(make_cnf([j]))
 
         # invoke the script
-        from subprocess                        import check_call
-        from borg.tools.portfolio.test.support import clean_up_environment
+        from subprocess import check_call
+        from functools  import partial
+        from cargo.io   import unset_all
 
-        research_engine_url = "sqlite:///%s" % join(sandbox_path, "research.sqlite")
+        research_engine_url = "sqlite:///%s" % join(sandbox_path, "test.sqlite")
 
         with open("/dev/null", "w") as null_file:
             check_call(
@@ -88,7 +89,7 @@ def test_get_tasks():
                     ],
                 stdout     = null_file,
                 stderr     = null_file,
-                preexec_fn = clean_up_environment,
+                preexec_fn = partial(unset_all, "CARGO_FLAGS_EXTRA"),
                 )
 
         # success?

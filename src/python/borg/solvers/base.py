@@ -8,7 +8,8 @@ from cargo.flags import (
     Flag,
     Flags,
     )
-from borg.rowed import AbstractRowed
+from cargo.sugar import ABC
+from borg.rowed  import AbstractRowed
 
 log          = get_logger(__name__)
 module_flags = \

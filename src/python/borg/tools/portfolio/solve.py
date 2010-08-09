@@ -130,15 +130,17 @@ def main((solver_path, input_path, seed_string)):
         solver = pickle.load(file)
 
     # build the solver environment
-    from borg.solvers import (
+    from borg.solvers          import (
         Environment,
         get_named_solvers,
         )
+    from borg.sovers.analyzers import SATzillaAnalyzer
 
     environment = \
         Environment(
             named_solvers = get_named_solvers(),
             time_ratio    = flags.calibration / 2.2,
+            analyzer      = SATzillaAnalyzer(),
             )
 
     # solve
