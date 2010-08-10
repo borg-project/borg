@@ -113,9 +113,7 @@ class ModelingStrategy(AbstractStrategy):
         history    = numpy.zeros(dimensions, numpy.uint)
 
         while True:
-            # predict, then make a selection
-            predicted         = self._model.predict(history, random)
-            selected          = self._planner.select(predicted, budget, random)
+            selected          = self._planner.select(self._model, history, budget, random)
             (outcome, budget) = yield selected
 
             history[self._model.actions.index(selected), selected.outcomes.index(outcome)] += 1
@@ -130,7 +128,7 @@ class ModelingStrategy(AbstractStrategy):
         from borg.portfolio.planners import build_planner
 
         model   = build_model(request["model"], trainer)
-        planner = build_planner(request["planner"], trainer, model)
+        planner = build_planner(request["planner"], trainer)
 
         return ModelingStrategy(model, planner)
 

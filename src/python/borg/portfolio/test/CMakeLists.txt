@@ -4,6 +4,7 @@ install(
         support.py
         test_bellman.py
         test_models.py
+        test_planners.py
         test_strategies.py
 	DESTINATION lib/borg/portfolio/test
 	)

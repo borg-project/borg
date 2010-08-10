@@ -28,9 +28,9 @@ class AbstractPlanner(ABC):
     """
 
     @abstractmethod
-    def select(self, predicted, budget, random):
+    def select(self, model, history, budget, random):
         """
-        Select an action given the probabilities of outcomes.
+        Select an action.
         """
 
 class HardMyopicPlanner(AbstractPlanner):
@@ -38,28 +38,31 @@ class HardMyopicPlanner(AbstractPlanner):
     Deterministic greedy action selection.
     """
 
-    def __init__(self, actions, discount):
+    def __init__(self, discount):
         """
         Initialize.
         """
 
-        self.actions  = actions
-        self.discount = discount
+        self._discount = discount
 
-    def select(self, predicted, budget, random):
+    def select(self, model, history, budget, random):
         """
-        Select an action given the probabilities of outcomes.
+        Select an action.
         """
 
+        # compute next-step predictions
+        predicted = model.predict(history, random)
+
+        # select an apparently-best action
         from itertools import izip
 
         best_action      = None
         best_expectation = None
 
-        for (i, action) in enumerate(self.actions):
+        for (i, action) in enumerate(model.actions):
             if action.cost <= budget:
                 e  = sum(p * o.utility for (p, o) in izip(predicted[i], action.outcomes))
-                e *= self.discount**action.cost
+                e *= self._discount**action.cost
 
                 if best_action is None or best_expectation < e:
                     best_action      = action
@@ -68,10 +71,10 @@ class HardMyopicPlanner(AbstractPlanner):
         return best_action
 
     @staticmethod
-    def build(request, trainer, model):
+    def build(request, trainer):
         """
         Build a sequence strategy as requested.
         """
 
-        return HardMyopicPlanner(model.actions, request["discount"])
+        return HardMyopicPlanner(request["discount"])
 
