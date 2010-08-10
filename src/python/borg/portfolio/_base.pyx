@@ -14,6 +14,13 @@ cdef class Action:
 
         self._cost = cost
 
+    def __reduce__(self):
+        """
+        Reduce this instance for pickling.
+        """
+
+        raise NotImplementedError()
+
     def description(self):
         """
         A human-readable name for this action.
@@ -47,6 +54,13 @@ cdef class Outcome:
         """
 
         self._utility = utility
+
+    def __reduce__(self):
+        """
+        Reduce this instance for pickling.
+        """
+
+        return (Outcome, (self._utility,))
 
     @property
     def utility(self):

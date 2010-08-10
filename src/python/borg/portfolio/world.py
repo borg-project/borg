@@ -31,6 +31,13 @@ class SolverAction(Action):
         self._solver = solver
         self._budget = budget
 
+    def __reduce__(self):
+        """
+        Reduce this instance for pickling.
+        """
+
+        return (SolverAction, (self._solver, self._budget))
+
     def get_training(self, session, task_uuids):
         """
         Return a tasks-by-outcomes array.
@@ -162,6 +169,13 @@ class FeatureAction(Action):
         Action.__init__(self, 0.0)
 
         self._feature_name = feature_name
+
+    def __reduce__(self):
+        """
+        Reduce this instance for pickling.
+        """
+
+        return (FeatureAction, (self._feature_name,))
 
     def get_training(self, session, task_uuids):
         """
