@@ -38,19 +38,19 @@ class SequenceStrategy(AbstractStrategy):
     A strategy the follows an iterable sequence for every task.
     """
 
-    def __init__(self, actions):
+    def __init__(self, sequence):
         """
         Initialize.
         """
 
-        self.actions = actions
+        self._sequence = sequence
 
     def select(self, budget, random):
         """
         A generator that yields actions and receives (outcome, next_budget).
         """
 
-        for selected in self.actions:
+        for selected in self._sequence:
             if selected.cost <= budget:
                 (_, budget) = yield selected
             else:
@@ -99,9 +99,8 @@ class ModelingStrategy(AbstractStrategy):
         Initialize.
         """
 
-        self.model   = model
-        self.planner = planner
-        self._action_indices = dict((a, i) for (i, a) in enumerate(self.model.actions))
+        self._model   = model
+        self._planner = planner
 
     def select(self, budget, random):
         """
@@ -110,16 +109,16 @@ class ModelingStrategy(AbstractStrategy):
 
         import numpy
 
-        dimensions = (len(self.model.actions), max(len(a.outcomes) for a in self.model.actions))
+        dimensions = (len(self._model.actions), max(len(a.outcomes) for a in self._model.actions))
         history    = numpy.zeros(dimensions, numpy.uint)
 
         while True:
             # predict, then make a selection
-            predicted         = self.model.predict(history, random)
-            selected          = self.planner.select(predicted, budget, random)
+            predicted         = self._model.predict(history, random)
+            selected          = self._planner.select(predicted, budget, random)
             (outcome, budget) = yield selected
 
-            history[self.model.actions.index(selected), selected.outcomes.index(outcome)] += 1
+            history[self._model.actions.index(selected), selected.outcomes.index(outcome)] += 1
 
     @staticmethod
     def build(request, trainer):
