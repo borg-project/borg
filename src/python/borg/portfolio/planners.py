@@ -78,3 +78,34 @@ class HardMyopicPlanner(AbstractPlanner):
 
         return HardMyopicPlanner(request["discount"])
 
+class BellmanPlanner(AbstractPlanner):
+    """
+    Fixed-horizon optimal replanning.
+    """
+
+    def __init__(self, horizon, discount):
+        """
+        Initialize.
+        """
+
+        self._horizon  = horizon
+        self._discount = discount
+
+    def select(self, model, history, budget, random):
+        """
+        Select an action.
+        """
+
+        from borg.portfolio.bellman import compute_bellman_plan
+
+        (utility, plan) = \
+            compute_bellman_plan(
+                model,
+                self._horizon,
+                budget,
+                self._discount,
+                history = history,
+                )
+
+        return plan[0]
+

@@ -64,12 +64,15 @@ def _compute_bellman_plan(model, horizon, budget, discount, history):
 
                 # update the expectation for this action
                 this_expected += predictions[i, j] * (outcome.utility + discount * inner_utility)
-        else:
+        elif budget > action.cost:
             # we're at a base case
             this_expected = sum(predictions[i, j] * o.utility for (j, o) in enumerate(action.outcomes))
             inner_plan    = []
+        else:
+            # we can't afford this action
+            this_expected = 0.0
 
-        # take the max over actions
+        # update the max over actions
         if this_expected > best_expected:
             best_expected = this_expected
             best_plan     = [action] + inner_plan
