@@ -185,7 +185,7 @@ class DistributionModel(AbstractModel):
                 predicted[i, j] = numpy.exp(posterior.log_likelihood(indicator))
                 indicator[i, j] = 0
 
-        predicted /= numpy.sum(predicted, 1)
+        predicted /= numpy.sum(predicted, 1)[:, None]
 
         return predicted
 

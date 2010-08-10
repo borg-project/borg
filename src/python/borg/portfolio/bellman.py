@@ -8,17 +8,72 @@ from borg.portfolio._bellman import compute_bellman_utility
 
 log = get_logger(__name__)
 
-def compute_bellman_plan(model, horizon, budget, discount = 1.0):
+def compute_bellman_plan(model, horizon, budget, discount, history = None):
     """
-    Compute the Bellman-optimal plan.
+    Compute an optimal plan.
     """
 
-    import numpy
+    # parameters
+    if horizon < 1:
+        raise ValueError("horizon must be >= 1")
 
-    dimensions = (len(model.actions), max(len(a.outcomes) for a in model.actions))
-    history    = numpy.zeros(dimensions, numpy.uint)
+    if history is None:
+        import numpy
 
-    (_, plan) = compute_bellman_utility(model, horizon, budget, discount, history)
+        dimensions = (len(model.actions), max(len(a.outcomes) for a in model.actions))
+        history    = numpy.zeros(dimensions, numpy.uint)
 
-    return plan
+    # compute the plan
+    return _compute_bellman_plan(model, horizon, budget, discount, history)
+
+def _compute_bellman_plan(model, horizon, budget, discount, history):
+    """
+    Compute an optimal plan.
+    """
+
+    # return a plan and its expectation
+    predictions   = model.predict(history, None)
+    best_expected = 0.0
+    best_plan     = []
+
+    for i in xrange(len(model.actions)):
+        action = model.actions[i]
+
+        if horizon > 1:
+            this_expected = 0.0
+
+            for j in xrange(len(action.outcomes)):
+                outcome = action.outcomes[j]
+
+                if outcome.utility > 0.0:
+                    # halting state
+                    inner_utility = 0.0
+                    inner_plan    = []
+                else:
+                    # compute the utility of later actions
+                    history[i, j] += 1
+
+                    (inner_utility, inner_plan) = \
+                        _compute_bellman_plan(
+                            model,
+                            horizon - 1,
+                            budget - action.cost,
+                            discount,
+                            history,
+                            )
+
+                    history[i, j] -= 1
+
+                # update the expectation for this action
+                this_expected += predictions[i, j] * (outcome.utility + discount * inner_utility)
+        else:
+            # update the expectation for this action
+            this_expected = sum(predictions[i, j] * o.utility for (j, o) in enumerate(action.outcomes))
+            inner_plan    = []
+
+        if this_expected > best_expected:
+            best_expected = this_expected
+            best_plan     = [action] + inner_plan
+
+    return (best_expected, best_plan)
 

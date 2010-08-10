@@ -6,6 +6,7 @@ install(
 	FILES
         __init__.py
 		analyze_instance.py
+		bench_bellman.py
         calibrate.py
         delete_trial.py
         generate_ddl.py
