@@ -18,7 +18,6 @@ def build_planner(request, trainer, model):
 
     builders = {
         "hard_myopic" : HardMyopicPlanner.build,
-        "soft_myopic" : SoftMyopicPlanner.build,
         }
 
     return builders[request["type"]](request, trainer, model)
@@ -75,47 +74,4 @@ class HardMyopicPlanner(AbstractPlanner):
         """
 
         return HardMyopicPlanner(model.actions, request["discount"])
-
-class SoftMyopicPlanner(AbstractPlanner):
-    """
-    Probabilistic greedy action selection.
-    """
-
-    def __init__(self, discount, temperature = 1.0):
-        """
-        Initialize.
-        """
-
-        self.discount    = discount
-        self.temperature = temperature
-
-    def select(self, predicted, actions, random):
-        """
-        Select an action given the probabilities of outcomes.
-        """
-
-        # FIXME does this respect budget? (clearly not: the signature isn't even correct)
-
-        # convert to expectation
-        import numpy
-
-        expected       = numpy.sum(predicted * self.world.utilities, 1)
-        discounted     = numpy.fromiter((expected[a.n]*(self.discount**a.cutoff.as_s) for a in actions), numpy.double)
-        probabilities  = numpy.exp(discounted / self.temperature)
-        probabilities /= numpy.sum(probabilities)
-        ((naction,),)  = numpy.nonzero(random.multinomial(1, probabilities))
-        action         = actions[naction]
-
-        log.detail("probabilities: %s", probabilities)
-        log.detail("selected action %i (p = %.4f): %s", naction, probabilities[naction], action)
-
-        return action
-
-    @staticmethod
-    def build(request, trainer, model):
-        """
-        Build a sequence strategy as requested.
-        """
-
-        return SoftMyopicPlanner(request["discount"], request["temperature"])
 
