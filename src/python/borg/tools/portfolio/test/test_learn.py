@@ -26,7 +26,7 @@ def test_tools_portfolio_learn():
                     "type"     : "hard_myopic",
                     "discount" : 1.0,
                     },
-                "model"   : {
+                "model" : {
                     "type" : "random",
                     },
                 },

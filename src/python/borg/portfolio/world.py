@@ -41,6 +41,8 @@ class SolverAction(Action):
     def get_training(self, session, task_uuids):
         """
         Return a tasks-by-outcomes array.
+
+        Typically invoked through a trainer.
         """
 
         from sqlalchemy               import (
