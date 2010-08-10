@@ -2,9 +2,7 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from cargo.log               import get_logger
-from borg.portfolio.planners import AbstractPlanner
-from borg.portfolio._bellman import compute_bellman_utility
+from cargo.log import get_logger
 
 log = get_logger(__name__)
 
@@ -31,7 +29,6 @@ def _compute_bellman_plan(model, horizon, budget, discount, history):
     Compute an optimal plan.
     """
 
-    # return a plan and its expectation
     predictions   = model.predict(history, None)
     best_expected = 0.0
     best_plan     = []
@@ -40,6 +37,7 @@ def _compute_bellman_plan(model, horizon, budget, discount, history):
         action = model.actions[i]
 
         if horizon > 1:
+            # we'll recurse into later states
             this_expected = 0.0
 
             for j in xrange(len(action.outcomes)):
@@ -67,10 +65,11 @@ def _compute_bellman_plan(model, horizon, budget, discount, history):
                 # update the expectation for this action
                 this_expected += predictions[i, j] * (outcome.utility + discount * inner_utility)
         else:
-            # update the expectation for this action
+            # we're at a base case
             this_expected = sum(predictions[i, j] * o.utility for (j, o) in enumerate(action.outcomes))
             inner_plan    = []
 
+        # take the max over actions
         if this_expected > best_expected:
             best_expected = this_expected
             best_plan     = [action] + inner_plan
