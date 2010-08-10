@@ -2,7 +2,6 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-
 def yield_selected(strategy, budget):
     """
     Return a strategy's next action.
