@@ -77,8 +77,8 @@ def test_analyze_instance():
                     "--research-database",
                     engine_url,
                     "--commit",
-                    get_support_path("s57-100.cnf"),
                     "sat",
+                    get_support_path("s57-100.cnf"),
                     ],
                 preexec_fn = partial(unset_all, "CARGO_FLAGS_EXTRA_FILE"),
                 )

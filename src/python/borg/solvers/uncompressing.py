@@ -2,7 +2,6 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from contextlib   import contextmanager
 from cargo.log    import get_logger
 from borg.rowed   import Rowed
 from borg.solvers import (
@@ -31,38 +30,10 @@ class UncompressingSolver(Rowed, AbstractSolver):
         Attempt to solve the specified instance; return the outcome.
         """
 
-        with self._uncompressed_task(task) as inner_task:
+        from borg.tasks import uncompressed_task
+
+        with uncompressed_task(task) as inner_task:
             return self._inner.solve(inner_task, budget, random, environment)
-
-    @contextmanager
-    def _uncompressed_task(self, task):
-        """
-        Provide an uncompressed task in a managed context.
-        """
-
-        # it it's not file-backed, pass it along
-        from borg.tasks import AbstractFileTask
-
-        if not isinstance(task, AbstractFileTask):
-            yield task
-        else:
-            # create the context
-            from cargo.io import mkdtemp_scoped
-
-            with mkdtemp_scoped(prefix = "uncompressing.") as sandbox_path:
-                # decompress the instance, if necessary
-                from os.path  import join
-                from cargo.io import decompress_if
-
-                sandboxed_path    = join(sandbox_path, "uncompressed.cnf")
-                uncompressed_path = decompress_if(task.path, sandboxed_path)
-
-                log.info("maybe-decompressed %s to %s", task.path, uncompressed_path)
-
-                # provide the task
-                from borg.tasks import UncompressedFileTask
-
-                yield UncompressedFileTask(uncompressed_path, task)
 
     def get_new_row(self, session):
         """

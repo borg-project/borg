@@ -37,9 +37,10 @@ class TaskAnalyzer(ABC):
         """
 
         builders = {
-            "no"        : NoAnalyzer.build,
-            "satzilla"  : SATzillaAnalyzer.build,
-            "recycling" : RecyclingAnalyzer.build,
+            "no"            : NoAnalyzer.build,
+            "satzilla"      : SATzillaAnalyzer.build,
+            "recycling"     : RecyclingAnalyzer.build,
+            "uncompressing" : RecyclingAnalyzer.build,
             }
 
         return builders[request["type"]](request, trainer)
@@ -72,6 +73,44 @@ class NoAnalyzer(TaskAnalyzer):
 
         return NoAnalyzer()
 
+class UncompressingAnalyzer(TaskAnalyzer):
+    """
+    Acquire no features.
+    """
+
+    def __init__(self, analyzer):
+        """
+        Initialize.
+        """
+
+        self._analyzer = analyzer
+
+    def analyze(self, task, environment):
+        """
+        Acquire no features from the specified task.
+        """
+
+        from borg.tasks import uncompressed_task
+
+        with uncompressed_task(task) as inner_task:
+            return self._analyzer.analyze(inner_task, environment)
+
+    @property
+    def feature_names(self):
+        """
+        Return the names of features provided by this analyzer.
+        """
+
+        return analyzer.feature_names
+
+    @staticmethod
+    def build(request, trainer):
+        """
+        Build this analyzer from a request.
+        """
+
+        return NotImplementedError()
+
 class SATzillaAnalyzer(TaskAnalyzer):
     """
     Acquire features using SATzilla's (old) analyzer.
@@ -99,7 +138,7 @@ class SATzillaAnalyzer(TaskAnalyzer):
 
         raw         = compute_raw_features(task.path)
         transformed = {
-            "satzilla/vars-clauses-ratio<=4.36" : raw["vars-clauses-ratio"] <= 4.36,
+            "satzilla/vars-clauses-ratio<=1/4.36" : raw["vars-clauses-ratio"] <= (1 / 4.36),
             }
 
         if self._names is None:
@@ -114,7 +153,7 @@ class SATzillaAnalyzer(TaskAnalyzer):
         """
 
         if self._names is None:
-            return ["satzilla/vars-clauses-ratio<=4.36"]
+            return ["satzilla/vars-clauses-ratio<=1/4.36"]
         else:
             return self._names
 

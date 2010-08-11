@@ -3,7 +3,7 @@
 """
 
 if __name__ == "__main__":
-    from borg.tools.analyze_instance import main
+    from borg.tools.analyze import main
 
     raise SystemExit(main())
 
@@ -24,18 +24,15 @@ module_flags = \
             ),
         )
 
-def commit_features(instance_path, domain_name, features):
+def commit_features(instance_path, domain, features):
     """
     Add feature information to the database.
     """
 
     # hash the instance
-    from borg.tasks import (
-        builtin_domains,
-        get_task_file_hash,
-        )
+    from borg.tasks import get_task_file_hash
 
-    task_hash = get_task_file_hash(instance_path, builtin_domains[domain_name])
+    task_hash = get_task_file_hash(instance_path, domain)
 
     log.info("instance has hash %s", task_hash.encode("hex_codec"))
 
@@ -84,7 +81,7 @@ def main():
 
     from cargo.flags import parse_given
 
-    (instance_path, domain_name) = parse_given(usage = "%prog [options] <instance> <domain>")
+    (domain_name, path) = parse_given(usage = "%prog [options] <domain> <path>")
 
     # set up log output
     from cargo.log import enable_default_logging
@@ -95,19 +92,30 @@ def main():
     get_logger("borg.analyzers",    level = "DETAIL")
 
     # analyze the instance
-    from borg.tasks     import FileTask
-    from borg.analyzers import SATzillaAnalyzer
+    from os.path        import basename
+    from cargo.io       import files_under
+    from borg.tasks     import (
+        FileTask,
+        builtin_domains,
+        )
+    from borg.analyzers import (
+        SATzillaAnalyzer,
+        UncompressingAnalyzer,
+        )
 
-    task     = FileTask(instance_path)
-    analyzer = SATzillaAnalyzer()
-    features = analyzer.analyze(task, None)
+    analyzer = UncompressingAnalyzer(SATzillaAnalyzer())
+    domain   = builtin_domains[domain_name]
 
-    log.info("feature pairs follow:")
+    for task_path in files_under(path, domain.patterns):
+        task     = FileTask(task_path)
+        features = analyzer.analyze(task, None)
 
-    for (name, value) in features.items():
-        log.info("%s: %s", name, value)
+        log.info("feature pairs follow for %s:", basename(task_path))
 
-    # store it, if requested
-    if module_flags.given.commit:
-        commit_features(instance_path, domain_name, features)
+        for (name, value) in features.items():
+            log.info("%s: %s", name, value)
+
+        # store it, if requested
+        if module_flags.given.commit:
+            commit_features(task_path, domain, features)
 

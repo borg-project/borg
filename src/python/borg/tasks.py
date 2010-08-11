@@ -6,6 +6,7 @@ from abc         import (
     abstractmethod,
     abstractproperty,
     )
+from contextlib  import contextmanager
 from collections import namedtuple
 from cargo.log   import get_logger
 from cargo.flags import (
@@ -93,6 +94,36 @@ def get_collections(path = None, default = {None: "."}):
         return default
 
     return dict((k, expandpath(v)) for (k, v) in load_json(json_path))
+
+@contextmanager
+def uncompressed_task(task):
+    """
+    Provide an uncompressed task in a managed context.
+    """
+
+    # it it's not file-backed, pass it along
+    from borg.tasks import AbstractFileTask
+
+    if not isinstance(task, AbstractFileTask):
+        yield task
+    else:
+        # create the context
+        from cargo.io import mkdtemp_scoped
+
+        with mkdtemp_scoped(prefix = "uncompressing.") as sandbox_path:
+            # decompress the instance, if necessary
+            from os.path  import join
+            from cargo.io import decompress_if
+
+            sandboxed_path    = join(sandbox_path, "uncompressed.cnf")
+            uncompressed_path = decompress_if(task.path, sandboxed_path)
+
+            log.info("maybe-decompressed %s to %s", task.path, uncompressed_path)
+
+            # provide the task
+            from borg.tasks import UncompressedFileTask
+
+            yield UncompressedFileTask(uncompressed_path, task)
 
 class AbstractTask(AbstractRowed):
     """
