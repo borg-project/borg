@@ -57,7 +57,6 @@ module_flags = \
 def make_validation_run(
     engine_url,
     request,
-    domain,
     fraction,
     task_uuids,
     budget,
@@ -106,11 +105,11 @@ def make_validation_run(
         CacheSession = make_session(bind = cache_engine)
 
     # build the solver
-    from borg.portfolio.world import build_trainer
-    from borg.solvers         import solver_from_request
+    from borg.solvers         import AbstractSolver
+    from borg.portfolio.world import Trainer
 
-    trainer = build_trainer(domain, train_uuids, CacheSession, extrapolation = 6)
-    solver  = solver_from_request(trainer, request)
+    requested = AbstractSolver.build(trainer, request["solver"])
+    trainer   = Trainer.build(ResearchSession, train_uuids, request["trainer"])
 
     log.info("built solver from request")
 
@@ -151,11 +150,13 @@ def make_validation_run(
         log.info("solver succeeded on %i of %i task(s)", solved, len(test_uuids))
 
         if solver.name == "portfolio":
-            components = request["strategy"]["model"]["components"]
-            model_type = request["strategy"]["model"]["type"]
+            components    = request["solver"]["strategy"]["model"]["components"]
+            model_type    = request["solver"]["strategy"]["model"]["type"]
+            analyzer_type = request["solver"]["analyzer"]["type"]
         else:
-            components = None
-            model_type = None
+            components    = None
+            model_type    = None
+            analyzer_type = None
 
         run = \
             ValidationRunRow(
@@ -167,10 +168,16 @@ def make_validation_run(
                 score            = solved,
                 components       = components,
                 model_type       = model_type,
+                analyzer_type    = analyzer_type,
                 )
 
         session.add(run)
         session.commit()
+
+def request_portfolio(model_type, components, solvers, features):
+    """
+    Return a request for a model-based portfolio.
+    """
 
 def yield_solver_requests():
     """
@@ -216,46 +223,110 @@ def yield_solver_requests():
 #     for k in xrange(1, 65):
     for k in [63]:
         yield {
-            "type"     : "portfolio",
-            "strategy" : {
-                "type"     : "modeling",
-                "model"    : {
-                    "type"        : "dcm",
-                    "components"  : int(k),
-                    "em_restarts" : 4,
-                    "actions"     : {
-                        "solvers" : sat_2009_subsolvers,
-                        "budgets" : numpy.r_[25.0:4000.0:10j].tolist(),
-                        },
-                    },
-                "planner" : {
-                    "type"     : "hard_myopic",
-                    "discount" : 1.0 - 1e-4,
-                    },
+            "trainer" : {
+                "type" : "decision"
                 },
+            "solver" : {
+                "type"     : "portfolio",
+                "analyzer" : {
+                    "type" : "satzilla"
+                    },
+                "solvers" : [
+                    "sat/2009/CirCUs",
+                    "sat/2009/clasp"
+                    ],
+                "budgets"  : [25.0, 100.0],
+                "strategy" : {
+                    "type"    : "modeling",
+                    "planner" : {
+                        "type"     : "bellman",
+                        "horizon"  : 2,
+                        "discount" : 0.98
+                        },
+                    "model" : {
+                        "type" : "distribution",
+                        "estimator" : {
+                            "type"        : "mixture",
+                            "iterations"  : 128,
+                            "convergence" : 1e-8,
+                            "estimators"  : [
+                                {
+                                    "type"       : "tuple",
+                                    "estimators" : [
+                                        {
+                                            "type"      : "dcm",
+                                            "norm"      : 1,
+                                            "threshold" : 1e-5,
+                                            "cutoff"    : 1e3
+                                            },
+                                        {
+                                            "type"      : "dcm",
+                                            "norm"      : 1,
+                                            "threshold" : 1e-5,
+                                            "cutoff"    : 1e3
+                                            },
+                                        {
+                                            "type"      : "dcm",
+                                            "norm"      : 1,
+                                            "threshold" : 1e-5,
+                                            "cutoff"    : 1e3
+                                            },
+                                        {
+                                            "type"      : "dcm",
+                                            "norm"      : 1,
+                                            "threshold" : 1e-5,
+                                            "cutoff"    : 1e3
+                                            },
+                                        {
+                                            "type"      : "dcm",
+                                            "norm"      : 1,
+                                            "threshold" : 1e-5,
+                                            "cutoff"    : 1e3
+                                            }
+                                        ]
+                                    },
+                                {
+                                    "type"       : "tuple",
+                                    "estimators" : [
+                                        {
+                                            "type"      : "dcm",
+                                            "norm"      : 1,
+                                            "threshold" : 1e-5,
+                                            "cutoff"    : 1e3
+                                            },
+                                        {
+                                            "type"      : "dcm",
+                                            "norm"      : 1,
+                                            "threshold" : 1e-5,
+                                            "cutoff"    : 1e3
+                                            },
+                                        {
+                                            "type"      : "dcm",
+                                            "norm"      : 1,
+                                            "threshold" : 1e-5,
+                                            "cutoff"    : 1e3
+                                            },
+                                        {
+                                            "type"      : "dcm",
+                                            "norm"      : 1,
+                                            "threshold" : 1e-5,
+                                            "cutoff"    : 1e3
+                                            },
+                                        {
+                                            "type"      : "dcm",
+                                            "norm"      : 1,
+                                            "threshold" : 1e-5,
+                                            "cutoff"    : 1e3
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
             }
 
-    # the multinomial portfolio solver(s)
-#     for k in xrange(1, 65):
-#         yield {
-#             "type"     : "portfolio",
-#             "strategy" : {
-#                 "type"     : "modeling",
-#                 "model"    : {
-#                     "type"        : "multinomial",
-#                     "components"  : int(k),
-#                     "em_restarts" : 4,
-#                     "actions"     : {
-#                         "solvers" : sat_2009_subsolvers,
-#                         "budgets" : numpy.r_[25.0:4000.0:10j].tolist(),
-#                         },
-#                     },
-#                 "planner" : {
-#                     "type"     : "hard_myopic",
-#                     "discount" : 1.0 - 1e-4,
-#                     },
-#                 },
-#             }
 
 def main():
     """
@@ -323,7 +394,6 @@ def main():
                             make_validation_run,
                             engine_url    = session.connection().engine.url,
                             request       = request,
-                            domain        = "sat",
                             fraction      = fraction,
                             task_uuids    = uuids,
                             budget        = budget,

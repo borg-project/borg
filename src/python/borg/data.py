@@ -705,6 +705,7 @@ class ValidationRunRow(DatumBase):
     score            = Column(Float)
     components       = Column(Integer)
     model_type       = Column(String)
+    analyzer_type    = Column(String)
 
     solver = relationship(SolverRow)
 
