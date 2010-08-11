@@ -73,7 +73,7 @@ def test_analyze_instance():
                 [
                     "python",
                     "-m",
-                    "borg.tools.analyze_instance",
+                    "borg.tools.analyze",
                     "--research-database",
                     engine_url,
                     "--commit",

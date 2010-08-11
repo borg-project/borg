@@ -18,8 +18,17 @@ def test_tools_portfolio_learn():
     log = get_logger(__name__, level = "NOTSET")
 
     solver_request = {
+        "trainer" : {
+            "type" : "decision",
+            },
         "solver" : {
-            "type"     : "portfolio",
+            "type"    : "portfolio",
+            "solvers" : [
+                "foo",
+                "bar",
+                "baz",
+                ],
+            "budgets"  : [1],
             "strategy" : {
                 "type"    : "modeling",
                 "planner" : {
@@ -32,17 +41,6 @@ def test_tools_portfolio_learn():
                 },
             "analyzer" : {
                 "type" : "no",
-                },
-            },
-        "trainer" : {
-            "type" : "sat",
-            "actions"     : {
-                "solvers" : [
-                    "foo",
-                    "bar",
-                    "baz",
-                    ],
-                "budgets" : [1],
                 },
             },
         }
