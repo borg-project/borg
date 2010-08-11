@@ -37,6 +37,7 @@ def main():
 
     get_logger("sqlalchemy.engine",         level = "WARNING")
     get_logger("cargo.statistics.mixture",  level = "DETAIL")
+    get_logger("borg.solvers.portfolio",    level = "DETAIL")
     get_logger("borg.portfolio.bellman",    level = "DETAIL")
     get_logger("borg.portfolio._bellman",   level = "DETAIL")
     get_logger("borg.portfolio.sat_world",  level = "DETAIL")

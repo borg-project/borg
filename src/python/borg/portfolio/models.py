@@ -22,32 +22,6 @@ def assert_sane_predictions(predictions):
         if numpy.sum(row) != 1.0:
             raise ValueError("non-normalized probability vector")
 
-def build_model(request, trainer):
-    """
-    Build a model as requested.
-    """
-
-    builders = {
-        "distribution" : DistributionModel.build,
-        "random"       : RandomModel.build,
-        "fixed"        : FixedModel.build,
-        "pickle"       : load_model,
-        }
-
-    return builders[request["type"]](request, trainer)
-
-def load_model(request, trainer):
-    """
-    Load a model as requested.
-    """
-
-    import cPickle as pickle
-
-    from cargo.io import expandpath
-
-    with open(expandpath(request["path"])) as file:
-        return pickle.load(file)
-
 class AbstractModel(ABC):
     """
     A model of action outcomes.
@@ -72,6 +46,28 @@ class AbstractModel(ABC):
         """
 
         return None
+
+    @staticmethod
+    def build(request, actions, trainer):
+        """
+        Build a model as requested.
+        """
+
+        if request["type"] == "pickle":
+            import cPickle as pickle
+
+            from cargo.io import expandpath
+
+            with open(expandpath(request["path"])) as file:
+                return pickle.load(file)
+        else:
+            builders = {
+                "distribution" : DistributionModel.build,
+                "random"       : RandomModel.build,
+                "fixed"        : FixedModel.build,
+                }
+
+            return builders[request["type"]](request, actions, trainer)
 
 class FixedModel(AbstractModel):
     """
@@ -109,7 +105,7 @@ class FixedModel(AbstractModel):
         return self._actions
 
     @staticmethod
-    def build(request, trainer):
+    def build(request, actions, trainer):
         """
         Build a model as requested.
         """
@@ -147,12 +143,12 @@ class RandomModel(AbstractModel):
         return self._actions
 
     @staticmethod
-    def build(request, trainer):
+    def build(request, actions, trainer):
         """
         Build a model as requested.
         """
 
-        return RandomModel(trainer.actions)
+        return RandomModel(actions)
 
 class DistributionModel(AbstractModel):
     """
@@ -198,17 +194,18 @@ class DistributionModel(AbstractModel):
         return self._actions
 
     @staticmethod
-    def build(request, trainer):
+    def build(request, actions, trainer):
         """
         Build a model as requested.
         """
 
-        from cargo.statistics.base  import Estimator
-        from cargo.statistics.tuple import TupleSamples
+        from cargo.statistics import (
+            Estimator,
+            TupleSamples,
+            )
 
-        actions   = trainer.actions
         samples   = TupleSamples([trainer.get_data(a) for a in actions])
-        estimator = build_estimator(request["estimator"])
+        estimator = Estimator.build(request["estimator"])
         estimated = estimator.estimate(samples)
 
         return DistributionModel(estimated, actions)

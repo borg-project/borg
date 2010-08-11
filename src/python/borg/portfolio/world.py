@@ -6,11 +6,14 @@ from abc                  import (
     abstractmethod,
     abstractproperty,
     )
+from cargo.log            import get_logger
 from cargo.sugar          import ABC
 from borg.portfolio._base import (
     Action,
     Outcome,
     )
+
+log = get_logger(__name__)
 
 class SolverAction(Action):
     """
@@ -58,7 +61,7 @@ class SolverAction(Action):
             )
 
         # related rows
-        solver_row           = action.solver.get_row(session)
+        solver_row           = self._solver.get_row(session)
         recyclable_trial_row = TR.get_recyclable(session)
 
         # existing action outcomes
@@ -67,12 +70,12 @@ class SolverAction(Action):
                 select(
                     [
                         RAR.task_uuid,
-                        count(case([(RAR.cost <= action.cost, RAR.answer_uuid)])),
+                        count(case([(RAR.cost <= self.cost, RAR.answer_uuid)])),
                         count(),
                         ],
                     and_(
                         RAR.solver           == solver_row,
-                        RAR.budget           >= action.cost,
+                        RAR.budget           >= self.cost,
                         RAR.__table__.c.uuid == AR.uuid,
                         RAR.task_uuid.in_(task_uuids),
                         RAR.trials.contains(recyclable_trial_row),
@@ -84,12 +87,12 @@ class SolverAction(Action):
 
         # FIXME ordering
 
-        log.detail("fetched %i rows for action %s", len(rows), action.description)
+        log.detail("fetched %i rows for action %s", len(rows), self.description)
 
         # build the array
         import numpy
 
-        return numpy.array([[s, (a - s)] for (s, a) in rows], numpy.uint)
+        return numpy.array([[s, (a - s)] for (_, s, a) in rows], numpy.uint)
 
     def take(self, task, remaining, random, environment):
         """
@@ -138,24 +141,6 @@ class SolverAction(Action):
 
         return self._solver
 
-    @staticmethod
-    def build_actions(request):
-        """
-        Build a sequence of solver actions.
-        """
-
-        # build the solvers and cutoffs
-        from cargo.temporal import TimeDelta
-        from borg.solvers   import LookupSolver
-
-        solvers = [LookupSolver(s) for s in request["solvers"]]
-        budgets = [TimeDelta(seconds = s) for s in request["budgets"]]
-
-        # build the actions
-        from itertools import product
-
-        return [SolverAction(*a) for a in product(solvers, budgets)]
-
 class FeatureAction(Action):
     """
     An action that acquires a static feature of a problem instance.
@@ -184,7 +169,10 @@ class FeatureAction(Action):
         Return a tasks-by-outcomes array.
         """
 
-        from sqlalchemy import and_
+        from sqlalchemy import (
+            and_,
+            select,
+            )
         from borg.data  import (
             TaskRow        as TR,
             TaskFeatureRow as TFR,
@@ -203,7 +191,7 @@ class FeatureAction(Action):
                 )                                       \
                 .fetchall()
 
-        log.detail("fetched %i rows for feature %s", len(rows), action.description)
+        log.detail("fetched %i rows for feature %s", len(rows), self.description)
 
         # build the array
         import numpy
@@ -212,9 +200,10 @@ class FeatureAction(Action):
         counts = {
             True  : [0, 1],
             False : [1, 0],
+            None  : [0, 0],
             }
 
-        return numpy.array([counts[mapped[u]] for u in task_uuids], numpy.uint)
+        return numpy.array([counts[mapped.get(u)] for u in task_uuids], numpy.uint)
 
     def take(self, features):
         """
@@ -261,12 +250,6 @@ class Trainer(ABC):
         Provide task-outcomes counts to the trainee.
         """
 
-    @abstractproperty
-    def actions(self):
-        """
-        Return the associated actions.
-        """
-
     @staticmethod
     def build(Session, task_uuids, request):
         """
@@ -274,25 +257,23 @@ class Trainer(ABC):
         """
 
         builders = {
-            "pb"  : PB_Trainer.build,
-            "sat" : SAT_Trainer.build,
+            "decision" : DecisionTrainer.build,
             }
 
         return builders[request["type"]](Session, task_uuids, request)
 
-class PB_Trainer(Trainer):
+class DecisionTrainer(Trainer):
     """
     Grant a decision portfolio access to training data.
     """
 
-    def __init__(self, Session, task_uuids, actions):
+    def __init__(self, Session, task_uuids):
         """
         Initialize.
         """
 
         self._Session    = Session
         self._task_uuids = task_uuids
-        self._actions    = actions
 
     def get_data(self, action):
         """
@@ -302,66 +283,11 @@ class PB_Trainer(Trainer):
         with self._Session() as session:
             return action.get_training(session, self._task_uuids)
 
-    @property
-    def actions(self):
-        """
-        Return the associated actions.
-        """
-
-        return self._actions
-
     @staticmethod
     def build(Session, task_uuids, request):
         """
         Build this trainer from a request.
         """
 
-        actions = SolverAction.build_actions(request["actions"])
-
-        return PB_Trainer(Session, task_uuids, actions)
-
-class SAT_Trainer(Trainer):
-    """
-    Grant a decision portfolio access to training data.
-    """
-
-    def __init__(self, Session, task_uuids, actions):
-        """
-        Initialize.
-        """
-
-        self._Session    = Session
-        self._task_uuids = task_uuids
-        self._actions    = actions
-
-    def get_data(self, action):
-        """
-        Provide a tasks-by-outcomes array to the trainee.
-        """
-
-        with self._Session() as session:
-            return action.get_training(session, self._task_uuids)
-
-    @property
-    def actions(self):
-        """
-        Return the associated actions.
-        """
-
-        return self._actions
-
-    @staticmethod
-    def build(Session, task_uuids, request):
-        """
-        Build this trainer from a request.
-        """
-
-        from borg.sat.cnf import feature_names
-
-        # FIXME action construction doesn't belong here...?
-
-        actions  = SolverAction.build_actions(request["actions"])
-        actions += [FeatureAction(name) for name in feature_names]
-
-        return SAT_Trainer(Session, task_uuids, actions)
+        return DecisionTrainer(Session, task_uuids)
 

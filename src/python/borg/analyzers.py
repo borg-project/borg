@@ -2,7 +2,10 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from abc         import abstractmethod
+from abc         import (
+    abstractmethod,
+    abstractproperty,
+    )
 from cargo.log   import get_logger
 from cargo.sugar import ABC
 
@@ -19,6 +22,12 @@ class TaskAnalyzer(ABC):
         Acquire features of the specified task.
 
         @return: Mapping from feature names to feature values.
+        """
+
+    @abstractproperty
+    def feature_names(self):
+        """
+        Return the names of features provided by this analyzer.
         """
 
     @staticmethod
@@ -46,6 +55,14 @@ class NoAnalyzer(TaskAnalyzer):
         """
 
         return {}
+
+    @property
+    def feature_names(self):
+        """
+        Return the names of features provided by this analyzer.
+        """
+
+        return []
 
     @staticmethod
     def build(request, trainer):
@@ -90,6 +107,17 @@ class SATzillaAnalyzer(TaskAnalyzer):
         else:
             return dict((n, transformed[n]) for n in self._names)
 
+    @property
+    def feature_names(self):
+        """
+        Return the names of features provided by this analyzer.
+        """
+
+        if self._names is None:
+            return ["satzilla/vars-clauses-ratio<=4.36"]
+        else:
+            return self._names
+
     @staticmethod
     def build(request, trainer):
         """
@@ -103,7 +131,7 @@ class RecyclingAnalyzer(TaskAnalyzer):
     Look up precomputed features from the database.
     """
 
-    def __init__(self, names = None):
+    def __init__(self, names):
         """
         Initialize.
         """
@@ -134,11 +162,19 @@ class RecyclingAnalyzer(TaskAnalyzer):
 
             return dict(feature_rows)
 
+    @property
+    def feature_names(self):
+        """
+        Return the names of features provided by this analyzer.
+        """
+
+        return self._names
+
     @staticmethod
     def build(request, trainer):
         """
         Build this analyzer from a request.
         """
 
-        return RecyclingAnalyzer(request.get("names"))
+        return RecyclingAnalyzer(request["names"])
 

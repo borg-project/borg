@@ -2,12 +2,15 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+from cargo.log      import get_logger
 from borg.rowed     import Rowed
 from borg.solvers   import (
     RunAttempt,
     AbstractSolver,
     )
 from borg.analyzers import NoAnalyzer
+
+log = get_logger(__name__)
 
 # FIXME hack---shouldn't really be a RunAttempt
 # FIXME (if the *only* distinction between a run and non-run attempt
@@ -141,11 +144,34 @@ class PortfolioSolver(Rowed, AbstractSolver):
         Build a solver as requested.
         """
 
-        from borg.analyzers            import TaskAnalyzer
-        from borg.portfolio.strategies import build_strategy
+        # build the analyzer
+        from borg.analyzers import TaskAnalyzer
 
-        strategy = build_strategy(request["strategy"], trainer)
         analyzer = TaskAnalyzer.build(request["analyzer"], trainer)
+
+        # build the action set
+        from itertools      import product
+        from cargo.temporal import TimeDelta
+        from borg.solvers   import LookupSolver
+        from borg.portfolio import (
+            SolverAction,
+            FeatureAction,
+            )
+
+        solvers  = [LookupSolver(s) for s in request["solvers"]]
+        budgets  = [TimeDelta(seconds = s) for s in request["budgets"]]
+        actions  = [SolverAction(*a) for a in product(solvers, budgets)]
+        actions += [FeatureAction(name) for name in analyzer.feature_names]
+
+        log.detail("solver actions (there are %i) follow:", len(actions))
+
+        for action in actions:
+            log.detail("%s: %s", type(action).__name__, action.description)
+
+        # build the overall selection strategy
+        from borg.portfolio.strategies import AbstractStrategy
+
+        strategy = AbstractStrategy.build(request["strategy"], actions, trainer)
 
         return PortfolioSolver(strategy, analyzer)
 
