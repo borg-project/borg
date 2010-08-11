@@ -169,6 +169,14 @@ class FeatureAction(Action):
         Return a tasks-by-outcomes array.
         """
 
+        # sanity
+        from uuid import UUID
+
+        for task_uuid in task_uuids:
+            if not isinstance(task_uuid, UUID):
+                raise TypeError("task uuid is not a uuid")
+
+        # get stored feature values
         from sqlalchemy import (
             and_,
             select,
@@ -178,7 +186,6 @@ class FeatureAction(Action):
             TaskFeatureRow as TFR,
             )
 
-        # existing action outcomes
         rows =                                          \
             session.execute(
                 select(

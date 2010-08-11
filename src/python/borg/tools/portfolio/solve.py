@@ -114,9 +114,11 @@ def main((solver_path, input_path, seed_string)):
     flags = module_flags.given
 
     if flags.verbose:
-        get_logger("cargo.unix.accounting", level = "DETAIL")
-        get_logger("borg.portfolio.models", level = "NOTSET")
-        get_logger("borg.solvers.satelite", level = "INFO")
+        get_logger("cargo.unix.accounting",   level = "DETAIL")
+        get_logger("borg.portfolio.models",   level = "NOTSET")
+        get_logger("borg.portfolio.planners", level = "NOTSET")
+        get_logger("borg.solvers.satelite",   level = "INFO")
+        get_logger("borg.solvers.portfolio",  level = "INFO")
 
     # build our PRNG
     from numpy.random import RandomState

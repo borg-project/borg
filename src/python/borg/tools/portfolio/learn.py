@@ -19,6 +19,7 @@ def main():
     # get command line arguments
     import borg.data
 
+    from uuid        import UUID
     from cargo.json  import load_json
     from cargo.flags import parse_given
 
@@ -27,7 +28,7 @@ def main():
             usage = "%prog <uuids.json> <request.json> <out.pickle> [options]",
             )
 
-    train_uuids = load_json(train_uuids_path)
+    train_uuids = map(UUID, load_json(train_uuids_path))
     request     = load_json(request_path)
 
     # set up log output

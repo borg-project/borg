@@ -189,7 +189,7 @@ class RecyclingAnalyzer(TaskAnalyzer):
 
         # look up the features
         with environment.CacheSession() as session:
-            from borg.data  import TaskFeatureRow as TFR
+            from borg.data import TaskFeatureRow as TFR
 
             constraint = TFR.task == task_row
 

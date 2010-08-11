@@ -108,6 +108,8 @@ class BellmanPlanner(AbstractPlanner):
                 history = history,
                 )
 
+        log.detail("computed Bellman plan: %s", " -> ".join(a.description for a in plan))
+
         return plan[0]
 
     @staticmethod

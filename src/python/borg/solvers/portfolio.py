@@ -97,8 +97,12 @@ class PortfolioSolver(Rowed, AbstractSolver):
             if action is None:
                 break
             elif isinstance(action, FeatureAction):
+                log.info("taking feature action %s", action.description)
+
                 outcome = action.take(features)
             elif isinstance(action, SolverAction):
+                log.info("taking solver action %s", action.description)
+
                 (attempt, outcome)  = action.take(task, remaining, random, environment)
                 nleft              -= 1
                 remaining           = TimeDelta.from_timedelta(remaining - action.budget)
