@@ -91,6 +91,8 @@ class PortfolioSolver(Rowed, AbstractSolver):
 
         while remaining > TimeDelta() and nleft > 0:
             # select and take an action
+            log.detail("selecting an action with %s remaining", remaining)
+
             action = selector.send(message)
 
             if action is None:
