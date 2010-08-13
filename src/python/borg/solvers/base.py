@@ -213,7 +213,7 @@ class TypicalEnvironmentFactory(object):
 
         from cargo.sql.alchemy import make_session
 
-        MainSession = engines.get(self._main_url)
+        MainSession = make_session(bind = engines.get(self._main_url))
 
         if self._cache_path is None:
             CacheSession = MainSession
