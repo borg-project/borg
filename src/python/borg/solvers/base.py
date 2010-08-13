@@ -127,25 +127,6 @@ class AbstractSolver(AbstractRowed):
         Attempt to solve the specified instance.
         """
 
-    @staticmethod
-    def build(trainer, request):
-        """
-        Build a portfolio object as requested.
-        """
-
-        from borg.solvers import (
-            LookupSolver,
-            PortfolioSolver,
-            )
-
-        builders = {
-            "lookup"             : LookupSolver.build,
-            "portfolio"          : PortfolioSolver.build,
-            "portfolio+modeling" : PortfolioSolver.build_modeling,
-            }
-
-        return builders[request["type"]](trainer, request)
-
 class AbstractPreprocessor(AbstractSolver):
     """
     Abstract base for a preprocessor.

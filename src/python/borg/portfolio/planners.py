@@ -11,18 +11,6 @@ from cargo.sugar import ABC
 
 log = get_logger(__name__)
 
-def build_planner(request, trainer):
-    """
-    Build an action planner as requested.
-    """
-
-    builders = {
-        "hard_myopic" : HardMyopicPlanner.build,
-        "bellman"     : BellmanPlanner.build,
-        }
-
-    return builders[request["type"]](request, trainer)
-
 class AbstractPlanner(ABC):
     """
     Interface for action selection schemes.
@@ -71,14 +59,6 @@ class HardMyopicPlanner(AbstractPlanner):
 
         return best_action
 
-    @staticmethod
-    def build(request, trainer):
-        """
-        Build a sequence strategy as requested.
-        """
-
-        return HardMyopicPlanner(request["discount"])
-
 class BellmanPlanner(AbstractPlanner):
     """
     Fixed-horizon optimal replanning.
@@ -111,12 +91,4 @@ class BellmanPlanner(AbstractPlanner):
         log.detail("computed Bellman plan: %s", " -> ".join(a.description for a in plan))
 
         return plan[0]
-
-    @staticmethod
-    def build(request, trainer):
-        """
-        Build a sequence strategy as requested.
-        """
-
-        return BellmanPlanner(request["horizon"], request["discount"])
 

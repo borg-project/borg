@@ -79,14 +79,6 @@ class LookupSolver(Rowed, AbstractSolver):
 
         return self._name
 
-    @staticmethod
-    def build(trainer, request):
-        """
-        Build a solver as requested.
-        """
-
-        return LookupSolver(request["name"])
-
 class LookupPreprocessor(LookupSolver, AbstractPreprocessor):
     """
     A preprocessor which indirectly executes a named preprocessor.

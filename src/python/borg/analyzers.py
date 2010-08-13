@@ -30,21 +30,6 @@ class TaskAnalyzer(ABC):
         Return the names of features provided by this analyzer.
         """
 
-    @staticmethod
-    def build(request, trainer):
-        """
-        Build an analyzer as specified.
-        """
-
-        builders = {
-            "no"            : NoAnalyzer.build,
-            "satzilla"      : SATzillaAnalyzer.build,
-            "recycling"     : RecyclingAnalyzer.build,
-            "uncompressing" : RecyclingAnalyzer.build,
-            }
-
-        return builders[request["type"]](request, trainer)
-
 class NoAnalyzer(TaskAnalyzer):
     """
     Acquire no features.
@@ -64,14 +49,6 @@ class NoAnalyzer(TaskAnalyzer):
         """
 
         return []
-
-    @staticmethod
-    def build(request, trainer):
-        """
-        Build this analyzer from a request.
-        """
-
-        return NoAnalyzer()
 
 class UncompressingAnalyzer(TaskAnalyzer):
     """
@@ -102,14 +79,6 @@ class UncompressingAnalyzer(TaskAnalyzer):
         """
 
         return analyzer.feature_names
-
-    @staticmethod
-    def build(request, trainer):
-        """
-        Build this analyzer from a request.
-        """
-
-        return NotImplementedError()
 
 class SATzillaAnalyzer(TaskAnalyzer):
     """
@@ -157,14 +126,6 @@ class SATzillaAnalyzer(TaskAnalyzer):
         else:
             return self._names
 
-    @staticmethod
-    def build(request, trainer):
-        """
-        Build this analyzer from a request.
-        """
-
-        return SATzillaAnalyzer(request.get("names"))
-
 class RecyclingAnalyzer(TaskAnalyzer):
     """
     Look up precomputed features from the database.
@@ -208,12 +169,4 @@ class RecyclingAnalyzer(TaskAnalyzer):
         """
 
         return self._names
-
-    @staticmethod
-    def build(request, trainer):
-        """
-        Build this analyzer from a request.
-        """
-
-        return RecyclingAnalyzer(request["names"])
 

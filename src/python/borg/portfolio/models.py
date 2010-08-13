@@ -47,28 +47,6 @@ class AbstractModel(ABC):
 
         return None
 
-    @staticmethod
-    def build(request, actions, trainer):
-        """
-        Build a model as requested.
-        """
-
-        if request["type"] == "pickle":
-            import cPickle as pickle
-
-            from cargo.io import expandpath
-
-            with open(expandpath(request["path"])) as file:
-                return pickle.load(file)
-        else:
-            builders = {
-                "distribution" : DistributionModel.build,
-                "random"       : RandomModel.build,
-                "fixed"        : FixedModel.build,
-                }
-
-            return builders[request["type"]](request, actions, trainer)
-
 class FixedModel(AbstractModel):
     """
     Stick to one prediction.
@@ -104,14 +82,6 @@ class FixedModel(AbstractModel):
 
         return self._actions
 
-    @staticmethod
-    def build(request, actions, trainer):
-        """
-        Build a model as requested.
-        """
-
-        raise NotImplementedError()
-
 class RandomModel(AbstractModel):
     """
     Make random predictions.
@@ -141,14 +111,6 @@ class RandomModel(AbstractModel):
         """
 
         return self._actions
-
-    @staticmethod
-    def build(request, actions, trainer):
-        """
-        Build a model as requested.
-        """
-
-        return RandomModel(actions)
 
 class DistributionModel(AbstractModel):
     """
@@ -192,21 +154,4 @@ class DistributionModel(AbstractModel):
         """
 
         return self._actions
-
-    @staticmethod
-    def build(request, actions, trainer):
-        """
-        Build a model as requested.
-        """
-
-        from cargo.statistics import (
-            Estimator,
-            TupleSamples,
-            )
-
-        samples   = TupleSamples([trainer.get_data(a) for a in actions])
-        estimator = Estimator.build(request["estimator"])
-        estimated = estimator.estimate(samples)
-
-        return DistributionModel(estimated, actions)
 

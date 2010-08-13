@@ -19,21 +19,6 @@ class AbstractStrategy(ABC):
         A generator that yields actions and receives (outcome, next_budget).
         """
 
-    @staticmethod
-    def build(request, actions, trainer):
-        """
-        Build a selection strategy as requested.
-        """
-
-        builders = {
-            "sequence" : SequenceStrategy.build,
-            "fixed"    : FixedStrategy.build,
-            "modeling" : ModelingStrategy.build,
-            "bellman"  : BellmanStrategy.build,
-            }
-
-        return builders[request["type"]](request, actions, trainer)
-
 class SequenceStrategy(AbstractStrategy):
     """
     A strategy the follows an iterable sequence for every task.
@@ -60,14 +45,6 @@ class SequenceStrategy(AbstractStrategy):
         while True:
             yield None
 
-    @staticmethod
-    def build(request, actions, trainer):
-        """
-        Build a sequence strategy as requested.
-        """
-
-        raise NotImplementedError()
-
 class FixedStrategy(SequenceStrategy):
     """
     A strategy that repeats a fixed action.
@@ -81,14 +58,6 @@ class FixedStrategy(SequenceStrategy):
         from itertools import repeat
 
         SequenceStrategy.__init__(self, repeat(action))
-
-    @staticmethod
-    def build(request, actions, trainer):
-        """
-        Build a fixed strategy as requested.
-        """
-
-        raise NotImplementedError()
 
 class ModelingStrategy(AbstractStrategy):
     """
@@ -119,20 +88,6 @@ class ModelingStrategy(AbstractStrategy):
 
             history[self._model.actions.index(selected), selected.outcomes.index(outcome)] += 1
 
-    @staticmethod
-    def build(request, actions, trainer):
-        """
-        Build a modeling selection strategy as requested.
-        """
-
-        from borg.portfolio.models   import AbstractModel
-        from borg.portfolio.planners import build_planner
-
-        model   = AbstractModel.build(request["model"], actions, trainer)
-        planner = build_planner(request["planner"], trainer)
-
-        return ModelingStrategy(model, planner)
-
 class BellmanStrategy(SequenceStrategy):
     """
     A strategy that employs a model of its actions.
@@ -157,16 +112,4 @@ class BellmanStrategy(SequenceStrategy):
             log.info("action %i: %s", i, action.description)
 
         SequenceStrategy.__init__(self, plan)
-
-    @staticmethod
-    def build(request, actions, trainer):
-        """
-        Build a modeling selection strategy as requested.
-        """
-
-        from borg.portfolio.models import AbstractModel
-
-        model = AbstractModel.build(request["model"], actions, trainer)
-
-        return BellmanStrategy(model, request["horizon"], request["budget"], request["discount"])
 
