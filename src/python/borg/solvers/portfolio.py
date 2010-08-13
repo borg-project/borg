@@ -86,15 +86,16 @@ class PortfolioSolver(Rowed, AbstractSolver):
         remaining = budget
         nleft     = self._max_invocations
         record    = []
-        selector  = self._strategy.select(remaining.as_s, random)
-        message   = None
+
+        self._strategy.reset()
 
         while remaining > TimeDelta() and nleft > 0:
-            # select and take an action
+            # select an action
             log.detail("selecting an action with %s remaining", remaining)
 
-            action = selector.send(message)
+            action = self._strategy.choose(remaining.as_s, random)
 
+            # take the action
             if action is None:
                 break
             elif isinstance(action, FeatureAction):
@@ -115,7 +116,8 @@ class PortfolioSolver(Rowed, AbstractSolver):
             else:
                 raise TypeError("cannot handle unexpected action type")
 
-            message = (outcome, remaining.as_s)
+            # witness its outcome
+            self._strategy.see(action, outcome)
 
         return PortfolioAttempt(self, task, budget, budget - remaining, record)
 
@@ -143,42 +145,11 @@ class PortfolioSolver(Rowed, AbstractSolver):
 
         return "portfolio"
 
-class ModelingSolverFactory(object):
-    """
-    Builder of portfolio solvers.
-    """
-
-    def __init__(self, estimator, planner, analyzer, actions):
+    @property
+    def analyzer(self):
         """
-        Initialize.
+        Return the analyzer employed.
         """
 
-        self._estimator = estimator
-        self._planner   = planner
-        self._analyzer  = analyzer
-        self._actions   = actions
-
-    def __call__(self, trainer):
-        """
-        Build the solver.
-        """
-
-        from cargo.statistics import TupleSamples
-        from borg.portfolio   import (
-            ModelingStrategy,
-            DistributionModel,
-            )
-
-        samples   = TupleSamples([trainer.get_data(a) for a in self._actions])
-        estimated = self._estimator.estimate(samples)
-        model     = DistributionModel(estimated, self._actions)
-
-        return \
-            PortfolioSolver(
-                ModelingStrategy(
-                    model,
-                    self._planner,
-                    ),
-                self._analyzer,
-                )
+        return self._analyzer
  

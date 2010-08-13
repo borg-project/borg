@@ -165,17 +165,10 @@ class FeatureAction(Action):
 
         return (FeatureAction, (self._feature_name,))
 
-    def get_training(self, session, task_uuids):
+    def get_training(self, session, tasks):
         """
         Return a tasks-by-outcomes array.
         """
-
-        # sanity
-        from uuid import UUID
-
-        for task_uuid in task_uuids:
-            if not isinstance(task_uuid, UUID):
-                raise TypeError("task uuid is not a uuid")
 
         # get stored feature values
         from sqlalchemy import (
@@ -187,7 +180,8 @@ class FeatureAction(Action):
             TaskFeatureRow as TFR,
             )
 
-        rows =                                          \
+        task_uuids = [task.get_row(session).uuid for task in tasks]
+        rows       =                                    \
             session.execute(
                 select(
                     [TFR.task_uuid, TFR.value],
@@ -219,9 +213,9 @@ class FeatureAction(Action):
         """
 
         if features[self._feature_name]:
-            return SolverAction.unsolved_outcome
+            return FeatureAction.outcomes_[0]
         else:
-            return SolverAction.solved_outcome
+            return FeatureAction.outcomes_[1]
 
     @property
     def description(self):

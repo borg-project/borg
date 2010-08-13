@@ -155,3 +155,16 @@ class DistributionModel(AbstractModel):
 
         return self._actions
 
+    @staticmethod
+    def estimated(trainer, estimator, actions):
+        """
+        Estimate a distribution and build the model.
+        """
+
+        from cargo.statistics import TupleSamples
+
+        samples   = TupleSamples(map(trainer.get_data, actions))
+        estimated = estimator.estimate(samples)
+
+        return DistributionModel(estimated, actions)
+

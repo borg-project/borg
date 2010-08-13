@@ -127,6 +127,13 @@ class AbstractSolver(AbstractRowed):
         Attempt to solve the specified instance.
         """
 
+    def name(self):
+        """
+        An arbitrary name for this solver.
+        """
+
+        return "anonymous"
+
 class AbstractPreprocessor(AbstractSolver):
     """
     Abstract base for a preprocessor.

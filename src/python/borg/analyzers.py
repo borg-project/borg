@@ -152,13 +152,12 @@ class RecyclingAnalyzer(TaskAnalyzer):
         with environment.CacheSession() as session:
             from borg.data import TaskFeatureRow as TFR
 
-            constraint = TFR.task == task_row
+            constraint = TFR.task == task.get_row(session)
 
             if self._names is not None:
                 constraint = constraint & TFR.name.in_(self._names)
 
-            task_row     = task.get_row(session)
-            feature_rows = session.query([TFR.name, TFR.value]).filter(constraint).all()
+            feature_rows = session.query(TFR.name, TFR.value).filter(constraint).all()
 
             return dict(feature_rows)
 

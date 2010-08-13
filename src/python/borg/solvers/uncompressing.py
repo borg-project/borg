@@ -60,7 +60,9 @@ class UncompressingPreprocessor(UncompressingSolver, AbstractPreprocessor):
         Preprocess an instance.
         """
 
-        with self._uncompressed_task(task) as inner_task:
+        from borg.tasks import uncompressed_task
+
+        with uncompressed_task(task) as inner_task:
             return self._inner.preprocess(inner_task, budget, output_path, random, environment)
 
     def extend(self, task, answer):

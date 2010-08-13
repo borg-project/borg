@@ -2,27 +2,6 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-def yield_selected(strategy, budget):
-    """
-    Return a strategy's next action.
-    """
-
-    from itertools    import repeat
-    from numpy.random import RandomState
-
-    selected = strategy.select(budget, RandomState(42))
-    result   = None
-
-    for outcome in repeat(None):
-        action = selected.send(result)
-
-        if action is not None:
-            budget -= action.cost
-
-        result = (outcome, budget)
-
-        yield action
-
 def test_sequence_strategy():
     """
     Test the sequence selection strategy.
@@ -34,22 +13,25 @@ def test_sequence_strategy():
 
     actions  = [FakeAction(i) for i in xrange(4)]
     strategy = SequenceStrategy(actions * 2)
-    selected = yield_selected(strategy, 128.0)
 
     # verify basic behavior
-    for (action, selected_action) in zip(actions, selected):
-        assert_equal(selected_action.value, action.value)
+    strategy.reset()
 
-    assert_equal(selected.next().value, actions[0].value)
+    for action in actions:
+        assert_equal(strategy.choose(128.0, None).value, action.value)
+
+    assert_equal(strategy.choose(128.0, None).value, actions[0].value)
 
     # verify repeated behavior
-    selected = yield_selected(strategy, 128.0)
+    strategy.reset()
 
-    for (action, selected_action) in zip(actions, selected):
-        assert_equal(selected_action.value, action.value)
+    for action in actions:
+        assert_equal(strategy.choose(128.0, None).value, action.value)
 
     # verify budget awareness
-    assert_equal(yield_selected(strategy, 2.0).next(), None)
+    strategy.reset()
+
+    assert_equal(strategy.choose(2.0, None), None)
 
 def test_fixed_strategy():
     """
@@ -61,14 +43,15 @@ def test_fixed_strategy():
     from borg.portfolio.strategies   import FixedStrategy
 
     strategy = FixedStrategy(FakeAction(42))
-    selected = yield_selected(strategy, 128.0)
 
     # verify basic behavior
-    for (_, action) in zip(xrange(4), selected):
-        assert_equal(action.value, 42)
+    strategy.reset()
+
+    for _ in xrange(4):
+        assert_equal(strategy.choose(128.0, None).value, 42)
 
     # verify budget awareness
-    assert_equal(yield_selected(strategy, 2.0).next(), None)
+    assert_equal(strategy.choose(2.0, None), None)
 
 def test_modeling_selection_strategy():
     """
@@ -90,12 +73,10 @@ def test_modeling_selection_strategy():
     strategy   = ModelingStrategy(model, planner)
 
     # does it select the expected action?
-    selected = yield_selected(strategy, 128.0).next()
+    strategy.reset()
 
-    assert_equal(selected, actions[-1])
+    assert_equal(strategy.choose(128.0, None), actions[-1])
 
     # does it pay attention to feasibility?
-    selected = yield_selected(strategy, 2.0).next()
-
-    assert_equal(selected, None)
+    assert_equal(strategy.choose(2.0, None), None)
 
