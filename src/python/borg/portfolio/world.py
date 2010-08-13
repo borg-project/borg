@@ -41,7 +41,7 @@ class SolverAction(Action):
 
         return (SolverAction, (self._solver, self._budget))
 
-    def get_training(self, session, task_uuids):
+    def get_training(self, session, tasks):
         """
         Return a tasks-by-outcomes array.
 
@@ -63,6 +63,7 @@ class SolverAction(Action):
         # related rows
         solver_row           = self._solver.get_row(session)
         recyclable_trial_row = TR.get_recyclable(session)
+        task_uuids           = [task.get_row(session).uuid for task in tasks]
 
         # existing action outcomes
         rows =                                                                     \
@@ -257,30 +258,18 @@ class Trainer(ABC):
         Provide task-outcomes counts to the trainee.
         """
 
-    @staticmethod
-    def build(Session, task_uuids, request):
-        """
-        Build a trainer as requested.
-        """
-
-        builders = {
-            "decision" : DecisionTrainer.build,
-            }
-
-        return builders[request["type"]](Session, task_uuids, request)
-
 class DecisionTrainer(Trainer):
     """
     Grant a decision portfolio access to training data.
     """
 
-    def __init__(self, Session, task_uuids):
+    def __init__(self, Session, tasks):
         """
         Initialize.
         """
 
-        self._Session    = Session
-        self._task_uuids = task_uuids
+        self._Session = Session
+        self._tasks   = tasks
 
     def get_data(self, action):
         """
@@ -288,13 +277,5 @@ class DecisionTrainer(Trainer):
         """
 
         with self._Session() as session:
-            return action.get_training(session, self._task_uuids)
-
-    @staticmethod
-    def build(Session, task_uuids, request):
-        """
-        Build this trainer from a request.
-        """
-
-        return DecisionTrainer(Session, task_uuids)
+            return action.get_training(session, self._tasks)
 

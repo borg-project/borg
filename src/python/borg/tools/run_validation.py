@@ -108,8 +108,8 @@ def make_validation_run(
     from borg.solvers         import AbstractSolver
     from borg.portfolio.world import Trainer
 
+    trainer   = DecisionTrainer.build(ResearchSession, train_uuids, request["trainer"])
     requested = AbstractSolver.build(trainer, request["solver"])
-    trainer   = Trainer.build(ResearchSession, train_uuids, request["trainer"])
 
     log.info("built solver from request")
 
@@ -174,159 +174,47 @@ def make_validation_run(
         session.add(run)
         session.commit()
 
-def request_portfolio(model_type, components, solvers, features):
+def outsource_validation_jobs(
+    engine_url,
+    builders,
+    task_uuids,
+    budget,
+    fraction,
+    group = None,
+    repeats = 1,
+    ):
     """
-    Return a request for a model-based portfolio.
+    Outsource validation runs.
     """
 
-def yield_solver_requests():
-    """
-    Build the solvers as configured.
-    """
+    # build its jobs
+    def yield_jobs():
+        from cargo.labor.jobs import CallableJob
+        from cargo.random     import get_random_random
+        from borg.solvers     import get_named_solvers
 
-    import numpy
+        for builder in builders:
+            for i in xrange(repeats):
+                yield CallableJob(
+                    make_validation_run,
+                    engine_url    = engine_url,
+                    builder       = builder,
+                    fraction      = fraction,
+                    task_uuids    = task_uuids,
+                    budget        = budget,
+                    random        = get_random_random(),
+                    named_solvers = get_named_solvers(use_recycled = True),
+                    group         = group,
+                    cache_path    = None,
+                    )
 
-    sat_2009_subsolvers = [
-        "sat/2009/adaptg2wsat2009++",
-        "sat/2009/CirCUs",
-        "sat/2009/clasp",
-        "sat/2009/glucose",
-        "sat/2009/gnovelty+2",
-        "sat/2009/gNovelty+-T",
-        "sat/2009/hybridGM3",
-        "sat/2009/iPAWS",
-        "sat/2009/IUT_BMB_SAT",
-        "sat/2009/LySAT_c",
-        "sat/2009/LySAT_i",
-        "sat/2009/ManySAT",
-        "sat/2009/march_hi",
-        "sat/2009/minisat_09z",
-        "sat/2009/minisat_cumr_p",
-        "sat/2009/mxc_09",
-        "sat/2009/precosat",
-        "sat/2009/rsat_09",
-        "sat/2009/SApperloT",
-        "sat/2009/TNM",
-        "sat/2009/VARSAT-industrial"
-        ]
-    sat_2009_satzillas = [
-        "sat/2009/SATzilla2009_R",
-        "sat/2009/SATzilla2009_C",
-        "sat/2009/SATzilla2009_I",
-        ]
+    jobs = list(yield_jobs())
 
-    # the individual solvers
-#     for name in sat_2009_subsolvers + sat_2009_satzillas:
-#         yield { "type" : "lookup", "name" : name }
+    # run the jobs
+    from cargo.temporal      import utc_now
+    from cargo.labor.storage import outsource_or_run
 
-    # the DCM portfolio solver(s)
-#     for k in xrange(1, 65):
-    for k in [63]:
-        yield {
-            "trainer" : {
-                "type" : "decision"
-                },
-            "solver" : {
-                "type"     : "portfolio",
-                "analyzer" : {
-                    "type" : "satzilla"
-                    },
-                "solvers" : [
-                    "sat/2009/CirCUs",
-                    "sat/2009/clasp"
-                    ],
-                "budgets"  : [25.0, 100.0],
-                "strategy" : {
-                    "type"    : "modeling",
-                    "planner" : {
-                        "type"     : "bellman",
-                        "horizon"  : 2,
-                        "discount" : 0.98
-                        },
-                    "model" : {
-                        "type" : "distribution",
-                        "estimator" : {
-                            "type"        : "mixture",
-                            "iterations"  : 128,
-                            "convergence" : 1e-8,
-                            "estimators"  : [
-                                {
-                                    "type"       : "tuple",
-                                    "estimators" : [
-                                        {
-                                            "type"      : "dcm",
-                                            "norm"      : 1,
-                                            "threshold" : 1e-5,
-                                            "cutoff"    : 1e3
-                                            },
-                                        {
-                                            "type"      : "dcm",
-                                            "norm"      : 1,
-                                            "threshold" : 1e-5,
-                                            "cutoff"    : 1e3
-                                            },
-                                        {
-                                            "type"      : "dcm",
-                                            "norm"      : 1,
-                                            "threshold" : 1e-5,
-                                            "cutoff"    : 1e3
-                                            },
-                                        {
-                                            "type"      : "dcm",
-                                            "norm"      : 1,
-                                            "threshold" : 1e-5,
-                                            "cutoff"    : 1e3
-                                            },
-                                        {
-                                            "type"      : "dcm",
-                                            "norm"      : 1,
-                                            "threshold" : 1e-5,
-                                            "cutoff"    : 1e3
-                                            }
-                                        ]
-                                    },
-                                {
-                                    "type"       : "tuple",
-                                    "estimators" : [
-                                        {
-                                            "type"      : "dcm",
-                                            "norm"      : 1,
-                                            "threshold" : 1e-5,
-                                            "cutoff"    : 1e3
-                                            },
-                                        {
-                                            "type"      : "dcm",
-                                            "norm"      : 1,
-                                            "threshold" : 1e-5,
-                                            "cutoff"    : 1e3
-                                            },
-                                        {
-                                            "type"      : "dcm",
-                                            "norm"      : 1,
-                                            "threshold" : 1e-5,
-                                            "cutoff"    : 1e3
-                                            },
-                                        {
-                                            "type"      : "dcm",
-                                            "norm"      : 1,
-                                            "threshold" : 1e-5,
-                                            "cutoff"    : 1e3
-                                            },
-                                        {
-                                            "type"      : "dcm",
-                                            "norm"      : 1,
-                                            "threshold" : 1e-5,
-                                            "cutoff"    : 1e3
-                                            }
-                                        ]
-                                    }
-                                ]
-                            }
-                        }
-                    }
-                }
-            }
-
+    outsource_or_run(jobs, "validation runs (at %s)" % utc_now())
 
 def main():
     """

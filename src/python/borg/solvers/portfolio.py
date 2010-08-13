@@ -2,13 +2,12 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from cargo.log      import get_logger
-from borg.rowed     import Rowed
-from borg.solvers   import (
+from cargo.log    import get_logger
+from borg.rowed   import Rowed
+from borg.solvers import (
     RunAttempt,
     AbstractSolver,
     )
-from borg.analyzers import NoAnalyzer
 
 log = get_logger(__name__)
 
@@ -142,40 +141,42 @@ class PortfolioSolver(Rowed, AbstractSolver):
 
         return "portfolio"
 
-    @staticmethod
-    def build(trainer, request):
+class ModelingSolverFactory(object):
+    """
+    Builder of portfolio solvers.
+    """
+
+    def __init__(self, estimator, planner, analyzer, actions):
         """
-        Build a solver as requested.
+        Initialize.
         """
 
-        # build the analyzer
-        from borg.analyzers import TaskAnalyzer
+        self._estimator = estimator
+        self._planner   = planner
+        self._analyzer  = analyzer
+        self._actions   = actions
 
-        analyzer = TaskAnalyzer.build(request["analyzer"], trainer)
+    def __call__(self, trainer):
+        """
+        Build the solver.
+        """
 
-        # build the action set
-        from itertools      import product
-        from cargo.temporal import TimeDelta
-        from borg.solvers   import LookupSolver
-        from borg.portfolio import (
-            SolverAction,
-            FeatureAction,
+        from cargo.statistics import TupleSamples
+        from borg.portfolio   import (
+            ModelingStrategy,
+            DistributionModel,
             )
 
-        solvers  = [LookupSolver(s) for s in request["solvers"]]
-        budgets  = [TimeDelta(seconds = s) for s in request["budgets"]]
-        actions  = [SolverAction(*a) for a in product(solvers, budgets)]
-        actions += [FeatureAction(name) for name in analyzer.feature_names]
+        samples   = TupleSamples([trainer.get_data(a) for a in self._actions])
+        estimated = self._estimator.estimate(samples)
+        model     = DistributionModel(estimated, self._actions)
 
-        log.detail("solver actions (there are %i) follow:", len(actions))
-
-        for action in actions:
-            log.detail("%s: %s", type(action).__name__, action.description)
-
-        # build the overall selection strategy
-        from borg.portfolio.strategies import AbstractStrategy
-
-        strategy = AbstractStrategy.build(request["strategy"], actions, trainer)
-
-        return PortfolioSolver(strategy, analyzer)
-
+        return \
+            PortfolioSolver(
+                ModelingStrategy(
+                    model,
+                    self._planner,
+                    ),
+                self._analyzer,
+                )
+ 

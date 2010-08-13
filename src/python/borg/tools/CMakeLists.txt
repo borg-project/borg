@@ -7,6 +7,7 @@ install(
         __init__.py
 		analyze.py
 		bench_bellman.py
+        cache_data.py
         calibrate.py
         delete_trial.py
         generate_ddl.py

@@ -5,7 +5,6 @@
 install(
 	FILES
         __init__.py
-        cache_data.py
         learn.py
         practice.py
         solve.py

@@ -139,8 +139,9 @@ class AbstractSolver(AbstractRowed):
             )
 
         builders = {
-            "portfolio" : PortfolioSolver.build,
-            "lookup"    : LookupSolver.build,
+            "lookup"             : LookupSolver.build,
+            "portfolio"          : PortfolioSolver.build,
+            "portfolio+modeling" : PortfolioSolver.build_modeling,
             }
 
         return builders[request["type"]](trainer, request)
@@ -190,4 +191,42 @@ class Environment(object):
         self.collections   = collections
         self.MainSession   = MainSession
         self.CacheSession  = CacheSession
+
+class TypicalEnvironmentFactory(object):
+    """
+    Build a typical environment.
+    """
+
+    def __init__(self, main_url = None, cache_path = None, **kwargs):
+        """
+        Initialize.
+        """
+
+        self._main_url   = main_url
+        self._cache_path = cache_path
+        self._kwargs     = kwargs
+
+    def __call__(self, engines):
+        """
+        Build an environment.
+        """
+
+        from cargo.sql.alchemy import make_session
+
+        MainSession = engines.get(self._main_url)
+
+        if self._cache_path is None:
+            CacheSession = MainSession
+        else:
+            from cargo.io import cache_file
+
+            cache_engine = engines.get("sqlite:///%s" % cache_file(self._cache_path))
+            CacheSession = make_session(bind = cache_engine)
+
+        return \
+            Environment(
+                MainSession  = MainSession,
+                CacheSession = CacheSession,
+                **self._kwargs
+                )
 

@@ -689,23 +689,3 @@ class PreprocessorAttemptRow(RunAttemptRow):
 
     output_task = relationship(TaskRow)
 
-class ValidationRunRow(DatumBase):
-    """
-    Place a task in the context of a collection.
-    """
-
-    __tablename__ = "validation_runs"
-
-    uuid             = Column(SQL_UUID, primary_key = True, default = uuid4)
-    solver_name      = Column(String, ForeignKey("solvers.name"), nullable = False)
-    solver_request   = Column(SQL_JSON)
-    train_task_uuids = Column(SQL_List(SQL_UUID))
-    test_task_uuids  = Column(SQL_List(SQL_UUID))
-    group            = Column(String)
-    score            = Column(Float)
-    components       = Column(Integer)
-    model_type       = Column(String)
-    analyzer_type    = Column(String)
-
-    solver = relationship(SolverRow)
-

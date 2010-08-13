@@ -3,7 +3,7 @@
 """
 
 if __name__ == "__main__":
-    from borg.tools.portfolio.cache_data import main
+    from borg.tools.cache_data import main
 
     raise SystemExit(main())
 

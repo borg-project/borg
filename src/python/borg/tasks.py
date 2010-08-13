@@ -130,6 +130,16 @@ class AbstractTask(AbstractRowed):
     Interface for a task.
     """
 
+    @property
+    def description(self):
+        """
+        Return an arbitrary description of this task.
+        """
+
+        return str(self)
+
+#tasks = map(UUID_Task, TaskRow.with_prefix(session, "sat/competition_2009/random/"))
+
 class AbstractFileTask(AbstractTask):
     """
     Interface for a task backed by a file.
@@ -186,6 +196,44 @@ class Task(Rowed, AbstractTask):
         """
 
         Rowed.__init__(self, row)
+
+class UUID_Task(Task):
+    """
+    An unbacked task identified by UUID.
+    """
+
+    def __init__(self, uuid, row = None):
+        """
+        Initialize.
+        """
+
+        if row is not None and uuid != row.uuid:
+            raise ValueError("uuid and row uuid do not match")
+
+        Rowed.__init__(self, row)
+
+        self._uuid = uuid
+
+    def get_new_row(self, session):
+        """
+        Create or obtain an ORM row for this object.
+        """
+
+        from borg.data import TaskRow as TR
+
+        return session.query(TR).get(self._uuid)
+
+    @staticmethod
+    def with_prefix(session, prefix):
+        """
+        Return the task uuids associated with a name prefix.
+        """
+
+        from borg.data import TaskRow
+
+        task_rows = TaskRow.with_prefix(session, prefix)
+
+        return [UUID_Task(task_row.uuid) for task_row in task_rows]
 
 class WrappedTask(Rowed, AbstractTask):
     """
