@@ -64,29 +64,25 @@ class BellmanPlanner(AbstractPlanner):
     Fixed-horizon optimal replanning.
     """
 
-    def __init__(self, horizon, discount):
+    def __init__(self, horizon, discount, enabled = None):
         """
         Initialize.
         """
 
         self._horizon  = horizon
         self._discount = discount
+        self._enabled  = enabled
 
     def select(self, model, history, budget, random):
         """
         Select an action.
         """
 
-        from borg.portfolio.bellman import compute_bellman_plan
+        from borg.portfolio.bellman import BellmanCore
 
-        (utility, plan) = \
-            compute_bellman_plan(
-                model,
-                self._horizon,
-                budget,
-                self._discount,
-                history = history,
-                )
+        core = BellmanCore(model, self._discount, self._enabled)
+
+        (utility, plan) = core.plan(self._horizon, budget, history)
 
         log.detail("computed Bellman plan: %s", " -> ".join(a.description for a in plan))
 

@@ -44,9 +44,10 @@ def test_compute_bellman():
         assert_equal,
         assert_almost_equal,
         )
-    from borg.portfolio.bellman import compute_bellman_plan
+    from borg.portfolio.bellman import BellmanCore
 
-    (expectation, plan) = compute_bellman_plan(build_real_model(), 2, 1e6, 0.9)
+    core                = BellmanCore(build_real_model(), 0.9)
+    (expectation, plan) = core.plan_from_start(2, 1e6)
 
     assert_almost_equal(expectation, 0.344)
     assert_equal([a.solver.name for a in plan], ["bar", "bar"])
