@@ -11,7 +11,7 @@ from cargo.sugar import ABC
 
 log = get_logger(__name__)
 
-class TaskAnalyzer(ABC):
+class Analyzer(ABC):
     """
     Abstract base for task feature acquisition classes.
     """
@@ -30,7 +30,7 @@ class TaskAnalyzer(ABC):
         Return the names of features provided by this analyzer.
         """
 
-class NoAnalyzer(TaskAnalyzer):
+class NoAnalyzer(Analyzer):
     """
     Acquire no features.
     """
@@ -50,7 +50,7 @@ class NoAnalyzer(TaskAnalyzer):
 
         return []
 
-class UncompressingAnalyzer(TaskAnalyzer):
+class UncompressingAnalyzer(Analyzer):
     """
     Acquire no features.
     """
@@ -78,9 +78,9 @@ class UncompressingAnalyzer(TaskAnalyzer):
         Return the names of features provided by this analyzer.
         """
 
-        return analyzer.feature_names
+        return self._analyzer.feature_names
 
-class SATzillaAnalyzer(TaskAnalyzer):
+class SATzillaAnalyzer(Analyzer):
     """
     Acquire features using SATzilla's (old) analyzer.
     """
@@ -126,7 +126,7 @@ class SATzillaAnalyzer(TaskAnalyzer):
         else:
             return self._names
 
-class RecyclingAnalyzer(TaskAnalyzer):
+class RecyclingAnalyzer(Analyzer):
     """
     Look up precomputed features from the database.
     """
