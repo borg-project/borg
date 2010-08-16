@@ -76,6 +76,9 @@ class PortfolioSolver(Rowed, AbstractSolver):
         # first, compute features
         features = self._analyzer.analyze(task, environment)
 
+        for (name, value) in features.items():
+            log.detail("feature %s has value %s", name, value)
+
         # then invoke solvers
         from cargo.temporal       import TimeDelta
         from borg.portfolio.world import (
@@ -91,7 +94,7 @@ class PortfolioSolver(Rowed, AbstractSolver):
 
         while remaining > TimeDelta() and nleft > 0:
             # select an action
-            log.detail("selecting an action with %s remaining", remaining)
+            log.debug("selecting an action with %s remaining", remaining)
 
             action = self._strategy.choose(remaining.as_s, random)
 

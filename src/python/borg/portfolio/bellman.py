@@ -49,7 +49,7 @@ class BellmanCore(object):
 
             # action is disabled?
             if not self._enabled[i]:
-                pass
+                this_expected = 0.0
             # recurse into later states?
             elif horizon > 1:
                 this_expected = 0.0
