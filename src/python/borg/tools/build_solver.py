@@ -3,7 +3,7 @@
 """
 
 if __name__ == "__main__":
-    from borg.tools.portfolio.learn import main
+    from borg.tools.build_solver import main
 
     raise SystemExit(main())
 
@@ -23,13 +23,12 @@ def main():
     from cargo.json  import load_json
     from cargo.flags import parse_given
 
-    (train_uuids_path, request_path, solver_path) = \
+    (train_uuids_path, solver_py, out_path) = \
         parse_given(
-            usage = "%prog <uuids.json> <request.json> <out.pickle> [options]",
+            usage = "%prog <uuids.json> <solver.py> <out.pickle> [options]",
             )
 
     train_uuids = map(UUID, load_json(train_uuids_path))
-    request     = load_json(request_path)
 
     # set up log output
     from cargo.log import enable_default_logging
@@ -47,16 +46,20 @@ def main():
     # construct the solver
     from cargo.sql.alchemy    import make_session
     from borg.data            import research_connect
-    from borg.portfolio.world import Trainer
-    from borg.solvers         import AbstractSolver
+    from borg.portfolio.world import DecisionTrainer
+
+    def built(solver):
+        """
+        Receive a solver from the construction script.
+        """
+
+        import cPickle as pickle
+
+        with open(out_path, "w") as file:
+            pickle.dump(solver, file, -1)
 
     ResearchSession = make_session(bind = research_connect())
-    trainer         = Trainer.build(ResearchSession, train_uuids, request["trainer"])
-    requested       = AbstractSolver.build(trainer, request["solver"])
+    trainer         = DecisionTrainer(ResearchSession, train_uuids)
 
-    # write it to disk
-    import cPickle as pickle
-
-    with open(solver_path, "w") as file:
-        pickle.dump(requested, file, -1)
+    execfile(solver_py, {"built": built})
 

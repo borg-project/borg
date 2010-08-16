@@ -17,6 +17,8 @@ install(
         run_solvers.py
         run_validation.py
         plot_validation.py
+        solve.py
+        build_solver.py
 	DESTINATION lib/borg/tools
 	)
 
@@ -24,7 +26,6 @@ install(
 # descend
 #
 
-add_subdirectory(portfolio)
 add_subdirectory(sat)
 add_subdirectory(test)
 

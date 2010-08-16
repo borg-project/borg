@@ -3,7 +3,7 @@
 """
 
 if __name__ == "__main__":
-    from borg.tools.portfolio.solve import main
+    from borg.tools.solve import main
 
     raise SystemExit(main())
 

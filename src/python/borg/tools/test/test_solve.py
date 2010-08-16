@@ -4,9 +4,9 @@
 
 from nose.tools import assert_equal
 
-def test_tools_portfolio_solve():
+def test_solve():
     """
-    Test the portfolio solver execution script.
+    Test the solver execution tool.
     """
 
     # output we care about
@@ -57,7 +57,7 @@ def test_tools_portfolio_solve():
                     command = [
                         "python",
                         "-m",
-                        "borg.tools.portfolio.solve",
+                        "borg.tools.solve",
                         pickle_file.name,
                         cnf_file.name,
                         "42",

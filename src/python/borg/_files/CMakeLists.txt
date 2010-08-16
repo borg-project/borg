@@ -1,3 +1,7 @@
+#
+# install
+#
+
 install(
 	PROGRAMS
 		features1s
@@ -9,4 +13,10 @@ install(
 		beamer_sfmath.tex
     DESTINATION lib/borg/_files
     )
+
+#
+# descend
+#
+
+add_subdirectory(for_tests)
 
