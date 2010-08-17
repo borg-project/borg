@@ -17,8 +17,12 @@ def populate_database(session):
         get_task_file_hash,
         )
 
-    file_hash = get_task_file_hash(get_support_path("s57-100.cnf"), builtin_domains["sat"])
-    task_row  = FTR(hash = buffer(file_hash))
+    file_hash = \
+        get_task_file_hash(
+            get_support_path("for_tests/s57-100.cnf"),
+            builtin_domains["sat"],
+            )
+    task_row = FTR(hash = buffer(file_hash))
 
     DatumBase.metadata.create_all(session.connection())
 
@@ -37,7 +41,7 @@ def assert_instance_analyzed(session):
 
 def test_analyze_instance():
     """
-    Test the analyze_instance tool.
+    Test the task analysis tool.
     """
 
     from cargo.io import mkdtemp_scoped
@@ -78,7 +82,7 @@ def test_analyze_instance():
                     engine_url,
                     "--commit",
                     "sat",
-                    get_support_path("s57-100.cnf"),
+                    get_support_path("for_tests/s57-100.cnf"),
                     ],
                 preexec_fn = partial(unset_all, "CARGO_FLAGS_EXTRA_FILE"),
                 )

@@ -4,7 +4,7 @@
 """
 
 if __name__ == "__main__":
-    from borg.tools.sat.test_solvers import main
+    from borg.tools.test_solvers import main
 
     raise SystemExit(main())
 
@@ -287,9 +287,7 @@ def main(positional):
     enable_default_logging()
 
     if flags.verbose:
-        get_logger("utexas.tools.sat.run_solvers", level = "NOTSET")
         get_logger("cargo.unix.accounting", level = "DEBUG")
-        get_logger("utexas.sat.solvers", level = "DEBUG")
 
     # build the solvers
     from utexas.sat.solvers import get_named_solvers

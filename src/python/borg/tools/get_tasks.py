@@ -3,7 +3,7 @@
 """
 
 if __name__ == "__main__":
-    from borg.tools.sat.get_tasks import main
+    from borg.tools.get_tasks import main
 
     raise SystemExit(main())
 

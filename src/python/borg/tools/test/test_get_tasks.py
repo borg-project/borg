@@ -78,7 +78,7 @@ def test_get_tasks():
                 [
                     "python",
                     "-m",
-                    "borg.tools.sat.get_tasks",
+                    "borg.tools.get_tasks",
                     tasks_path,
                     sandbox_path,
                     "--collection",

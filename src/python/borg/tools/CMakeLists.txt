@@ -19,6 +19,8 @@ install(
         plot_validation.py
         solve.py
         build_solver.py
+        get_tasks.py
+        test_solvers.py
 	DESTINATION lib/borg/tools
 	)
 
@@ -26,6 +28,5 @@ install(
 # descend
 #
 
-add_subdirectory(sat)
 add_subdirectory(test)
 
