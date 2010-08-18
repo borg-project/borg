@@ -137,19 +137,42 @@ def yield_solvers(session, solver_pairs):
     Build the solvers as configured.
     """
 
-    import cPickle as pickle
-
-    from cargo.io     import expandpath
     from borg.solvers import LookupSolver
 
-    for (kind, name) in solver_pairs:
-        if kind == "name":
+    if solver_pairs is None:
+        from borg.data import SolverRow as SR
+
+        for (name,) in session.query(SR.name):
             yield LookupSolver(name)
-        elif kind == "load":
-            with open(expandpath(name)) as file:
-                yield pickle.load(file)
-        else:
-            raise ValueError("unknown solver kind")
+    else:
+        for (kind, name) in solver_pairs:
+            if kind == "name":
+                yield LookupSolver(name)
+            elif kind == "load":
+                import cPickle as pickle
+
+                from cargo.io import expandpath
+
+                with open(expandpath(name)) as file:
+                    yield pickle.load(file)
+            else:
+                raise ValueError("unknown solver kind")
+
+def yield_task_uuids(session, task_uuids):
+    """
+    Look up or return the task uuids.
+    """
+
+    if task_uuids is None:
+        from borg.data import TaskRow as TR
+
+        for (uuid,) in session.query(TR.uuid):
+            yield uuid
+    else:
+        from uuid import UUID
+
+        for s in task_uuids:
+            yield UUID(s)
 
 def main():
     """
@@ -170,7 +193,11 @@ def main():
 
     flags     = module_flags.given
     budget    = TimeDelta(seconds = float(budget))
-    arguments = load_json(arguments)
+
+    if arguments != "none":
+        arguments = load_json(arguments)
+    else:
+        arguments = {}
 
     # set up logging
     from cargo.log import enable_default_logging
@@ -223,7 +250,6 @@ def main():
                 Generate a set of jobs to distribute.
                 """
 
-                from uuid             import UUID
                 from cargo.labor.jobs import CallableJob
                 from cargo.random     import get_random_random
                 from borg.tasks       import get_collections
@@ -236,7 +262,7 @@ def main():
                 environment   = Environment(named_solvers = named_solvers)
                 collections   = get_collections()
 
-                for solver in yield_solvers(session, arguments["solvers"]):
+                for solver in yield_solvers(session, arguments.get("solvers")):
                     restarts = module_flags.given.restarts
 
                     if solver.get_seeded(environment):
@@ -244,7 +270,7 @@ def main():
 
                     log.info("making %i restarts of %s", restarts, solver.name)
 
-                    for task_uuid in map(UUID, arguments["tasks"]):
+                    for task_uuid in yield_task_uuids(session, arguments.get("tasks")):
                         for i in xrange(restarts):
                             yield CallableJob(
                                 solve_task,
