@@ -3,56 +3,16 @@
 """
 
 if __name__ == "__main__":
+    from plac                   import call
     from borg.tools.run_solvers import main
 
-    raise SystemExit(main())
+    call(main)
 
-from cargo.log   import get_logger
-from cargo.flags import (
-    Flag,
-    Flags,
-    )
+from plac           import annotations
+from cargo.log      import get_logger
+from cargo.temporal import parse_timedelta
 
-log          = get_logger(__name__, default_level = "INFO")
-module_flags = \
-    Flags(
-        "Script Options",
-        Flag(
-            "-t",
-            "--trial",
-            default = "random",
-            metavar = "UUID",
-            help    = "place attempts in trial UUID [%default]",
-            ),
-        Flag(
-            "-p",
-            "--parent-trial",
-            default = None,
-            metavar = "UUID",
-            help    = "use a child trial of UUID [%default]",
-            ),
-        Flag(
-            "-r",
-            "--restarts",
-            type    = int,
-            default = 1,
-            metavar = "INT",
-            help    = "make at least INT restarts of all solvers [%default]",
-            ),
-        Flag(
-            "-s",
-            "--seeded-restarts",
-            type    = int,
-            default = 1,
-            metavar = "INT",
-            help    = "make at least INT restarts of seeded solvers [%default]",
-            ),
-        Flag(
-            "--use-recycled-runs",
-            action = "store_true",
-            help   = "reuse past runs [%default]",
-            ),
-        )
+log = get_logger(__name__, default_level = "INFO")
 
 def solve_task(
     engine_url,
@@ -174,30 +134,35 @@ def yield_task_uuids(session, task_uuids):
         for s in task_uuids:
             yield UUID(s)
 
-def main():
+@annotations(
+    budget          = ("solver budget"    , "positional", None , parse_timedelta),
+    arguments       = ("arguments in JSON", "positional", None),
+    trial           = ("place in trial"   , "option"    , "t"  , UUID)           ,
+    parent_trial    = ("with parent trial", "option"    , "p"  , UUID)           ,
+    restarts        = ("minimum attempts" , "option"    , "r"  , int)            ,
+    seeded_restarts = ("minimum attempts" , "option"    , "s"  , int)            ,
+    recycle         = ("reuse past runs"  , "flag")     ,
+    )
+def main(
+    budget,
+    arguments       = None,
+    trial           = "random",
+    parent_trial    = None,
+    restarts        = 1,
+    seeded_restarts = 1,
+    recycle         = False,
+    ):
     """
     Run the script.
     """
 
-    # get command line arguments
-    import cargo.labor.storage
-    import borg.data
-    import borg.tasks
-    import borg.solvers
+    # get arguments
+    from cargo.json import load_json
 
-    from datetime    import timedelta
-    from cargo.json  import load_json
-    from cargo.flags import parse_given
-
-    (budget, arguments) = parse_given(usage = "%prog <budget> <args.json> [options]")
-
-    flags  = module_flags.given
-    budget = timedelta(seconds = float(budget))
-
-    if arguments != "none":
-        arguments = load_json(arguments)
-    else:
+    if arguments is None:
         arguments = {}
+    else:
+        arguments = load_json(arguments)
 
     # set up logging
     from cargo.log import enable_default_logging
@@ -222,21 +187,21 @@ def main():
 
             trial_label = "solver runs (at %s)" % utc_now()
 
-            if module_flags.given.parent_trial is None:
+            if parent_trial is None:
                 parent_trial = None
             else:
-                parent_trial = session.query(TrialRow).get(module_flags.given.parent_trial)
+                parent_trial = session.query(TrialRow).get(parent_trial)
 
                 assert parent_trial is not None
 
-            if module_flags.given.trial == "random":
+            if trial == "random":
                 trial_row = TrialRow(label = trial_label, parent = parent_trial)
 
                 session.add(trial_row)
             else:
                 assert parent_trial is None
 
-                trial_row = session.query(TrialRow).get(module_flags.given.trial)
+                trial_row = session.query(TrialRow).get(trial)
 
                 assert trial_row is not None
 
@@ -258,15 +223,13 @@ def main():
                     get_named_solvers,
                     )
 
-                named_solvers = get_named_solvers(use_recycled = flags.use_recycled_runs)
+                named_solvers = get_named_solvers(use_recycled = recycle)
                 environment   = Environment(named_solvers = named_solvers)
                 collections   = get_collections()
 
                 for solver in yield_solvers(session, arguments.get("solvers")):
-                    restarts = module_flags.given.restarts
-
                     if solver.get_seeded(environment):
-                        restarts = max(restarts, module_flags.given.seeded_restarts)
+                        restarts = max(restarts, seeded_restarts)
 
                     log.info("making %i restarts of %s", restarts, solver.name)
 
@@ -282,7 +245,7 @@ def main():
                                 random        = get_random_random(),
                                 named_solvers = named_solvers,
                                 collections   = collections,
-                                use_recycled  = flags.use_recycled_runs,
+                                use_recycled  = recycle,
                                 )
 
             jobs = list(yield_jobs())

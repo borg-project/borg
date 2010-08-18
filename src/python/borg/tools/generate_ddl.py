@@ -3,51 +3,24 @@
 """
 
 if __name__ == "__main__":
+    from plac                    import call
     from borg.tools.generate_ddl import main
 
-    raise SystemExit(main())
+    call(main)
 
-from cargo.flags import (
-    Flag,
-    Flags,
-    )
+from plac import annotations
 
-module_flags = \
-    Flags(
-        "Research Data Storage",
-        Flag(
-            "-a",
-            "--apply",
-            action = "store_true",
-            help   = "create the generated schema",
-            ),
-        Flag(
-            "-r",
-            "--reflect",
-            action = "store_true",
-            help   = "load the reflected schema",
-            ),
-        Flag(
-            "-t",
-            "--topological",
-            action = "store_true",
-            help   = "print topologically sorted by dependency",
-            ),
-        )
-
-def generate_ddl(engine):
+def generate_ddl(engine, reflect, apply, topological):
     """
     Print or apply the database schema.
     """
 
     # load the appropriate schema
-    if module_flags.given.reflect:
+    if reflect:
         # use the database's schema
         from sqlalchemy.schema import MetaData
 
-        metadata = MetaData()
-
-        metadata.reflect(bind = engine)
+        metadata = MetaData(bind = engine, reflect = True)
     else:
         # use the project-defined schema
         from borg.data import DatumBase
@@ -55,14 +28,14 @@ def generate_ddl(engine):
         metadata = DatumBase.metadata
 
     # then do something with it
-    if module_flags.given.apply:
+    if apply:
         # apply the DDL to the database
         metadata.create_all(engine)
     else:
         # print the DDL
         from sqlalchemy.schema import CreateTable
 
-        if module_flags.given.topological:
+        if topological:
             sorted_tables = metadata.sorted_tables
         else:
             sorted_tables = sorted(metadata.sorted_tables, key = lambda t: t.name)
@@ -70,21 +43,18 @@ def generate_ddl(engine):
         for table in sorted_tables:
             print CreateTable(table).compile(engine)
 
-def main():
+@annotations(
+    reflect     = ("load the reflected schema"  , "flag", "r"),
+    apply       = ("create the generated schema", "flag", "a"),
+    topological = ("sort by dependency"         , "flag", "t"),
+    )
+def main(reflect = False, apply = False, topological = False):
     """
     Deal with core database metadata.
     """
 
-    # get command line arguments
-    import borg.data
-
-    from cargo.sql.alchemy import SQL_Engines
-    from cargo.flags       import parse_given
-
-    parse_given(usage = "usage: %prog [options]")
-
     # be verbose in non-print modes
-    if module_flags.given.apply:
+    if apply:
         import logging
 
         from cargo.log import (
@@ -97,6 +67,8 @@ def main():
         get_logger("sqlalchemy.engine").setLevel(logging.DEBUG)
 
     # connect to the database and go
+    from cargo.sql.alchemy import SQL_Engines
+
     with SQL_Engines.default:
         from borg.data import research_connect
 

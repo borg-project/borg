@@ -4,24 +4,10 @@
 
 from abc         import abstractmethod
 from cargo.log   import get_logger
-from cargo.flags import (
-    Flag,
-    Flags,
-    )
+from borg        import defaults
 from borg.rowed  import AbstractRowed
 
-log          = get_logger(__name__)
-module_flags = \
-    Flags(
-        "Solver Configuration",
-        Flag(
-            "--solvers-file",
-            default = [],
-            action  = "append",
-            metavar = "FILE",
-            help    = "read solver descriptions from FILE [%default]",
-            ),
-        )
+log = get_logger(__name__)
 
 def get_random_seed(random):
     """
@@ -34,12 +20,10 @@ def get_random_seed(random):
 
     return random.randint(iinfo(numpy.int32).max)
 
-def get_named_solvers(paths = [], flags = {}, use_recycled = False):
+def get_named_solvers(paths = defaults.solver_lists, use_recycled = False):
     """
     Retrieve a list of named solvers.
     """
-
-    import json
 
     from os.path      import dirname
     from cargo.io     import expandpath
@@ -50,8 +34,6 @@ def get_named_solvers(paths = [], flags = {}, use_recycled = False):
         RecyclingPreprocessor,
         SAT_CompetitionSolver,
         )
-
-    flags = module_flags.merged(flags)
 
     def sat_competition_loader(name, relative, attributes):
         """
@@ -94,11 +76,11 @@ def get_named_solvers(paths = [], flags = {}, use_recycled = False):
         (Recursively) yield solvers from a solvers file.
         """
 
+        from cargo.json import load_json
+
         path     = expandpath(raw_path)
         relative = dirname(path)
-
-        with open(path) as file:
-            loaded = json.load(file)
+        loaded   = load_json(path)
 
         log.note("read named-solvers file: %s", raw_path)
 
@@ -114,7 +96,7 @@ def get_named_solvers(paths = [], flags = {}, use_recycled = False):
     # build the solvers dictionary
     from itertools import chain
 
-    return dict(chain(*(yield_solvers_from(p) for p in chain(paths, flags.solvers_file))))
+    return dict(chain(*(yield_solvers_from(p) for p in paths)))
 
 class AbstractSolver(AbstractRowed):
     """

@@ -32,41 +32,18 @@ from cargo.sql.alchemy          import (
     SQL_Engines,
     SQL_TimeDelta,
     )
-from cargo.flags                import (
-    Flag,
-    Flags,
-    )
 
-log          = get_logger(__name__)
-DatumBase    = declarative_base()
-module_flags = \
-    Flags(
-        "Research Data Storage",
-        Flag(
-            "--research-database",
-            default = "sqlite:///:memory:",
-            metavar = "DATABASE",
-            help    = "use research DATABASE by default [%default]",
-            ),
-        Flag(
-            "--create-research-schema",
-            action  = "store_true",
-            help    = "create the research data schema, if necessary",
-            ),
-        )
+log       = get_logger(__name__)
+DatumBase = declarative_base()
 
-def research_connect(engines = SQL_Engines.default, flags = module_flags.given):
+from borg import defaults
+
+def research_connect(engines = SQL_Engines.default, url = defaults.research_url):
     """
     Connect to research data storage.
     """
 
-    flags  = module_flags.merged(flags)
-    engine = engines.get(flags.research_database)
-
-    if flags.create_research_schema:
-        DatumBase.metadata.create_all(engine)
-
-    return engine
+    return engines.get(url)
 
 class CPU_LimitedRunRow(DatumBase):
     """

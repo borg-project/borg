@@ -9,25 +9,12 @@ from abc         import (
 from contextlib  import contextmanager
 from collections import namedtuple
 from cargo.log   import get_logger
-from cargo.flags import (
-    Flag,
-    Flags,
-    )
 from borg.rowed  import (
     Rowed,
     AbstractRowed,
     )
 
-log          = get_logger(__name__)
-module_flags = \
-    Flags(
-        "Script Options",
-        Flag(
-            "--task-collections",
-            metavar = "PATH",
-            help    = "read collection paths from PATH [%default]",
-            )
-        )
+log = get_logger(__name__)
 
 DomainProperties = namedtuple("DomainProperties", ["patterns", "extension", "sanitizer"])
 
@@ -77,7 +64,7 @@ def get_task_file_hash(path, domain):
 
             return file_hash
 
-def get_collections(path = None, default = {None: "."}):
+def get_collections(path = defaults.collections, default = {None: "."}):
     """
     Get paths to task collections from a configuration file.
     """
@@ -86,14 +73,9 @@ def get_collections(path = None, default = {None: "."}):
     from cargo.json import load_json
 
     if path is None:
-        json_path = module_flags.given.task_collections
-    else:
-        json_path = path
-
-    if json_path is None:
         return default
-
-    return dict((k, expandpath(v)) for (k, v) in load_json(json_path))
+    else:
+        return dict((k, expandpath(v)) for (k, v) in load_json(path))
 
 @contextmanager
 def uncompressed_task(task):

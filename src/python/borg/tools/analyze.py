@@ -3,26 +3,15 @@
 """
 
 if __name__ == "__main__":
+    from plac               import call
     from borg.tools.analyze import main
 
-    raise SystemExit(main())
+    call(main)
 
-from cargo.log   import get_logger
-from cargo.flags import (
-    Flag,
-    Flags,
-    )
+from plac      import annotations
+from cargo.log import get_logger
 
-log          = get_logger(__name__, default_level = "INFO")
-module_flags = \
-    Flags(
-        "Script Options",
-        Flag(
-            "--commit",
-            action = "store_true",
-            help   = "commit features to database [%default]",
-            ),
-        )
+log = get_logger(__name__, default_level = "INFO")
 
 def commit_features(instance_path, domain, features):
     """
@@ -71,17 +60,13 @@ def commit_features(instance_path, domain, features):
 
         session.commit()
 
-def main():
+@annotations(
+    commit = ("commit features to database", "flag", "c"),
+    )
+def main(domain_name, path, commit = False):
     """
     Main.
     """
-
-    # get command line arguments
-    import borg.data
-
-    from cargo.flags import parse_given
-
-    (domain_name, path) = parse_given(usage = "%prog [options] <domain> <path>")
 
     # set up log output
     from cargo.log import enable_default_logging
@@ -116,6 +101,6 @@ def main():
             log.info("%s: %s", name, value)
 
         # store it, if requested
-        if module_flags.given.commit:
+        if commit:
             commit_features(task_path, domain, features)
 
