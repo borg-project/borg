@@ -79,27 +79,28 @@ def main():
         runs = json.load(file)
 
     # and execute them
+    from datetime       import timedelta
     from cargo.io       import expandpath
-    from cargo.temporal import TimeDelta
+    from cargo.temporal import seconds
 
     nrepeats    = module_flags.given.repeats
-    outer_total = TimeDelta()
+    outer_total = timedelta()
 
     for (solver_name, path, seed) in runs:
         solver      = get_solver(named_solvers, solver_name)
         full_path   = expandpath(path)
-        inner_total = TimeDelta()
+        inner_total = timedelta()
 
         for i in xrange(nrepeats):
-            result       = solver.solve(full_path, TimeDelta(seconds = 1e6), seed)
+            result       = solver.solve(full_path, timedelta(seconds = 1e6), seed)
             inner_total += result.run.usage_elapsed
 
         average      = inner_total / nrepeats
         outer_total += average
 
-        log.detail("run average is %f", TimeDelta.from_timedelta(average).as_s)
+        log.detail("run average is %f", seconds(average))
 
     score = outer_total / len(runs)
 
-    log.note("machine performance score is %f", TimeDelta.from_timedelta(score).as_s)
+    log.note("machine performance score is %f", seconds(score))
 

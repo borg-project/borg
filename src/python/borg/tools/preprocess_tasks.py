@@ -179,13 +179,13 @@ def main():
     import borg.data
     import borg.solvers
 
-    from cargo.json     import load_json
-    from cargo.flags    import parse_given
-    from cargo.temporal import TimeDelta
+    from datetime    import timedelta
+    from cargo.json  import load_json
+    from cargo.flags import parse_given
 
     (budget, arguments) = parse_given(usage = "%prog <budget> <args.json> [options]")
 
-    budget    = TimeDelta(seconds = float(budget))
+    budget    = timedelta(seconds = float(budget))
     arguments = load_json(arguments)
 
     # set up logging

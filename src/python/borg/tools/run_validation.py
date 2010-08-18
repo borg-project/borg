@@ -229,14 +229,14 @@ def main():
 
     from uuid           import UUID
     from os.path        import abspath
+    from datetime       import timedelta
     from cargo.json     import load_json
     from cargo.flags    import parse_given
-    from cargo.temporal import TimeDelta
 
     (group, budget, fraction, uuids) = \
         parse_given(usage = "%prog [options] <group> <budget> <fraction> <uuids.json>")
 
-    budget   = TimeDelta(seconds = float(budget))
+    budget   = timedelta(seconds = float(budget))
     fraction = float(fraction)
     uuids    = map(UUID, load_json(uuids))
 

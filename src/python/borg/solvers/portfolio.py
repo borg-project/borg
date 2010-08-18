@@ -80,11 +80,12 @@ class PortfolioSolver(Rowed, AbstractSolver):
             log.detail("feature %s has value %s", name, value)
 
         # then invoke solvers
-        from cargo.temporal       import TimeDelta
+        from datetime             import timedelta
         from borg.portfolio.world import (
             SolverAction,
             FeatureAction,
             )
+        from cargo.temporal       import seconds
 
         remaining = budget
         nleft     = self._max_invocations
@@ -92,11 +93,11 @@ class PortfolioSolver(Rowed, AbstractSolver):
 
         self._strategy.reset()
 
-        while remaining > TimeDelta() and nleft > 0:
+        while remaining > timedelta() and nleft > 0:
             # select an action
             log.debug("selecting an action with %s remaining", remaining)
 
-            action = self._strategy.choose(remaining.as_s, random)
+            action = self._strategy.choose(seconds(remaining), random)
 
             # take the action
             if action is None:
@@ -110,7 +111,7 @@ class PortfolioSolver(Rowed, AbstractSolver):
 
                 (attempt, outcome)  = action.take(task, remaining, random, environment)
                 nleft              -= 1
-                remaining           = TimeDelta.from_timedelta(remaining - action.budget)
+                remaining           = remaining - action.budget
 
                 record.append((action.solver, attempt))
 

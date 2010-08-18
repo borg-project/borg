@@ -44,8 +44,8 @@ def test_solve():
             # invoke the script solver
             import numpy
 
+            from datetime       import timedelta
             from cargo.io       import env_restored
-            from cargo.temporal import TimeDelta
             from borg.tasks     import FileTask
             from borg.solvers   import (
                 Environment,
@@ -65,7 +65,7 @@ def test_solve():
                     )
             task          = FileTask(cnf_file.name)
             environment   = Environment()
-            budget        = TimeDelta(seconds = 16.0)
+            budget        = timedelta(seconds = 16.0)
 
             with env_restored(unset = ["CARGO_FLAGS_EXTRA_FILE"]):
                 attempt = script_solver.solve(task, budget, numpy.random, environment)

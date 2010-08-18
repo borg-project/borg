@@ -28,7 +28,6 @@ from cargo.flags        import (
     Flags,
     with_flags_parsed,
     )
-from cargo.temporal     import TimeDelta
 
 log = get_logger(__name__, default_level = "NOTE")
 
@@ -195,6 +194,8 @@ def test_solver_on(solver, path, expectation):
     Run a single test on a single solver.
     """
 
+    from datetime import timedelta
+
     flags = module_flags.given
 
     # interpret expectations
@@ -217,7 +218,7 @@ def test_solver_on(solver, path, expectation):
             min_seconds = 0.0
             max_seconds = time_range
 
-    cutoff    = TimeDelta(seconds = max_seconds)
+    cutoff    = timedelta(seconds = max_seconds)
     full_path = join(flags.tasks_dir, expandpath(path))
 
     # run the solver
@@ -228,7 +229,7 @@ def test_solver_on(solver, path, expectation):
 
     # mark as passed/failed
     if expectation is not None:
-        min_elapsed = TimeDelta(seconds = min_seconds)
+        min_elapsed = timedelta(seconds = min_seconds)
 
         if outcome == should_be and run.proc_elapsed >= min_elapsed:
             log.note(

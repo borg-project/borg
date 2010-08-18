@@ -10,7 +10,7 @@ def build_real_model():
     # set up the model
     import numpy
 
-    from cargo.temporal           import TimeDelta
+    from datetime                 import timedelta
     from cargo.statistics.dcm     import DirichletCompoundMultinomial as DCM
     from cargo.statistics.tuple   import TupleDistribution as TD
     from cargo.statistics.mixture import FiniteMixture
@@ -19,10 +19,10 @@ def build_real_model():
     from borg.portfolio.models    import DistributionModel
 
     actions = [
-        SolverAction(LookupSolver("foo"), TimeDelta(seconds = 1.0)),
-        SolverAction(LookupSolver("bar"), TimeDelta(seconds = 1.0)),
-        SolverAction(LookupSolver("baz"), TimeDelta(seconds = 1.0)),
-        SolverAction(LookupSolver("qux"), TimeDelta(seconds = 1.0)),
+        SolverAction(LookupSolver("foo"), timedelta(seconds = 1.0)),
+        SolverAction(LookupSolver("bar"), timedelta(seconds = 1.0)),
+        SolverAction(LookupSolver("baz"), timedelta(seconds = 1.0)),
+        SolverAction(LookupSolver("qux"), timedelta(seconds = 1.0)),
         ]
     components = [
         TD(map(DCM, [[0.10, 0.90], [0.20, 0.80], [0.15, 0.85], [0.05, 0.95]])),

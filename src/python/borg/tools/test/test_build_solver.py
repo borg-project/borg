@@ -59,7 +59,7 @@ def test_build_solver():
     # execute it in an environment with appropriate fake solvers mapped
     import numpy
 
-    from cargo.temporal            import TimeDelta
+    from datetime                  import timedelta
     from borg.tasks                import FileTask
     from borg.sat                  import Decision
     from borg.solvers              import Environment
@@ -73,7 +73,7 @@ def test_build_solver():
         }
     environment   = Environment(named_solvers = named_solvers)
     task          = FileTask("/tmp/arbitrary_path.cnf")
-    attempt       = solver.solve(task, TimeDelta(seconds = 1e6), numpy.random, environment)
+    attempt       = solver.solve(task, timedelta(seconds = 1e6), numpy.random, environment)
 
     assert_equal(attempt.answer, fixed_solver.answer)
 

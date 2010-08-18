@@ -11,7 +11,7 @@ def test_sat_portfolio_solver():
     """
 
     # set up the portfolio solver
-    from cargo.temporal            import TimeDelta
+    from datetime                  import timedelta
     from borg.sat                  import Decision
     from borg.solvers              import (
         Environment,
@@ -26,7 +26,7 @@ def test_sat_portfolio_solver():
         FixedSolver(Decision(True,  certificate)),
         FixedSolver(Decision(False, None)),
         ]
-    actions     = [SolverAction(s, TimeDelta(seconds = 16.0)) for s in subsolvers]
+    actions     = [SolverAction(s, timedelta(seconds = 16.0)) for s in subsolvers]
     environment = Environment()
 
     # each test is similar
@@ -44,7 +44,7 @@ def test_sat_portfolio_solver():
         analyzer = NoAnalyzer()
         solver   = PortfolioSolver(strategy, analyzer)
         task     = FileTask("/tmp/arbitrary_path.cnf")
-        attempt  = solver.solve(task, TimeDelta(seconds = seconds), numpy.random, environment)
+        attempt  = solver.solve(task, timedelta(seconds = seconds), numpy.random, environment)
 
         assert_equal(attempt.answer, answer)
         assert_equal([s for (s, _) in attempt.record], clean_record)

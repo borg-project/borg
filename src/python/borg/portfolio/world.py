@@ -29,7 +29,9 @@ class SolverAction(Action):
         Initialize.
         """
 
-        Action.__init__(self, budget.as_s)
+        from cargo.temporal import seconds
+
+        Action.__init__(self, seconds(budget))
 
         self._solver = solver
         self._budget = budget
@@ -100,9 +102,9 @@ class SolverAction(Action):
         Take the action.
         """
 
-        from cargo.temporal import TimeDelta
+        from datetime import timedelta
 
-        calibrated = TimeDelta(seconds = self.cost * environment.time_ratio)
+        calibrated = timedelta(seconds = self.cost * environment.time_ratio)
         attempt    = self._solver.solve(task, min(remaining, calibrated), random, environment)
 
         if attempt.answer is None:

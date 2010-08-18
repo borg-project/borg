@@ -67,13 +67,14 @@ def plot_trial(session, trial_rows):
     # plot the series
     import pylab
 
-    from cargo.plot import get_color_list
+    from cargo.plot     import get_color_list
+    from cargo.temporal import seconds
 
     colors = get_color_list(len(costs))
 
     for (i, (name, costs)) in enumerate(costs.iteritems()):
         # set up the coordinates
-        x_values      = [0.0] + [c.as_s for (c, _) in costs] + [budget.as_s]
+        x_values      = [0.0] + [seconds(c) for (c, _) in costs] + [seconds(budget)]
         y_values      = range(len(costs) + 1) + [len(costs)]
         tick_x_values = {True: [], False: []}
         tick_y_values = {True: [], False: []}

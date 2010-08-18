@@ -158,9 +158,9 @@ class StandardSolver(Rowed, AbstractSolver):
 
         # TIMELIMIT (or TIMEOUT): the total CPU time (in seconds) that the
         # solver may use before being killed
-        from cargo.temporal import TimeDelta
+        from cargo.temporal import seconds
 
-        cutoff_s                 = TimeDelta.from_timedelta(budget).as_s
+        cutoff_s                 = seconds(budget)
         expanded                 = expand(expanded, "TIMELIMIT", cutoff_s)
         expanded                 = expand(expanded, "TIMEOUT", cutoff_s)
         environment["TIMELIMIT"] = "%.1f" % cutoff_s

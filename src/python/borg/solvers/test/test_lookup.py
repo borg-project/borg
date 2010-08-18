@@ -39,7 +39,7 @@ def test_lookup_preprocessor():
 
         import numpy
 
-        from cargo.temporal            import TimeDelta
+        from datetime                  import timedelta
         from borg.solvers              import (
             Environment,
             LookupPreprocessor,
@@ -52,7 +52,7 @@ def test_lookup_preprocessor():
         result      = \
             lookup.preprocess(
                 input_task,
-                TimeDelta(seconds = 32.0),
+                timedelta(seconds = 32.0),
                 "/tmp/arbitrary_directory",
                 numpy.random,
                 environment,

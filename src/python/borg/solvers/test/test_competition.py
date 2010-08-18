@@ -57,11 +57,11 @@ while True: pass
             solver = SAT_CompetitionSolver(["python", code_file.name])
 
             # run the solver
-            from cargo.temporal import TimeDelta
-            from borg.tasks     import FileTask
+            from datetime   import timedelta
+            from borg.tasks import FileTask
 
             task    = FileTask("/tmp/path_irrelevant.cnf")
-            budget  = TimeDelta(seconds = 8.0)
+            budget  = timedelta(seconds = 8.0)
             attempt = solver.solve(task, budget, None, None)
 
             # verify its response

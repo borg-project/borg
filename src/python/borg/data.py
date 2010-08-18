@@ -14,6 +14,7 @@ from sqlalchemy                 import (
     String,
     Integer,
     Boolean,
+    DateTime,
     ForeignKey,
     LargeBinary,
     UniqueConstraint,
@@ -29,7 +30,6 @@ from cargo.sql.alchemy          import (
     SQL_JSON,
     SQL_UUID,
     SQL_Engines,
-    UTC_DateTime,
     SQL_TimeDelta,
     )
 from cargo.flags                import (
@@ -76,7 +76,7 @@ class CPU_LimitedRunRow(DatumBase):
     __tablename__ = "cpu_limited_runs"
 
     uuid          = Column(SQL_UUID, primary_key = True, default = uuid4)
-    started       = Column(UTC_DateTime)
+    started       = Column(DateTime)
     usage_elapsed = Column(SQL_TimeDelta)
     proc_elapsed  = Column(SQL_TimeDelta)
     cutoff        = Column(SQL_TimeDelta)

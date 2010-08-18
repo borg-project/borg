@@ -144,7 +144,7 @@ def main((solver_path, input_path, seed_string)):
             )
 
     # solve
-    from cargo.temporal import TimeDelta
+    from datetime       import timedelta
     from borg.tasks     import FileTask
     from borg.solvers   import (
         LookupPreprocessor,
@@ -159,7 +159,7 @@ def main((solver_path, input_path, seed_string)):
 
     primary = UncompressingSolver(secondary)
     task    = FileTask(input_path)
-    attempt = primary.solve(task, TimeDelta(seconds = 2e6), random, environment)
+    attempt = primary.solve(task, timedelta(seconds = 2e6), random, environment)
     answer  = attempt.answer
 
     # tell the world

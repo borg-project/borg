@@ -185,14 +185,14 @@ def main():
     import borg.tasks
     import borg.solvers
 
-    from cargo.json     import load_json
-    from cargo.flags    import parse_given
-    from cargo.temporal import TimeDelta
+    from datetime    import timedelta
+    from cargo.json  import load_json
+    from cargo.flags import parse_given
 
     (budget, arguments) = parse_given(usage = "%prog <budget> <args.json> [options]")
 
-    flags     = module_flags.given
-    budget    = TimeDelta(seconds = float(budget))
+    flags  = module_flags.given
+    budget = timedelta(seconds = float(budget))
 
     if arguments != "none":
         arguments = load_json(arguments)
