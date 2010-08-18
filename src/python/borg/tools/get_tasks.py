@@ -103,6 +103,9 @@ def get_task(
         session.add(task_name_row)
         session.commit()
 
+        # tell the world
+        log.info("added task %s with hash %s", task_row.uuid, file_hash.encode("hex_codec"))
+
 def yield_get_task_jobs(session, tasks_path, relative_to, collection, domain_name):
     """
     Find tasks to hash and name.
