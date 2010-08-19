@@ -35,7 +35,7 @@ cmake, define `CMAKE_PREFIX_PATH`; eg, if required libraries are installed under
 
 `cmake -DCMAKE_PREFIX_PATH=/opt/foo <other_options>`
 
-Note that cmake has known issues with paths that include colons.
+Note that CMake has known issues with paths that include colons.
 
 LICENSE
 -------
