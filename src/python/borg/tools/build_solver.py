@@ -3,6 +3,7 @@
 """
 
 if __name__ == "__main__":
+    from plac                    import call
     from borg.tools.build_solver import main
 
     raise SystemExit(main())
@@ -11,22 +12,14 @@ from cargo.log import get_logger
 
 log = get_logger(__name__)
 
-def main():
+def main(train_uuids_path, solver_py, out_path):
     """
     Script entry point.
     """
 
-    # get command line arguments
-    import borg.data
-
+    # transform arguments
     from uuid        import UUID
     from cargo.json  import load_json
-    from cargo.flags import parse_given
-
-    (train_uuids_path, solver_py, out_path) = \
-        parse_given(
-            usage = "%prog <uuids.json> <solver.py> <out.pickle> [options]",
-            )
 
     train_uuids = map(UUID, load_json(train_uuids_path))
 

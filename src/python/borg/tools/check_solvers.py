@@ -4,75 +4,15 @@
 """
 
 if __name__ == "__main__":
-    from borg.tools.test_solvers import main
+    from plac                     import call
+    from borg.tools.check_solvers import main
 
-    raise SystemExit(main())
+    call(main)
 
-import re
-import json
-import numpy
-import borg.solvers
-
-from os.path            import (
-    join,
-    dirname,
-    )
-from copy               import copy
-from tempfile           import NamedTemporaryFile
-from nose.tools         import nottest
-from cargo.io           import expandpath
-from cargo.log          import get_logger
-from cargo.json         import follows
-from cargo.flags        import (
-    Flag,
-    Flags,
-    with_flags_parsed,
-    )
+from plac      import annotations
+from cargo.log import get_logger
 
 log = get_logger(__name__, default_level = "NOTE")
-
-module_flags = \
-    Flags(
-        "Solver Execution Options",
-        Flag(
-            "-s",
-            "--seed",
-            default = "random",
-            metavar = "INT",
-            help    = "run solver with seed INT [%default]",
-            ),
-        Flag(
-            "-c",
-            "--cutoff",
-            type    = float,
-            default = 1e10,
-            metavar = "FLOAT",
-            help    = "run for at most FLOAT seconds [%default]",
-            ),
-        Flag(
-            "--verify-tmpdir",
-            action  = "store_true",
-            help    = "verify TMPDIR compliance via strace [%default]",
-            ),
-        Flag(
-            "-e",
-            "--expected",
-            metavar = "FILE",
-            help    = "read solver expectations from FILE [%default]",
-            ),
-        Flag(
-            "--tasks-dir",
-            default = "",
-            metavar = "PATH",
-            help    = "find tasks under PATH [%default]",
-            ),
-        Flag(
-            "-v",
-            "--verbose",
-            action  = "store_true",
-            help    = "be noisier [%default]",
-            ),
-        )
 
 def get_solver_expectations(start_path):
     """
@@ -84,14 +24,18 @@ def get_solver_expectations(start_path):
         (Recursively) yield solvers from a solvers file.
         """
 
+        from os.path    import dirname
+        from cargo.io   import expandpath
+        from cargo.json import (
+            follows,
+            load_json,
+            )
+
         path     = expandpath(raw_path)
         relative = dirname(path)
-
-        with open(path) as file:
-            loaded = json.load(file)
+        loaded   = load_json(path)
 
         for (name, value) in loaded.get("expected", {}).items():
-            yield (name, follows(value, relative))
 
         for included in loaded.get("includes", []):
             for pair in yield_from(expandpath(included, relative)):
@@ -104,9 +48,11 @@ def strace_signal(lines):
     Yield only strace lines that aren't obviously noise.
     """
 
+    from re import compile
+
     exclude = [
-        re.compile("open\\(\".+\",.*O_RDONLY.*"),
-        re.compile("--- SIG.+ ---"),
+        compile("open\\(\".+\",.*O_RDONLY.*"),
+        compile("--- SIG.+ ---"),
         ]
 
     for line in lines:
@@ -125,8 +71,10 @@ def tmpdir_uncompliance(lines):
         log.detail("from strace: %s", line.strip())
 
     # examine interesting lines
-    bad  = re.compile("open\\(\"/tmp/.+\", .+\\)")
-    good = re.compile("open\\(\"/tmp/solver\\_scratch\\..+\", .+\\)")
+    from re import compile
+
+    bad  = compile("open\\(\"/tmp/.+\", .+\\)")
+    good = compile("open\\(\"/tmp/solver\\_scratch\\..+\", .+\\)")
 
     for line in included:
         if bad.search(line) and not good.search(line):
@@ -138,6 +86,8 @@ def do_run(solver, cnf_path, cutoff, seed_request):
     """
 
     # if necessary, generate a seed
+    import numpy
+
     if not solver.seeded:
         seed = None
     elif seed_request == "random":
@@ -148,6 +98,7 @@ def do_run(solver, cnf_path, cutoff, seed_request):
     log.info("seed: %s", seed)
 
     # attempt to solve the instance
+    from os.path            import join
     from utexas.sat.solvers import (
         SAT_SanitizingSolver,
         SAT_UncompressingSolver,
@@ -172,6 +123,9 @@ def do_verified_run(solver, cnf_path, cutoff, seed_request):
     Run a solver, with optional verification of TMPDIR compliance.
     """
 
+    from copy     import copy
+    from tempfile import NamedTemporaryFile
+
     ssolver = copy(solver)
 
     with NamedTemporaryFile(prefix = "strace.") as file:
@@ -188,26 +142,25 @@ def do_verified_run(solver, cnf_path, cutoff, seed_request):
 
     return result
 
-@nottest
-def test_solver_on(solver, path, expectation):
+def check_solver_on(solver, path, expectation, cutoff, seed_flag, tasks_dir, verify_tmpdir):
     """
     Run a single test on a single solver.
     """
 
+    from os.path  import join
     from datetime import timedelta
-
-    flags = module_flags.given
+    from cargo.io import expandpath
 
     # interpret expectations
     if expectation is None:
         min_seconds  = 0.0
-        max_seconds  = flags.cutoff
-        seed_request = flags.seed
+        max_seconds  = cutoff
+        seed_request = seed_flag
     else:
         # unpack the general expectation tuple
         if len(expectation) == 2:
             (should_be, time_range) = expectation
-            seed_request            = flags.seed
+            seed_request            = seed_flag
         else:
             (should_be, time_range, seed_request) = expectation
 
@@ -218,14 +171,14 @@ def test_solver_on(solver, path, expectation):
             min_seconds = 0.0
             max_seconds = time_range
 
-    cutoff    = timedelta(seconds = max_seconds)
-    full_path = join(flags.tasks_dir, expandpath(path))
+    budget    = timedelta(seconds = max_seconds)
+    full_path = join(tasks_dir, expandpath(path))
 
     # run the solver
-    if flags.verify_tmpdir:
-        (outcome, run, seed) = do_verified_run(solver, full_path, cutoff, seed_request)
+    if verify_tmpdir:
+        (outcome, run, seed) = do_verified_run(solver, full_path, budget, seed_request)
     else:
-        (outcome, run, seed) = do_run(solver, full_path, cutoff, seed_request)
+        (outcome, run, seed) = do_run(solver, full_path, budget, seed_request)
 
     # mark as passed/failed
     if expectation is not None:
@@ -238,7 +191,7 @@ def test_solver_on(solver, path, expectation):
                 outcome,
                 run.proc_elapsed,
                 min_elapsed,
-                cutoff,
+                budget,
                 seed,
                 )
         else:
@@ -251,43 +204,35 @@ def test_solver_on(solver, path, expectation):
                 seed,
                 )
 
-@nottest
-def test_solver(solver, tests):
-    """
-    Run a set of tests on a single solver.
-    """
-
-    log.note("testing %s", solver.name)
-
-    for (path, expectation) in tests.items():
-        test_solver_on(solver, path, expectation)
-
-@nottest
-def test_solvers(tests_map):
-    """
-    Run a set of solver tests.
-    """
-
-    for (solver, tests) in tests_map.items():
-        test_solver(solver, tests)
-
-@with_flags_parsed(
-    usage = "usage: %prog [options] [solver [file]]",
+@annotations(
+    solver        = ("solver to check"          , "positional"),
+    seed          = ("solver PRNG seed"         , "option"     , "s" , int)  ,
+    cutoff        = ("max run duration"         , "option"     , "c" , float),
+    verify_tmpdir = ("verify $TMPDIR compliance", "flag")      ,
+    expected      = ("read expectations from"   , "option"     , "e"),
+    tasks_dir     = ("find tasks under"         , "option")    ,
+    verbose       = ("be noisier"               , "flag"       , "v"),
     )
-def main(positional):
+def main(
+    solver        = None,
+    seed          = "random",
+    cutoff        = 1e10,
+    verify_tmpdir = False,
+    expected      = None,
+    tasks_dir     = "",
+    verbose       = False,
+    *files,
+    ):
     """
     Main.
     """
-
-    # basic flag handling
-    flags = module_flags.given
 
     # set up log output
     from cargo.log import enable_default_logging
 
     enable_default_logging()
 
-    if flags.verbose:
+    if verbose:
         get_logger("cargo.unix.accounting", level = "DEBUG")
 
     # build the solvers
@@ -296,8 +241,8 @@ def main(positional):
     solvers = get_named_solvers()
 
     # get expectations, if any
-    if flags.expected is not None:
-        expected = get_solver_expectations(flags.expected)
+    if expected is not None:
+        expected = get_solver_expectations(expected)
 
     # build a list of tests to run
     if len(positional) > 0:
@@ -311,5 +256,9 @@ def main(positional):
         tests_map = dict((solvers[n], v) for (n, v) in expected.items())
 
     # and run them
-    test_solvers(tests_map)
+    for (solver, tests) in tests_map.items():
+        log.note("testing %s", solver.name)
+
+        for (path, expectation) in tests.items():
+            check_solver_on(solver, path, expectation, cutoff, seed, tasks_dir, verify_tmpdir)
 

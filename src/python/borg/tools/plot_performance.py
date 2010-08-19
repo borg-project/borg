@@ -3,9 +3,10 @@
 """
 
 if __name__ == "__main__":
+    from plac                        import call
     from borg.tools.plot_performance import main
 
-    raise SystemExit(main())
+    call(main)
 
 from cargo.log import get_logger
 
@@ -96,17 +97,10 @@ def plot_trial(session, trial_rows):
     pylab.legend(loc = "lower right")
     pylab.show()
 
-def main():
+def main(*trial_uuids):
     """
     Run the script.
     """
-
-    # get command line arguments
-    import borg.data
-
-    from cargo.flags import parse_given
-
-    trial_uuids = parse_given(usage = "%prog [options] <trial_uuid> [...]")
 
     # set up logging
     from cargo.log import enable_default_logging

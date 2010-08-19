@@ -3,56 +3,18 @@
 """
 
 if __name__ == "__main__":
+    from plac                      import call
     from borg.tools.run_validation import main
 
-    raise SystemExit(main())
+    call(main)
 
-from cargo.log   import get_logger
-from cargo.flags import (
-    Flag,
-    Flags,
-    )
+from uuid       import UUID
+from datetime   import parse_timedelta
+from plac       import annotations
+from cargo.log  import get_logger
+from cargo.json import load_json
 
-log          = get_logger(__name__, default_level = "INFO")
-module_flags = \
-    Flags(
-        "Script Options",
-        Flag(
-            "-t",
-            "--trial",
-            default = "random",
-            metavar = "UUID",
-            help    = "place attempts in trial UUID [%default]",
-            ),
-        Flag(
-            "-p",
-            "--parent-trial",
-            default = None,
-            metavar = "UUID",
-            help    = "use a child trial of UUID [%default]",
-            ),
-        Flag(
-            "-r",
-            "--runs",
-            type    = int,
-            default = 1,
-            metavar = "INT",
-            help    = "make INT validation runs [%default]",
-            ),
-        Flag(
-            "-f",
-            "--training-fraction",
-            type    = float,
-            default = 0.0,
-            metavar = "FLOAT",
-            help    = "use fraction FLOAT of tasks for training [%default]",
-            ),
-        Flag(
-            "--cache-path",
-            metavar = "PATH",
-            help    = "read data from PATH when possible [%default]",
-            ),
-        )
+log = get_logger(__name__, default_level = "INFO")
 
 def make_validation_run(
     engine_url,
@@ -216,34 +178,34 @@ def outsource_validation_jobs(
 
     outsource_or_run(jobs, "validation runs (at %s)" % utc_now())
 
-def main():
+@annotations(
+    group        = ("group name")       ,
+    budget       = ("solver time budget", "positional", None , parse_timedelta),
+    fraction     = ("train set fraction", "positional", None , float)          ,
+    uuids        = ("task uuids json"   , "positional", None , lambda p: map(UUID, load_json(p))),
+    trial        = ("attempts trial"    , "option"    , "t"  , UUID)           ,
+    parent_trial = ("trial parent"      , "option"    , "p"  , UUID)
+    runs         = ("number of runs"    , "option"    , "r"  , int)            ,
+    cache_path   = ("local database"    , "option"    , None),
+    )
+def main(
+    group,
+    budget,
+    fraction,
+    uuids,
+    trial        = "random",
+    parent_trial = None,
+    runs         = 1,
+    cache_path   = None,
+    ):
     """
     Run the script.
     """
 
-    # get command line arguments
-    import cargo.labor.storage
-    import borg.data
-    import borg.tasks
-    import borg.solvers
+    if cache_path is not None:
+        from os.path import abspath
 
-    from uuid           import UUID
-    from os.path        import abspath
-    from datetime       import timedelta
-    from cargo.json     import load_json
-    from cargo.flags    import parse_given
-
-    (group, budget, fraction, uuids) = \
-        parse_given(usage = "%prog [options] <group> <budget> <fraction> <uuids.json>")
-
-    budget   = timedelta(seconds = float(budget))
-    fraction = float(fraction)
-    uuids    = map(UUID, load_json(uuids))
-
-    if module_flags.given.cache_path is None:
-        cache_path = None
-    else:
-        cache_path = abspath(module_flags.given.cache_path)
+        cache_path = abspath(cache_path)
 
     # set up logging
     from cargo.log import enable_default_logging
@@ -277,7 +239,7 @@ def main():
                 named_solvers = get_named_solvers(use_recycled = True)
 
                 for request in yield_solver_requests():
-                    for i in xrange(module_flags.given.runs):
+                    for i in xrange(runs):
                         yield CallableJob(
                             make_validation_run,
                             engine_url    = session.connection().engine.url,

@@ -3,36 +3,15 @@
 """
 
 if __name__ == "__main__":
+    from plac                 import call
     from borg.tools.get_tasks import main
 
-    raise SystemExit(main())
+    call(main)
 
-from cargo.log   import get_logger
-from cargo.flags import (
-    Flag,
-    Flags,
-    )
+from plac      import annotations
+from cargo.log import get_logger
 
-log          = get_logger(__name__, default_level = "NOTE")
-module_flags = \
-    Flags(
-        "Script Options",
-        Flag(
-            "--collection",
-            default = "default",
-            metavar = "NAME",
-            help    = "task names in collection NAME [%default]",
-            ),
-        Flag(
-            "-d",
-            "--domain",
-            type    = "choice",
-            choices = ["sat", "pb"],
-            default = "sat",
-            metavar = "NAME",
-            help    = "find NAME tasks [%default]",
-            ),
-        )
+log = get_logger(__name__, default_level = "NOTE")
 
 def get_task(
     engine_url,
@@ -129,18 +108,16 @@ def yield_get_task_jobs(session, tasks_path, relative_to, collection, domain_nam
             domain     = domain,
             )
 
-def main():
+@annotations(
+    tasks_path  = ("find tasks under", )        ,
+    relative_to = ("collection root" , )        ,
+    domain      = ("problem domain"  , "option" , "d", str, ["sat", "pb"]),
+    collection  = ("task name group" , "option"),
+    )
+def main(tasks_path, relative_to, domain = "sat", collection = "default"):
     """
     Run the script.
     """
-
-    # get command line arguments
-    import cargo.labor.storage
-    import borg.data
-
-    from cargo.flags import parse_given
-
-    (tasks_path, relative_to) = parse_given(usage = "%prog <tasks> <relative> [options]")
 
     # set up logging
     from cargo.log import enable_default_logging
@@ -166,8 +143,8 @@ def main():
                         session,
                         abspath(tasks_path),
                         abspath(relative_to),
-                        module_flags.given.collection,
-                        module_flags.given.domain,
+                        collection,
+                        domain,
                         ),
                     )
 

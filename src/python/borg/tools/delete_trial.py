@@ -3,9 +3,10 @@
 """
 
 if __name__ == "__main__":
+    from plac                    import call
     from borg.tools.delete_trial import main
 
-    raise SystemExit(main())
+    call(main)
 
 from cargo.log import get_logger
 
@@ -60,19 +61,10 @@ def delete_trials(session, trial_uuids):
         session.query(TrialRow).get(trial_uuid).delete(session)
         session.commit()
 
-def main():
+def main(mode, *trial_uuids):
     """
     Run the script.
     """
-
-    # get command line arguments
-    import borg.data
-
-    from cargo.flags import parse_given
-
-    positional  = parse_given(usage = "%prog <mode> [<trial_uuid> [...]] [options]")
-    mode        = positional[0]
-    trial_uuids = positional[1:]
 
     # set up logging
     from cargo.log import enable_default_logging
