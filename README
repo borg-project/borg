@@ -1,16 +1,41 @@
 BORG
 ====
 
+REQUIREMENTS
+------------
+
+The project assumes a reasonably-standard Linux environment, available C
+compiler, CMake, and at least Python 2.6, along with a variety of supporting
+modules. Using virtualenv is strongly recommended. The core dependencies are
+listed in the `MODULES` file, which can be passed as a requirements file to the
+pip package management tool with `pip install -r MODULES`.
+
 COMPILATION
 -----------
 
+# Overview
+
+Most of the project is written in Python, but important subsets are written in
+Cython and compiled. CMake is used to handle compilation and installation. The
+procedure roughly follows:
+
+1. create an out-of-source build directory, eg, `mkdir build`
+2. run cmake from the build directory, eg:
+
+`cmake -DCMAKE_INSTALL_PREFIX=<prefix> <path_to_source_tree>`
+
+3. `make`
+4. `make install`
+
+# Dependencies
+
 To provide the location of libraries in nonstandard installation prefixes to
-cmake, use the CMAKE_PREFIX_PATH environment variable; eg,
+cmake, define `CMAKE_PREFIX_PATH`; eg, if required libraries are installed under
+`/opt/foo/include` and `/opt/foo/lib`:
 
-CMAKE_PREFIX_PATH=/opt/foo ./run_cmake
+`cmake -DCMAKE_PREFIX_PATH=/opt/foo <other_options>`
 
-, where required libraries are installed under /opt/foo/include and
-/opt/foo/lib. Note that cmake has known issues with paths that include colons.
+Note that cmake has known issues with paths that include colons.
 
 LICENSE
 -------
