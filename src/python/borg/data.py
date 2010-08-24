@@ -393,6 +393,9 @@ class TaskNameRow(DatumBase):
 
     task = relationship(TaskRow, backref = "names")
 
+    task_unique = UniqueConstraint("task_uuid", "collection")
+    name_unique = UniqueConstraint("name", "collection")
+
 class TaskFeatureRow(DatumBase):
     """
     Record the features of a task.

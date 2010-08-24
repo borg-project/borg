@@ -19,7 +19,8 @@ install(
         solve.py
         build_solver.py
         get_tasks.py
-        test_solvers.py
+        check_solvers.py
+        copy_rows.py
 	DESTINATION lib/borg/tools
 	)
 

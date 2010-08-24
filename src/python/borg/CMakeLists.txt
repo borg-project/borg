@@ -10,6 +10,7 @@ install(
         data.py
         rowed.py
         tasks.py
+        defaults.py
     DESTINATION lib/borg
     )
 

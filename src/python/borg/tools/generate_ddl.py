@@ -9,6 +9,7 @@ if __name__ == "__main__":
     call(main)
 
 from plac import annotations
+from borg import defaults
 
 def generate_ddl(engine, reflect, apply, topological):
     """
@@ -44,11 +45,12 @@ def generate_ddl(engine, reflect, apply, topological):
             print CreateTable(table).compile(engine)
 
 @annotations(
+    url         = ("database URL"),
     reflect     = ("load the reflected schema"  , "flag", "r"),
     apply       = ("create the generated schema", "flag", "a"),
     topological = ("sort by dependency"         , "flag", "t"),
     )
-def main(reflect = False, apply = False, topological = False):
+def main(url = defaults.research_url, reflect = False, apply = False, topological = False):
     """
     Deal with core database metadata.
     """
@@ -69,8 +71,8 @@ def main(reflect = False, apply = False, topological = False):
     # connect to the database and go
     from cargo.sql.alchemy import SQL_Engines
 
-    with SQL_Engines.default:
+    with SQL_Engines.default as engines:
         from borg.data import research_connect
 
-        generate_ddl(research_connect())
+        generate_ddl(engines.get(url), reflect, apply, topological)
 
