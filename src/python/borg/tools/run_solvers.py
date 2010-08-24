@@ -8,6 +8,7 @@ if __name__ == "__main__":
 
     call(main)
 
+from uuid           import UUID
 from plac           import annotations
 from cargo.log      import get_logger
 from cargo.temporal import parse_timedelta
@@ -129,8 +130,6 @@ def yield_task_uuids(session, task_uuids):
         for (uuid,) in session.query(TR.uuid):
             yield uuid
     else:
-        from uuid import UUID
-
         for s in task_uuids:
             yield UUID(s)
 
@@ -142,15 +141,17 @@ def yield_task_uuids(session, task_uuids):
     restarts        = ("minimum attempts" , "option"    , "r"  , int)            ,
     seeded_restarts = ("minimum attempts" , "option"    , "s"  , int)            ,
     recycle         = ("reuse past runs"  , "flag")     ,
+    outsource       = ("outsource labor"  , "flag")
     )
 def main(
     budget,
     arguments       = None,
-    trial           = "random",
+    trial           = None,
     parent_trial    = None,
     restarts        = 1,
     seeded_restarts = 1,
     recycle         = False,
+    outsource       = False,
     ):
     """
     Run the script.
@@ -194,7 +195,7 @@ def main(
 
                 assert parent_trial is not None
 
-            if trial == "random":
+            if trial is None:
                 trial_row = TrialRow(label = trial_label, parent = parent_trial)
 
                 session.add(trial_row)
@@ -229,12 +230,14 @@ def main(
 
                 for solver in yield_solvers(session, arguments.get("solvers")):
                     if solver.get_seeded(environment):
-                        restarts = max(restarts, seeded_restarts)
+                        restarts_of = max(restarts, seeded_restarts)
+                    else:
+                        restarts_of = restarts
 
-                    log.info("making %i restarts of %s", restarts, solver.name)
+                    log.info("making %i restarts of %s", restarts_of, solver.name)
 
                     for task_uuid in yield_task_uuids(session, arguments.get("tasks")):
-                        for i in xrange(restarts):
+                        for i in xrange(restarts_of):
                             yield CallableJob(
                                 solve_task,
                                 engine_url    = session.connection().engine.url,
@@ -253,5 +256,5 @@ def main(
         # run the jobs
         from cargo.labor.storage import outsource_or_run
 
-        outsource_or_run(jobs, trial_label)
+        outsource_or_run(jobs, outsource, trial_label)
 

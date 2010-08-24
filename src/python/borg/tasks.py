@@ -13,6 +13,7 @@ from borg.rowed  import (
     Rowed,
     AbstractRowed,
     )
+from borg        import defaults
 
 log = get_logger(__name__)
 
