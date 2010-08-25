@@ -10,10 +10,11 @@ if __name__ == "__main__":
 
 from plac      import annotations
 from cargo.log import get_logger
+from borg      import defaults
 
 log = get_logger(__name__, default_level = "INFO")
 
-def commit_features(instance_path, domain, features):
+def commit_features(instance_path, domain, features, url):
     """
     Add feature information to the database.
     """
@@ -26,16 +27,10 @@ def commit_features(instance_path, domain, features):
     log.info("instance has hash %s", task_hash.encode("hex_codec"))
 
     # connect to the database
-    from cargo.sql.alchemy import (
-        SQL_Engines,
-        make_session,
-        )
-    from borg.data         import research_connect
+    from cargo.sql.alchemy import SQL_Engines
 
-    ResearchSession = make_session(bind = research_connect())
-
-    # locate the instance row
-    with ResearchSession() as session:
+    with SQL_Engines.default.make_session(url)() as session:
+		# locate the instance row
         from borg.data import (
             FileTaskRow as FTR,
             TaskFeatureRow as TFR,
@@ -61,9 +56,10 @@ def commit_features(instance_path, domain, features):
         session.commit()
 
 @annotations(
-    commit = ("commit features to database", "flag", "c"),
+    commit = ("commit features to database", "flag"   , "c"),
+    url    = ("research database URL"      , "option"),
     )
-def main(domain_name, path, commit = False):
+def main(domain_name, path, commit = False, url = defaults.research_url):
     """
     Main.
     """
@@ -102,5 +98,5 @@ def main(domain_name, path, commit = False):
 
         # store it, if requested
         if commit:
-            commit_features(task_path, domain, features)
+            commit_features(task_path, domain, features, url)
 

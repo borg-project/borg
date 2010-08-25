@@ -22,11 +22,11 @@ def assert_tasks_stored(session):
 
     for i in xrange(8):
         for j in xrange(8):
-            task_row =                                   \
-                session                                  \
-                .query(TNR)                               \
+            task_row =                                          \
+                session                                         \
+                .query(TNR)                                     \
                 .filter(TNR.name == "tasks/%i/%i.cnf" % (i, j)) \
-                .filter(TNR.collection == "sat/")         \
+                .filter(TNR.collection == "sat/")               \
                 .first()
 
             assert_true(task_row is not None)
@@ -41,11 +41,14 @@ def make_cnf(literals):
 
 def test_get_tasks():
     """
-    Test the tools.get_tasks script.
+    Test the task acquisition tool.
     """
 
     # scan a fake path
-    from cargo.io import mkdtemp_scoped
+    from cargo.io  import mkdtemp_scoped
+    from cargo.log import get_logger
+
+    log = get_logger(__name__, level = "NOTSET")
 
     with mkdtemp_scoped() as sandbox_path:
         # populate a directory with tasks
@@ -66,43 +69,46 @@ def test_get_tasks():
                 with open(task_ij_path, "w") as file:
                     file.write(make_cnf([j]))
 
+        # set up a test database
+        from cargo.sql.alchemy import SQL_Engines
+
+        #url = "sqlite:///%s" % join(sandbox_path, "test.sqlite")
+        url = "sqlite:////tmp/baz.sqlite"
+
+        with SQL_Engines() as engines:
+            from borg.data import DatumBase
+
+            DatumBase.metadata.create_all(engines.get(url).connect())
+
         # invoke the script
-        from subprocess import check_call
-        from functools  import partial
-        from cargo.io   import unset_all
+        from cargo.io import call_capturing
+        from borg     import export_clean_defaults_path
 
-        research_engine_url = "sqlite:///%s" % join(sandbox_path, "test.sqlite")
-
-        with open("/dev/null", "w") as null_file:
-            check_call(
+        (stdout, stderr, code) = \
+            call_capturing(
                 [
                     "python",
                     "-m",
                     "borg.tools.get_tasks",
                     tasks_path,
                     sandbox_path,
+					"--domain",
+					"sat",
                     "--collection",
                     "sat/",
-                    "--research-database",
-                    research_engine_url,
-                    "--create-research-schema",
+                    "-url",
+                    url,
                     ],
-                stdout     = null_file,
-                stderr     = null_file,
-                preexec_fn = partial(unset_all, "CARGO_FLAGS_EXTRA_FILE"),
+                preexec_fn = export_clean_defaults_path,
                 )
 
+        log.debug("call stdout follows:\n%s", stdout)
+        log.debug("call stderr follows:\n%s", stderr)
+
+        assert_equal(code, 0)
+
         # success?
-        from sqlalchemy        import create_engine
-        from cargo.sql.alchemy import (
-            disposing,
-            make_session,
-            )
-
-        research_engine = create_engine(research_engine_url)
-        ResearchSession = make_session(bind = research_engine)
-
-        with disposing(research_engine):
-            with ResearchSession() as session:
+        with SQL_Engines() as engines:
+            with engines.make_session(url)() as session:
                 assert_tasks_stored(session)
 

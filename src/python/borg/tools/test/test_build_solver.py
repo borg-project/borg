@@ -19,11 +19,11 @@ def test_build_solver():
 
     with mkdtemp_scoped() as sandbox_path:
         # invoke the script
-        from cargo.io import (
-            unset_all,
-            call_capturing,
-            )
-        from borg     import get_support_path
+        from cargo.io import call_capturing
+        from borg     import (
+			get_support_path,
+			export_clean_defaults_path,
+			)
 
         uuids_json_path    = join(sandbox_path, "train_uuids.json")
         solver_pickle_path = join(sandbox_path, "solver.pickle")
@@ -42,7 +42,7 @@ def test_build_solver():
                     get_support_path("for_tests/foo_solver.py"),
                     solver_pickle_path,
                     ],
-                preexec_fn = lambda: unset_all("CARGO_FLAGS_EXTRA_FILE"),
+				preexec_fn = export_clean_defaults_path,
                 )
 
         log.debug("call stdout follows:\n%s", stdout)

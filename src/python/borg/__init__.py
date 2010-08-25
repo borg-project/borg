@@ -20,3 +20,16 @@ def get_support_path(name):
     else:
         raise RuntimeError("specified support file does not exist")
 
+def export_clean_defaults_path():
+    """
+    Export a PYTHONPATH
+    """
+
+    from os import environ
+
+    environ["PYTHONPATH"] = \
+        "%s:%s" % (
+            get_support_path("for_tests/reset_defaults"),
+            environ["PYTHONPATH"],
+            )
+

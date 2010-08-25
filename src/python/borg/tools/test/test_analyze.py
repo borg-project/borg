@@ -66,11 +66,11 @@ def test_analyze_instance():
         # invoke the script
         from functools  import partial
         from subprocess import CalledProcessError
-        from cargo.io   import (
-            unset_all,
-            check_call_capturing,
+        from cargo.io   import check_call_capturing
+        from borg       import (
+            get_support_path,
+            export_clean_defaults_path,
             )
-        from borg       import get_support_path
 
         try:
             check_call_capturing(
@@ -78,13 +78,13 @@ def test_analyze_instance():
                     "python",
                     "-m",
                     "borg.tools.analyze",
-                    "--research-database",
+                    "-url",
                     engine_url,
                     "--commit",
                     "sat",
                     get_support_path("for_tests/s57-100.cnf"),
                     ],
-                preexec_fn = partial(unset_all, "CARGO_FLAGS_EXTRA_FILE"),
+                preexec_fn = export_clean_defaults_path,
                 )
         except CalledProcessError, error:
             print error.stdout

@@ -67,7 +67,12 @@ def test_solve():
             environment   = Environment()
             budget        = timedelta(seconds = 16.0)
 
-            with env_restored(unset = ["CARGO_FLAGS_EXTRA_FILE"]):
+            with env_restored():
+                from os   import environ
+                from borg import export_clean_defaults_path
+
+                export_clean_defaults_path()
+
                 attempt = script_solver.solve(task, budget, numpy.random, environment)
 
     # does the result match expectations?

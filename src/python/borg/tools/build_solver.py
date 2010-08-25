@@ -6,13 +6,18 @@ if __name__ == "__main__":
     from plac                    import call
     from borg.tools.build_solver import main
 
-    raise SystemExit(main())
+    call(main)
 
+from plac      import annotations
 from cargo.log import get_logger
+from borg      import defaults
 
 log = get_logger(__name__)
 
-def main(train_uuids_path, solver_py, out_path):
+@annotations(
+    url = ("database URL", "option"),
+    )
+def main(train_uuids_path, solver_py, out_path, url = defaults.research_url):
     """
     Script entry point.
     """
@@ -36,11 +41,19 @@ def main(train_uuids_path, solver_py, out_path):
     get_logger("borg.portfolio.sat_world" , level = "DETAIL")
     get_logger("borg.portfolio.strategies", level = "DETAIL")
 
-    # construct the solver
-    from cargo.sql.alchemy    import make_session
-    from borg.data            import research_connect
-    from borg.portfolio.world import DecisionTrainer
+    # build the trainer, if any
+    if url:
+        from cargo.sql.alchemy    import (
+            make_engine,
+            make_session,
+            )
+        from borg.portfolio.world import DecisionTrainer
 
+        trainer = DecisionTrainer(make_session(bind = make_engine(url)), train_uuids)
+    else:
+        trainer = None
+
+    # construct the solver
     def built(solver):
         """
         Receive a solver from the construction script.
@@ -51,8 +64,5 @@ def main(train_uuids_path, solver_py, out_path):
         with open(out_path, "w") as file:
             pickle.dump(solver, file, -1)
 
-    ResearchSession = make_session(bind = research_connect())
-    trainer         = DecisionTrainer(ResearchSession, train_uuids)
-
-    execfile(solver_py, {"built": built})
+    execfile(solver_py, {"built" : built, "trainer" : trainer})
 

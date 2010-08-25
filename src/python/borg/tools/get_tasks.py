@@ -10,8 +10,9 @@ if __name__ == "__main__":
 
 from plac      import annotations
 from cargo.log import get_logger
+from borg      import defaults
 
-log = get_logger(__name__, default_level = "NOTE")
+log = get_logger(__name__, default_level = "INFO")
 
 def get_task(
     engine_url,
@@ -84,6 +85,8 @@ def get_task(
 
         # tell the world
         log.info("added task %s with hash %s", task_row.uuid, file_hash.encode("hex_codec"))
+        print "added task %s with hash %s" % (task_row.uuid, file_hash.encode("hex_codec"))
+        print "name", name
 
 def yield_get_task_jobs(session, tasks_path, relative_to, collection, domain_name):
     """
@@ -111,10 +114,17 @@ def yield_get_task_jobs(session, tasks_path, relative_to, collection, domain_nam
 @annotations(
     tasks_path  = ("find tasks under", )        ,
     relative_to = ("collection root" , )        ,
-    domain      = ("problem domain"  , "option" , "d", str, ["sat", "pb"]),
-    collection  = ("task name group" , "option"),
+    domain      = ("problem domain"  , "option" , "d" , str, ["sat", "pb"]),
+    collection  = ("task name group" , "option" , "c"),
+    url         = ("database URL"    , "option"),
     )
-def main(tasks_path, relative_to, domain = "sat", collection = "default"):
+def main(
+    tasks_path,
+    relative_to,
+    domain     = "sat",
+    collection = "default",
+    url        = defaults.research_url,
+    ):
     """
     Run the script.
     """
@@ -125,18 +135,12 @@ def main(tasks_path, relative_to, domain = "sat", collection = "default"):
     enable_default_logging()
 
     # connect to the database and go
-    from cargo.sql.alchemy import (
-        SQL_Engines,
-        make_session,
-        )
+    from cargo.sql.alchemy import SQL_Engines
 
-    with SQL_Engines.default:
-        from os.path   import abspath
-        from borg.data import research_connect
+    with SQL_Engines.default as engines:
+        with engines.make_session(url)() as session:
+            from os.path import abspath
 
-        ResearchSession = make_session(bind = research_connect())
-
-        with ResearchSession() as session:
             jobs = \
                 list(
                     yield_get_task_jobs(
@@ -152,5 +156,5 @@ def main(tasks_path, relative_to, domain = "sat", collection = "default"):
         from cargo.labor.storage import outsource_or_run
         from cargo.temporal      import utc_now
 
-        outsource_or_run(jobs, "adding task rows (at %s)" % utc_now())
+        outsource_or_run(jobs, False, "adding task rows (at %s)" % utc_now())
 

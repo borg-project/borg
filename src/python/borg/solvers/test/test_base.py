@@ -55,10 +55,8 @@ def test_get_named_solvers():
 
         solvers = \
             get_named_solvers(
-                flags = {
-                    "solvers_file"      : [solvers_json_path],
-                    "use_recycled_runs" : False,
-                    },
+				paths        = [solvers_json_path],
+				use_recycled = False,
                 )
 
         # assert expectations
