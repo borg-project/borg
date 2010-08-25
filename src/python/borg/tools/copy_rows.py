@@ -19,8 +19,9 @@ log = get_logger(__name__, level = "NOTSET")
     from_urls = ("source URL(s)")  ,
     tables    = ("only table(s)"   , "option", "t" , lambda s: s.split(", ")),
     where     = ("SQL filter"      , "option", "w"),
+    fetch     = ("buffer size"     , "option", "f" , int),
     )
-def main(to_url, tables = None, quiet = False, where = None, *from_urls):
+def main(to_url, tables = None, quiet = False, where = None, fetch = 8192, *from_urls):
     """
     Copy data from source database(s) to some single target.
     """
@@ -38,24 +39,21 @@ def main(to_url, tables = None, quiet = False, where = None, *from_urls):
         raise ValueError("exactly one table must be specified with where clause")
 
     # copy as requested
-    from sqlalchemy        import create_engine
-    from cargo.sql.alchemy import normalize_url
+    from cargo.sql.alchemy import make_engine
 
-    to_engine     = create_engine(normalize_url(to_url))
+    to_engine     = make_engine(to_url)
     to_connection = to_engine.connect()
 
     with to_connection.begin():
         if tables is not None:
             log.debug("permitting only tables: %s", tables)
 
-        for raw_from_url in from_urls:
+        for from_url in from_urls:
             # normalize the URL
-            from_url = normalize_url(raw_from_url)
-
-            log.info("copying from %s", from_url)
+            log.info("copying from %s, fetching %i at a time", from_url, fetch)
 
             # connect to this source
-            from_engine     = create_engine(from_url)
+            from_engine     = make_engine(from_url)
             from_connection = from_engine.connect()
 
             # reflect its schema
@@ -68,7 +66,13 @@ def main(to_url, tables = None, quiet = False, where = None, *from_urls):
 
                     from cargo.sql.actions import copy_table
 
-                    copy_table(from_connection, to_connection, sorted_table, where = where)
+                    copy_table(
+                        from_connection,
+                        to_connection,
+                        sorted_table,
+                        where = where,
+                        fetch = fetch,
+                        )
 
             # done
             from_engine.dispose()
