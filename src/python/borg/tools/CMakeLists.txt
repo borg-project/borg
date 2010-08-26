@@ -9,7 +9,6 @@ install(
 		bench_bellman.py
         calibrate.py
         delete_trial.py
-        generate_ddl.py
         plot_performance.py
         preprocess_tasks.py
         print_run.py
@@ -20,7 +19,6 @@ install(
         build_solver.py
         get_tasks.py
         check_solvers.py
-        copy_rows.py
 	DESTINATION lib/borg/tools
 	)
 

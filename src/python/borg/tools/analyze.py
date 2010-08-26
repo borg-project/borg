@@ -61,7 +61,7 @@ def commit_features(instance_path, domain, features, url):
     )
 def main(domain_name, path, commit = False, url = defaults.research_url):
     """
-    Main.
+    Acquire task feature information.
     """
 
     # set up log output

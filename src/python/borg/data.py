@@ -32,11 +32,11 @@ from cargo.sql.alchemy          import (
     SQL_Engines,
     SQL_TimeDelta,
     )
+from borg                       import defaults
 
 log       = get_logger(__name__)
 DatumBase = declarative_base()
-
-from borg import defaults
+meta      = DatumBase.metadata
 
 def research_connect(engines = SQL_Engines.default, url = defaults.research_url):
     """

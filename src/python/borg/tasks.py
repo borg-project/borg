@@ -206,6 +206,14 @@ class UUID_Task(Task):
 
         return session.query(TR).get(self._uuid)
 
+    @property
+    def description(self):
+        """
+        Describe this task.
+        """
+
+        return str(self._uuid)
+
     @staticmethod
     def with_prefix(session, prefix):
         """
