@@ -11,143 +11,138 @@ if __name__ == "__main__":
 from uuid           import UUID
 from plac           import annotations
 from cargo.log      import get_logger
+from cargo.sugar    import composed
 from cargo.temporal import parse_timedelta
 
 log = get_logger(__name__, default_level = "INFO")
 
-def solve_task(
-    engine_url,
-    trial_row,
-    solver,
-    task_uuid,
-    budget,
-    random,
-    named_solvers,
-    collections,
-    use_recycled,
-    ):
+class SolveTaskJob(object):
     """
-    Make some number of solver runs on a task.
+    Attempt to solve a given task.
     """
 
-    # make sure that we're logging
-    from cargo.log import enable_default_logging
+    def __init__(self, url, solver, task_uuid, budget, named, recycle):
+        """
+        Initialize.
+        """
 
-    enable_default_logging()
+        from cargo.random import get_random_random
+        from borg.tasks   import get_collections
 
-    get_logger("cargo.unix.accounting",      level = "DEBUG")
-    get_logger("borg.solvers.competition",   level = "DEBUG")
-    get_logger("borg.solvers.uncompressing", level = "DEBUG")
+        self._url         = url
+        self._solver      = solver
+        self._task_uuid   = task_uuid
+        self._budget      = budget
+        self._named       = named
+        self._recycle     = recycle
+        self._random      = get_random_random()
+        self._collections = get_collections()
 
-    # connect to the database
-    from cargo.sql.alchemy import (
-        SQL_Engines,
-        make_session,
-        )
+    def __call__(self):
+        """
+        Make some number of solver runs on a task.
+        """
 
-    main_engine = SQL_Engines.default.get(engine_url)
-    MainSession = make_session(bind = main_engine)
+        # log as appropriate
+        get_logger("cargo.unix.accounting",      level = "DEBUG")
+        get_logger("borg.solvers.competition",   level = "DEBUG")
+        get_logger("borg.solvers.uncompressing", level = "DEBUG")
 
-    with MainSession() as session:
-        # set up the environment
-        from borg.solvers import Environment
+        # connect to the database
+        from cargo.sql.alchemy import SQL_Engines
 
-        environment = \
-            Environment(
-                MainSession   = MainSession,
-                CacheSession  = MainSession, # FIXME
-                named_solvers = named_solvers,
-                collections   = collections,
-                )
+        MainSession = SQL_Engines.default.make_session(self._url)
 
-        # prepare the run
-        import borg.solvers.base
+        with MainSession() as session:
+            # set up the environment
+            from borg.solvers import Environment
 
-        from borg.data import TaskRow
+            environment = \
+                Environment(
+                    MainSession   = MainSession,
+                    named_solvers = self._named,
+                    collections   = self._collections,
+                    )
 
-        trial_row = session.merge(trial_row)
-        task_row  = session.query(TaskRow).get(task_uuid)
+            # prepare the run
+            from borg.data import TaskRow
 
-        if use_recycled:
-            from borg.tasks import Task
+            task_row = session.query(TaskRow).get(self._task_uuid)
 
-            full_solver = solver
-            task        = Task(row = task_row)
-        else:
-            from borg.solvers import UncompressingSolver
+            if self._recycle:
+                from borg.tasks import UUID_Task
 
-            full_solver = UncompressingSolver(solver)
-            task        = task_row.get_task(environment)
+                full_solver = self._solver
+                task        = UUID_Task(self._task_uuid, row = task_row)
+            else:
+                from borg.solvers import UncompressingSolver
 
-        # make the run
-        log.info("running %s on %s", solver.name, task_row.uuid)
+                full_solver = UncompressingSolver(self._solver)
+                task        = task_row.get_task(environment)
 
-        session.commit()
+            # make the run
+            log.info("running %s on %s", self._solver.name, task_row.uuid)
 
-        attempt = full_solver.solve(task, budget, random, environment)
+            session.commit()
 
-        # store the attempt
-        run_row = attempt.get_row(session)
+            attempt = full_solver.solve(task, self._budget, self._random, environment)
 
-        run_row.trials = [trial_row]
+            # store the attempt
+            attempt.get_row(session)
 
-        session.commit()
+            session.commit()
 
-def yield_solvers(session, solver_pairs):
-    """
-    Build the solvers as configured.
-    """
+    @staticmethod
+    @composed(list)
+    def make_all(session, budget, restarts, seeded_restarts, recycle):
+        """
+        Generate a set of jobs to distribute.
+        """
 
-    from borg.solvers import LookupSolver
+        from borg.data    import (
+            TaskRow as TR,
+            SolverRow as SR,
+            )
+        from borg.solvers import (
+            Environment,
+            LookupSolver,
+            get_named_solvers,
+            )
 
-    if solver_pairs is None:
-        from borg.data import SolverRow as SR
+        named_solvers = get_named_solvers(use_recycled = recycle)
+        environment   = Environment(named_solvers = named_solvers)
+        task_uuids    = [u for (u,) in session.query(TR.uuid)]
 
         for (name,) in session.query(SR.name):
-            yield LookupSolver(name)
-    else:
-        for (kind, name) in solver_pairs:
-            if kind == "name":
-                yield LookupSolver(name)
-            elif kind == "load":
-                import cPickle as pickle
+            solver = LookupSolver(name)
 
-                from cargo.io import expandpath
-
-                with open(expandpath(name)) as file:
-                    yield pickle.load(file)
+            if solver.get_seeded(environment):
+                restarts_of = max(restarts, seeded_restarts)
             else:
-                raise ValueError("unknown solver kind")
+                restarts_of = restarts
 
-def yield_task_uuids(session, task_uuids):
-    """
-    Look up or return the task uuids.
-    """
+            log.info("making %i restarts of %s", restarts_of, solver.name)
 
-    if task_uuids is None:
-        from borg.data import TaskRow as TR
-
-        for (uuid,) in session.query(TR.uuid):
-            yield uuid
-    else:
-        for s in task_uuids:
-            yield UUID(s)
+            for task_uuid in task_uuids:
+                for i in xrange(restarts_of):
+                    yield SolveTaskJob(
+                        session.connection().engine.url,
+                        solver,
+                        task_uuid,
+                        budget,
+                        named_solvers,
+                        recycle,
+                        )
 
 @annotations(
     budget          = ("solver budget"    , "positional", None , parse_timedelta),
-    arguments       = ("arguments in JSON", "positional", None),
-    trial           = ("place in trial"   , "option"    , "t"  , UUID)           ,
-    parent_trial    = ("with parent trial", "option"    , "p"  , UUID)           ,
     restarts        = ("minimum attempts" , "option"    , "r"  , int)            ,
     seeded_restarts = ("minimum attempts" , "option"    , "s"  , int)            ,
     recycle         = ("reuse past runs"  , "flag")     ,
-    outsource       = ("outsource labor"  , "flag")
+    outsource       = ("outsource labor"  , "flag")     ,
     )
 def main(
     budget,
-    arguments       = None,
-    trial           = None,
-    parent_trial    = None,
     restarts        = 1,
     seeded_restarts = 1,
     recycle         = False,
@@ -157,20 +152,10 @@ def main(
     Run the script.
     """
 
-    # get arguments
-    from cargo.json import load_json
-
-    if arguments is None:
-        arguments = {}
-    else:
-        arguments = load_json(arguments)
-
-    # set up logging
+    # enable log output
     from cargo.log import enable_default_logging
 
     enable_default_logging()
-
-    get_logger("sqlalchemy.engine", level = "WARNING")
 
     # connect to the database and go
     from cargo.sql.alchemy import SQL_Engines
@@ -182,79 +167,10 @@ def main(
         ResearchSession = make_session(bind = research_connect())
 
         with ResearchSession() as session:
-            # create a trial
-            from cargo.temporal import utc_now
-            from borg.data      import TrialRow
-
-            trial_label = "solver runs (at %s)" % utc_now()
-
-            if parent_trial is None:
-                parent_trial = None
-            else:
-                parent_trial = session.query(TrialRow).get(parent_trial)
-
-                assert parent_trial is not None
-
-            if trial is None:
-                trial_row = TrialRow(label = trial_label, parent = parent_trial)
-
-                session.add(trial_row)
-            else:
-                assert parent_trial is None
-
-                trial_row = session.query(TrialRow).get(trial)
-
-                assert trial_row is not None
-
-            session.commit()
-
-            log.note("placing attempts in trial %s", trial_row.uuid)
-
-            # build its jobs
-            def yield_jobs():
-                """
-                Generate a set of jobs to distribute.
-                """
-
-                from cargo.labor.jobs import CallableJob
-                from cargo.random     import get_random_random
-                from borg.tasks       import get_collections
-                from borg.solvers     import (
-                    Environment,
-                    get_named_solvers,
-                    )
-
-                named_solvers = get_named_solvers(use_recycled = recycle)
-                environment   = Environment(named_solvers = named_solvers)
-                collections   = get_collections()
-
-                for solver in yield_solvers(session, arguments.get("solvers")):
-                    if solver.get_seeded(environment):
-                        restarts_of = max(restarts, seeded_restarts)
-                    else:
-                        restarts_of = restarts
-
-                    log.info("making %i restarts of %s", restarts_of, solver.name)
-
-                    for task_uuid in yield_task_uuids(session, arguments.get("tasks")):
-                        for i in xrange(restarts_of):
-                            yield CallableJob(
-                                solve_task,
-                                engine_url    = session.connection().engine.url,
-                                trial_row     = trial_row,
-                                solver        = solver,
-                                task_uuid     = task_uuid,
-                                budget        = budget,
-                                random        = get_random_random(),
-                                named_solvers = named_solvers,
-                                collections   = collections,
-                                use_recycled  = recycle,
-                                )
-
-            jobs = list(yield_jobs())
+            jobs = SolveTaskJob.make_all(session, budget, restarts, seeded_restarts, recycle)
 
         # run the jobs
-        from cargo.labor.storage import outsource_or_run
+        from cargo.labor import outsource_or_run
 
-        outsource_or_run(jobs, outsource, trial_label)
+        outsource_or_run(jobs, outsource)
 
