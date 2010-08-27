@@ -175,6 +175,8 @@ def compute_raw_features(path):
     # execute the helper
     from cargo.io import check_call_capturing
 
+    log.detail("executing %s %s", features1s, path)
+
     (output, _)     = check_call_capturing([features1s, path])
     (names, values) = [l.split(",") for l in output.splitlines()]
 

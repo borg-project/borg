@@ -8,58 +8,123 @@ if __name__ == "__main__":
 
     call(main)
 
-from plac      import annotations
-from cargo.log import get_logger
-from borg      import defaults
+from plac        import annotations
+from cargo.log   import get_logger
+from cargo.sugar import composed
+from borg        import defaults
 
 log = get_logger(__name__, default_level = "INFO")
 
-def commit_features(instance_path, domain, features, url):
+class AnalyzeTaskJob(object):
     """
-    Add feature information to the database.
+    Analyze a specified task file.
     """
 
-    # hash the instance
-    from borg.tasks import get_task_file_hash
+    def __init__(self, analyzer, domain, path, url = None):
+        """
+        Initialize.
+        """
 
-    task_hash = get_task_file_hash(instance_path, domain)
+        self._analyzer = analyzer
+        self._domain   = domain
+        self._path     = path
+        self._url      = url
 
-    log.info("instance has hash %s", task_hash.encode("hex_codec"))
+    def __call__(self):
+        """
+        Run the analysis.
+        """
 
-    # connect to the database
-    from cargo.sql.alchemy import SQL_Engines
+        # log as appropriate
+        get_logger("borg.sat.cnf",   level = "DETAIL")
+        get_logger("borg.analyzers", level = "DETAIL")
 
-    with SQL_Engines.default.make_session(url)() as session:
-		# locate the instance row
-        from borg.data import (
-            FileTaskRow as FTR,
-            TaskFeatureRow as TFR,
-            )
+        # analyze the task
+        from os.path    import basename
+        from borg.tasks import FileTask
 
-        task_row = session.query(FTR).filter(FTR.hash == buffer(task_hash)).first()
+        task     = FileTask(self._path)
+        features = self._analyzer.analyze(task, None)
 
-        if task_row is None:
-            raise RuntimeError("cannot locate row corresponding to task")
-
-        log.info("task row has uuid %s", task_row.uuid)
+        log.info("feature pairs follow for %s:", basename(self._path))
 
         for (name, value) in features.items():
-            constraint = (TFR.task == task_row) & (TFR.name == name)
+            log.info("%s: %s", name, value)
 
-            if session.query(TFR).filter(constraint).scalar() is None:
-                feature_row = TFR(task = task_row, name = name, value = value)
+        # store the analysis, if requested
+        if self._url is not None:
+            self.commit(features)
 
-                session.add(feature_row)
-            else:
-                log.info("feature \"%s\" already stored", name)
+    def commit(self, features):
+        """
+        Add feature information to the database.
+        """
 
-        session.commit()
+        # hash the instance
+        from borg.tasks import get_task_file_hash
+
+        log.info("hashing task file")
+
+        task_hash = get_task_file_hash(self._path, self._domain)
+
+        log.info("instance has hash %s", task_hash.encode("hex_codec"))
+
+        # connect to the database
+        from cargo.sql.alchemy import SQL_Engines
+
+        with SQL_Engines.default.make_session(self._url)() as session:
+            # look up the instance row
+            from borg.data import (
+                FileTaskRow    as FTR,
+                TaskFeatureRow as TFR,
+                )
+
+            task_row = session.query(FTR).filter(FTR.hash == buffer(task_hash)).first()
+
+            if task_row is None:
+                raise RuntimeError("cannot locate row corresponding to task")
+
+            log.info("task row has uuid %s", task_row.uuid)
+
+            # then insert corresponding feature rows
+            for (name, value) in features.items():
+                constraint = (TFR.task == task_row) & (TFR.name == name)
+
+                if session.query(TFR).filter(constraint).scalar() is None:
+                    feature_row = TFR(task = task_row, name = name, value = value)
+
+                    session.add(feature_row)
+                else:
+                    log.info("feature \"%s\" already stored", name)
+
+            session.commit()
+
+    @staticmethod
+    @composed(list)
+    def for_directory(domain_name, path, url = None):
+        """
+        Return analysis jobs for tasks under path.
+        """
+
+        from cargo.io       import files_under
+        from borg.tasks     import builtin_domains
+        from borg.analyzers import (
+            SATzillaAnalyzer,
+            UncompressingAnalyzer,
+            )
+
+        analyzer = UncompressingAnalyzer(SATzillaAnalyzer())
+        domain   = builtin_domains[domain_name]
+
+        for task_path in files_under(path, domain.patterns):
+            yield AnalyzeTaskJob(analyzer, domain, task_path, url)
 
 @annotations(
-    commit = ("commit features to database", "flag"   , "c"),
-    url    = ("research database URL"      , "option"),
+    commit    = ("commit features to database", "flag"   , "c"),
+    url       = ("research database URL"      , "option"),
+    outsource = ("outsource jobs"             , "flag")  ,
     )
-def main(domain_name, path, commit = False, url = defaults.research_url):
+def main(domain_name, path, commit = False, url = defaults.research_url, outsource = False):
     """
     Acquire task feature information.
     """
@@ -69,34 +134,10 @@ def main(domain_name, path, commit = False, url = defaults.research_url):
 
     enable_default_logging()
 
-    get_logger("sqlalchemy.engine", level = "WARNING")
-    get_logger("borg.analyzers",    level = "DETAIL")
+    # run the jobs
+    from cargo.labor import outsource_or_run
 
-    # analyze the instance
-    from os.path        import basename
-    from cargo.io       import files_under
-    from borg.tasks     import (
-        FileTask,
-        builtin_domains,
-        )
-    from borg.analyzers import (
-        SATzillaAnalyzer,
-        UncompressingAnalyzer,
-        )
+    jobs = AnalyzeTaskJob.for_directory(domain_name, path, url if commit else None)
 
-    analyzer = UncompressingAnalyzer(SATzillaAnalyzer())
-    domain   = builtin_domains[domain_name]
-
-    for task_path in files_under(path, domain.patterns):
-        task     = FileTask(task_path)
-        features = analyzer.analyze(task, None)
-
-        log.info("feature pairs follow for %s:", basename(task_path))
-
-        for (name, value) in features.items():
-            log.info("%s: %s", name, value)
-
-        # store it, if requested
-        if commit:
-            commit_features(task_path, domain, features, url)
+    outsource_or_run(jobs, outsource)
 
