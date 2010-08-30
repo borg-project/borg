@@ -32,15 +32,20 @@ def assert_analyzer_ok(analyzer, task):
     Assert than an analyzer behaves reasonably.
     """
 
-    from nose.tools   import assert_true
+    from nose.tools   import (
+        assert_true,
+        assert_equal,
+        )
     from borg.solvers import Environment
 
-    features = analyzer.analyze(task, Environment())
+    analysis = analyzer.analyze(task, Environment())
 
-    assert_true(len(analyzer.feature_names) > 0)
+    assert_true(len(analyzer.features) > 0)
 
-    for name in analyzer.feature_names:
-        assert_true(features.has_key(name))
+    for feature in analyzer.features:
+        assert_true(analysis.has_key(feature.name))
+
+    assert_equal(len(analyzer.features), len(analysis))
 
 def test_satzilla_analyzer():
     """

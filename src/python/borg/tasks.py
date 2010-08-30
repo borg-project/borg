@@ -121,8 +121,6 @@ class AbstractTask(AbstractRowed):
 
         return str(self)
 
-#tasks = map(UUID_Task, TaskRow.with_prefix(session, "sat/competition_2009/random/"))
-
 class AbstractFileTask(AbstractTask):
     """
     Interface for a task backed by a file.

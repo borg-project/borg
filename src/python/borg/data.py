@@ -396,18 +396,29 @@ class TaskNameRow(DatumBase):
     task_unique = UniqueConstraint("task_uuid", "collection")
     name_unique = UniqueConstraint("name", "collection")
 
-class TaskFeatureRow(DatumBase):
+class FeatureRow(DatumBase):
+    """
+    Record feature metadata.
+    """
+
+    __tablename__ = "features"
+
+    name = Column(String, primary_key = True)
+    type = Column(String)
+
+class TaskFloatFeatureRow(DatumBase):
     """
     Record the features of a task.
     """
 
-    __tablename__ = "task_features"
+    __tablename__ = "task_float_features"
 
-    name      = Column(String, primary_key = True)
+    name      = Column(String, ForeignKey("features.name"), primary_key = True)
     task_uuid = Column(SQL_UUID, ForeignKey("tasks.uuid"), primary_key = True)
-    value     = Column(Boolean)
+    value     = Column(Float)
 
-    task = relationship(TaskRow, backref = "features")
+    feature = relationship(FeatureRow)
+    task    = relationship(TaskRow, backref = "analysis")
 
 class AnswerRow(DatumBase):
     """

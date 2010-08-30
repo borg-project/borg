@@ -6,10 +6,64 @@ from abc         import (
     abstractmethod,
     abstractproperty,
     )
+from collections import namedtuple
 from cargo.log   import get_logger
 from cargo.sugar import ABC
+from borg.rowed  import Rowed
 
 log = get_logger(__name__)
+
+Feature = namedtuple("Feature", ["name", "value_type"])
+
+class Feature(Rowed):
+    """
+    Description of a feature.
+
+    Names are assumed to uniquely identify features.
+    """
+
+    def __init__(self, name, value_type, row = None):
+        """
+        Initialize.
+        """
+
+        Rowed.__init__(self, row = row)
+
+        self._name       = name
+        self._value_type = value_type
+
+    @property
+    def name(self):
+        """
+        The name of this feature.
+        """
+
+        return self._name
+
+    @property
+    def value_type(self):
+        """
+        The type of instances of this feature.
+        """
+
+        return self._value_type
+
+    def get_new_row(self, session):
+        """
+        Create or obtain an ORM row for this object.
+        """
+
+        from borg.data import FeatureRow as FR
+
+        row = session.query(FR).get(self._name)
+
+        if row is None:
+            row = FR(name = self._name, type = self._value_type.__name__)
+        else:
+            if row.type != self._value_type.__name__:
+                raise RuntimeError("stored value type does not match feature value type")
+
+        return row
 
 class Analyzer(ABC):
     """
@@ -25,9 +79,9 @@ class Analyzer(ABC):
         """
 
     @abstractproperty
-    def feature_names(self):
+    def features(self):
         """
-        Return the names of features provided by this analyzer.
+        Return the features provided by this analyzer.
         """
 
 class NoAnalyzer(Analyzer):
@@ -43,9 +97,9 @@ class NoAnalyzer(Analyzer):
         return {}
 
     @property
-    def feature_names(self):
+    def features(self):
         """
-        Return the names of features provided by this analyzer.
+        Return the features provided by this analyzer.
         """
 
         return []
@@ -64,7 +118,7 @@ class UncompressingAnalyzer(Analyzer):
 
     def analyze(self, task, environment):
         """
-        Acquire no features from the specified task.
+        Acquire features from the specified task.
         """
 
         from borg.tasks import uncompressed_task
@@ -73,24 +127,73 @@ class UncompressingAnalyzer(Analyzer):
             return self._analyzer.analyze(inner_task, environment)
 
     @property
-    def feature_names(self):
+    def features(self):
         """
-        Return the names of features provided by this analyzer.
+        Return the features provided by this analyzer.
         """
 
-        return self._analyzer.feature_names
+        return self._analyzer.features
 
 class SATzillaAnalyzer(Analyzer):
     """
     Acquire features using SATzilla's (old) analyzer.
     """
 
-    def __init__(self, names = None):
+    _feature_names = [
+        "nvars",
+        "nclauses",
+        "vars-clauses-ratio",
+        "VCG-VAR-mean",
+        "VCG-VAR-coeff-variation",
+        "VCG-VAR-min",
+        "VCG-VAR-max",
+        "VCG-VAR-entropy",
+        "VCG-CLAUSE-mean",
+        "VCG-CLAUSE-coeff-variation",
+        "VCG-CLAUSE-min",
+        "VCG-CLAUSE-max",
+        "VCG-CLAUSE-entropy",
+        "POSNEG-RATIO-CLAUSE-mean",
+        "POSNEG-RATIO-CLAUSE-coeff-variation",
+        "POSNEG-RATIO-CLAUSE-min",
+        "POSNEG-RATIO-CLAUSE-max",
+        "POSNEG-RATIO-CLAUSE-entropy",
+        "POSNEG-RATIO-VAR-mean",
+        "POSNEG-RATIO-VAR-stdev",
+        "POSNEG-RATIO-VAR-min",
+        "POSNEG-RATIO-VAR-max",
+        "POSNEG-RATIO-VAR-entropy",
+        "UNARY",
+        "BINARY+",
+        "TRINARY+",
+        "HORNY-VAR-mean",
+        "HORNY-VAR-coeff-variation",
+        "HORNY-VAR-min",
+        "HORNY-VAR-max",
+        "HORNY-VAR-entropy",
+        "horn-clauses-fraction",
+        "VG-mean",
+        "VG-coeff-variation",
+        "VG-min",
+        "VG-max",
+        "KLB-featuretime",
+        "CG-mean",
+        "CG-coeff-variation",
+        "CG-min",
+        "CG-max",
+        "CG-entropy",
+        "cluster-coeff-mean",
+        "cluster-coeff-coeff-variation",
+        "cluster-coeff-min",
+        "cluster-coeff-max",
+        "cluster-coeff-entropy",
+        "CG-featuretime",
+        ]
+
+    def __init__(self):
         """
         Initialize.
         """
-
-        self._names = names
 
     def analyze(self, task, environment):
         """
@@ -102,33 +205,66 @@ class SATzillaAnalyzer(Analyzer):
 
         assert isinstance(task, AbstractFileTask)
 
-        # compute the features
-        from borg.sat.cnf import compute_raw_features
+        # find the associated feature computation binary
+        from borg import get_support_path
 
-        raw         = compute_raw_features(task.path)
-        transformed = {
-            "satzilla/vars-clauses-ratio<=1/4.36" : raw["vars-clauses-ratio"] <= (1 / 4.36),
-            }
+        features1s = get_support_path("features1s")
 
-        if self._names is None:
-            return transformed
+        # execute the helper
+        from cargo.io import check_call_capturing
+
+        log.detail("executing %s %s", features1s, task.path)
+
+        (output, _)     = check_call_capturing([features1s, task.path])
+        (names, values) = [l.split(",") for l in output.splitlines()]
+
+        if names != self._feature_names:
+            raise RuntimeError("unexpected or missing feature names from features1s")
         else:
-            return dict((n, transformed[n]) for n in self._names)
+            return dict(zip([f.name for f in self.features], map(float, values)))
 
     @property
-    def feature_names(self):
+    def features(self):
+        """
+        Return the features provided by this analyzer.
+        """
+
+        return [Feature("satzilla/%s" % k.lower(), float) for k in self._feature_names]
+
+class BinarySATzillaAnalyzer(Analyzer):
+    """
+    Acquire features using SATzilla's (old) analyzer.
+    """
+
+    def __init__(self):
+        """
+        Initialize.
+        """
+
+        self._analyzer = SATzillaAnalyzer()
+
+    def analyze(self, task, environment):
+        """
+        Acquire features of the specified task.
+        """
+
+        analysis = self._analyzer.analyze(task, environment)
+
+        return {
+            "satzilla/vars-clauses-ratio<=1/4.36" : analysis["satzilla/vars-clauses-ratio"] <= (1 / 4.36),
+            }
+
+    @property
+    def features(self):
         """
         Return the names of features provided by this analyzer.
         """
 
-        if self._names is None:
-            return ["satzilla/vars-clauses-ratio<=1/4.36"]
-        else:
-            return self._names
+        return [Feature("satzilla/vars-clauses-ratio<=1/4.36", float)]
 
 class RecyclingAnalyzer(Analyzer):
     """
-    Look up precomputed features from the database.
+    Look up precomputed features in a database.
     """
 
     def __init__(self, names):
@@ -162,7 +298,7 @@ class RecyclingAnalyzer(Analyzer):
             return dict(feature_rows)
 
     @property
-    def feature_names(self):
+    def features(self):
         """
         Return the names of features provided by this analyzer.
         """

@@ -37,6 +37,7 @@ class AnalyzeTaskJob(object):
 
         # log as appropriate
         get_logger("borg.sat.cnf",   level = "DETAIL")
+        get_logger("borg.tasks",     level = "DETAIL")
         get_logger("borg.analyzers", level = "DETAIL")
 
         # analyze the task
@@ -44,18 +45,18 @@ class AnalyzeTaskJob(object):
         from borg.tasks import FileTask
 
         task     = FileTask(self._path)
-        features = self._analyzer.analyze(task, None)
+        analysis = self._analyzer.analyze(task, None)
 
         log.info("feature pairs follow for %s:", basename(self._path))
 
-        for (name, value) in features.items():
+        for (name, value) in analysis.items():
             log.info("%s: %s", name, value)
 
         # store the analysis, if requested
         if self._url is not None:
-            self.commit(features)
+            self.commit(analysis)
 
-    def commit(self, features):
+    def commit(self, analysis):
         """
         Add feature information to the database.
         """
@@ -75,8 +76,9 @@ class AnalyzeTaskJob(object):
         with SQL_Engines.default.make_session(self._url)() as session:
             # look up the instance row
             from borg.data import (
-                FileTaskRow    as FTR,
-                TaskFeatureRow as TFR,
+                FeatureRow          as FR,
+                FileTaskRow         as FTR,
+                TaskFloatFeatureRow as TFFR,
                 )
 
             task_row = session.query(FTR).filter(FTR.hash == buffer(task_hash)).first()
@@ -87,15 +89,18 @@ class AnalyzeTaskJob(object):
             log.info("task row has uuid %s", task_row.uuid)
 
             # then insert corresponding feature rows
-            for (name, value) in features.items():
-                constraint = (TFR.task == task_row) & (TFR.name == name)
+            for feature in self._analyzer.features:
+                if session.query(TFFR).get((feature.name, task_row.uuid)) is None:
+                    value_row = \
+                        TFFR(
+                            task    = task_row,
+                            feature = feature.get_row(session),
+                            value   = analysis[feature.name],
+                            )
 
-                if session.query(TFR).filter(constraint).scalar() is None:
-                    feature_row = TFR(task = task_row, name = name, value = value)
-
-                    session.add(feature_row)
+                    session.add(value_row)
                 else:
-                    log.info("feature \"%s\" already stored", name)
+                    log.info("feature \"%s\" already stored", feature.name)
 
             session.commit()
 
