@@ -83,7 +83,7 @@ class PortfolioSolver(Rowed, AbstractSolver):
         from datetime             import timedelta
         from borg.portfolio.world import (
             SolverAction,
-            FeatureAction,
+            BinaryFeatureAction,
             )
         from cargo.temporal       import seconds
 
@@ -102,7 +102,7 @@ class PortfolioSolver(Rowed, AbstractSolver):
             # take the action
             if action is None:
                 break
-            elif isinstance(action, FeatureAction):
+            elif isinstance(action, BinaryFeatureAction):
                 log.info("taking feature action %s", action.description)
 
                 outcome = action.take(features)

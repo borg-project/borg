@@ -27,12 +27,13 @@ class HardMyopicPlanner(AbstractPlanner):
     Deterministic greedy action selection.
     """
 
-    def __init__(self, discount):
+    def __init__(self, discount, enabled = None):
         """
         Initialize.
         """
 
         self._discount = discount
+        self._enabled  = enabled
 
     def select(self, model, history, budget, random):
         """
@@ -49,7 +50,12 @@ class HardMyopicPlanner(AbstractPlanner):
         best_expectation = None
 
         for (i, action) in enumerate(model.actions):
-            if action.cost <= budget:
+            if self._enabled is None:
+                on = True
+            else:
+                on = self._enabled[i]
+
+            if on and action.cost <= budget:
                 e  = sum(p * o.utility for (p, o) in izip(predicted[i], action.outcomes))
                 e *= self._discount**action.cost
 

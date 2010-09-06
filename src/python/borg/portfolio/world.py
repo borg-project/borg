@@ -50,6 +50,8 @@ class SolverAction(Action):
         Typically invoked through a trainer.
         """
 
+        import numpy
+
         from sqlalchemy               import (
             and_,
             case,
@@ -57,45 +59,44 @@ class SolverAction(Action):
             )
         from sqlalchemy.sql.functions import count
         from borg.data                import (
-            TrialRow      as TR,
             AttemptRow    as AR,
             RunAttemptRow as RAR,
             )
 
-        # related rows
-        solver_row           = self._solver.get_row(session)
-        recyclable_trial_row = TR.get_recyclable(session)
-        task_uuids           = [task.get_row(session).uuid for task in tasks]
-
-        # existing action outcomes
-        rows =                                                                     \
+        task_uuids = [t.get_row(session).uuid for t in tasks]
+        rows       =                                                               \
             session.execute(
                 select(
                     [
-                        RAR.task_uuid,
                         count(case([(RAR.cost <= self.cost, RAR.answer_uuid)])),
                         count(),
                         ],
                     and_(
-                        RAR.solver           == solver_row,
+                        RAR.solver           == self._solver.get_row(session),
                         RAR.budget           >= self.cost,
                         RAR.__table__.c.uuid == AR.uuid,
                         RAR.task_uuid.in_(task_uuids),
-                        RAR.trials.contains(recyclable_trial_row),
                         ),
                     group_by = RAR.task_uuid,
+                    order_by = RAR.task_uuid,
                     ),
                 )                                                                  \
                 .fetchall()
 
-        # FIXME ordering
+        if len(rows) != len(tasks):
+            log.warning(
+                "fetched only %i rows for action %s on %i tasks",
+                 len(rows),
+                 len(tasks),
+                 self.description,
+                 )
+        else:
+            log.detail("fetched %i rows for action %s", len(rows), self.description)
 
-        log.detail("fetched %i rows for action %s", len(rows), self.description)
+        order     = sorted(xrange(len(task_uuids)), key = lambda i: task_uuids[i])
+        unordered = numpy.array([[s, (a - s)] for (s, a) in rows], numpy.uint)
 
-        # build the array
-        import numpy
-
-        return numpy.array([[s, (a - s)] for (_, s, a) in rows], numpy.uint)
+        return unordered[numpy.array(order)]
 
     def take(self, task, remaining, random, environment):
         """
@@ -144,80 +145,46 @@ class SolverAction(Action):
 
         return self._solver
 
-class FeatureAction(Action):
+class BinaryFeatureAction(Action):
     """
     An action that acquires a static feature of a problem instance.
     """
 
     outcomes_ = [Outcome(0.0), Outcome(0.0)]
 
-    def __init__(self, feature_name):
+    def __init__(self, analyzer, feature):
         """
         Initialize.
         """
 
         Action.__init__(self, 0.0)
 
-        self._feature_name = feature_name
+        self._analyzer = analyzer
+        self._feature  = feature
 
     def __reduce__(self):
         """
         Reduce this instance for pickling.
         """
 
-        return (FeatureAction, (self._feature_name,))
+        return (BinaryFeatureAction, (self._analyzer, self._feature))
 
     def get_training(self, session, tasks):
         """
         Return a tasks-by-outcomes array.
         """
 
-        # get stored feature values
-        from sqlalchemy import (
-            and_,
-            select,
-            )
-        from borg.data  import (
-            TaskRow        as TR,
-            TaskFeatureRow as TFR,
-            )
-
-        task_uuids = [task.get_row(session).uuid for task in tasks]
-        rows       =                                    \
-            session.execute(
-                select(
-                    [TFR.task_uuid, TFR.value],
-                    and_(
-                        TFR.name == self._feature_name,
-                        TFR.task_uuid.in_(task_uuids),
-                        ),
-                    ),
-                )                                       \
-                .fetchall()
-
-        log.detail("fetched %i rows for feature %s", len(rows), self.description)
-
-        # build the array
-        import numpy
-
-        mapped = dict(rows)
-        counts = {
-            True  : [0, 1],
-            False : [1, 0],
-            None  : [0, 0],
-            }
-
-        return numpy.array([counts[mapped.get(u)] for u in task_uuids], numpy.uint)
+        return self._analyzer.get_training(session, self._feature, tasks)
 
     def take(self, features):
         """
         Return an outcome from the relevant feature value.
         """
 
-        if features[self._feature_name]:
-            return FeatureAction.outcomes_[0]
+        if features[self._feature.name]:
+            return BinaryFeatureAction.outcomes_[0]
         else:
-            return FeatureAction.outcomes_[1]
+            return BinaryFeatureAction.outcomes_[1]
 
     @property
     def description(self):
@@ -225,7 +192,7 @@ class FeatureAction(Action):
         A human-readable name for this action.
         """
 
-        return self._feature_name
+        return self._feature.name
 
     @property
     def outcomes(self):
@@ -233,15 +200,7 @@ class FeatureAction(Action):
         The possible outcomes of this action.
         """
 
-        return FeatureAction.outcomes_
-
-    @property
-    def feature_name(self):
-        """
-        The name of the associated feature.
-        """
-
-        return self._feature_name
+        return BinaryFeatureAction.outcomes_
 
 class Trainer(ABC):
     """
@@ -249,7 +208,7 @@ class Trainer(ABC):
     """
 
     @abstractmethod
-    def get_data(self, action):
+    def get_data(self, actions):
         """
         Provide task-outcomes counts to the trainee.
         """
@@ -267,11 +226,11 @@ class DecisionTrainer(Trainer):
         self._Session = Session
         self._tasks   = tasks
 
-    def get_data(self, action):
+    def get_data(self, actions):
         """
         Provide a tasks-by-outcomes array to the trainee.
         """
 
         with self._Session() as session:
-            return action.get_training(session, self._tasks)
+            return [a.get_training(session, self._tasks) for a in actions]
 

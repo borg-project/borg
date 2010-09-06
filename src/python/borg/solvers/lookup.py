@@ -79,6 +79,18 @@ class LookupSolver(Rowed, AbstractSolver):
 
         return self._name
 
+    @staticmethod
+    def with_prefix(session, prefix):
+        """
+        Query for named solvers with prefix.
+        """
+
+        from borg.data import SolverRow
+
+        names = session.query(SolverRow.name).filter(SolverRow.name.startswith(prefix))
+
+        return map(LookupSolver, names)
+
 class LookupPreprocessor(LookupSolver, AbstractPreprocessor):
     """
     A preprocessor which indirectly executes a named preprocessor.

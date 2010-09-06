@@ -660,7 +660,7 @@ class RunAttemptRow(AttemptRow):
     __mapper_args__ = {"polymorphic_identity": "run"}
 
     uuid        = Column(SQL_UUID, ForeignKey("attempts.uuid"), primary_key = True)
-    solver_name = Column(String, ForeignKey("solvers.name"), nullable = False)
+    solver_name = Column(String, ForeignKey("solvers.name"), nullable = False, index = True)
     seed        = Column(Integer)
     run_uuid    = Column(SQL_UUID, ForeignKey("cpu_limited_runs.uuid"), nullable = False)
 

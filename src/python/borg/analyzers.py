@@ -96,6 +96,48 @@ class NoAnalyzer(Analyzer):
 
         return {}
 
+    def get_training(self, session, feature, tasks):
+        """
+        Return a tasks-by-outcomes array.
+        """
+
+        # get stored feature values
+        from sqlalchemy import (
+            and_,
+            select,
+            )
+        from borg.data  import (
+            TaskRow             as TR,
+            TaskFloatFeatureRow as TFFR,
+            )
+
+        task_uuids = [t.get_row(session).uuid for t in tasks]
+        rows       =                                    \
+            session.execute(
+                select(
+                    [TFFR.task_uuid, TFFR.value],
+                    and_(
+                        TFFR.name == feature.name,
+                        TFFR.task_uuid.in_(task_uuids),
+                        ),
+                    ),
+                )                                       \
+                .fetchall()
+
+        log.detail("fetched %i rows for feature %s", len(rows), feature.description)
+
+        # build the array
+        import numpy
+
+        mapped = dict(rows)
+        counts = {
+            True  : [0, 1],
+            False : [1, 0],
+            None  : [0, 0],
+            }
+
+        return numpy.array([counts[mapped.get(u)] for u in task_uuids], numpy.uint)
+
     @property
     def features(self):
         """
@@ -223,6 +265,13 @@ class SATzillaAnalyzer(Analyzer):
         else:
             return dict(zip([f.name for f in self.features], map(float, values)))
 
+    def get_training(self, session, feature, tasks):
+        """
+        Return a tasks-by-outcomes array.
+        """
+
+        return RecyclingAnalyzer.get_training(session, feature, tasks)
+
     @property
     def features(self):
         """
@@ -236,12 +285,12 @@ class BinarySATzillaAnalyzer(Analyzer):
     Acquire features using SATzilla's (old) analyzer.
     """
 
-    def __init__(self):
+    def __init__(self, analyzer = SATzillaAnalyzer()):
         """
         Initialize.
         """
 
-        self._analyzer = SATzillaAnalyzer()
+        self._analyzer = analyzer
 
     def analyze(self, task, environment):
         """
@@ -253,6 +302,65 @@ class BinarySATzillaAnalyzer(Analyzer):
         return {
             "satzilla/vars-clauses-ratio<=1/4.36" : analysis["satzilla/vars-clauses-ratio"] <= (1 / 4.36),
             }
+
+    def get_training(self, session, feature, tasks):
+        """
+        Return a tasks-by-outcomes array.
+        """
+
+        # sanity
+        if feature.name != self.features[0].name:
+            raise ValueError("feature not appropriate for this analyzer")
+
+        # get stored feature values
+        from sqlalchemy import (
+            and_,
+            select,
+            )
+        from borg.data  import (
+            TaskRow             as TR,
+            TaskFloatFeatureRow as TFFR,
+            )
+
+        task_uuids = [t.get_row(session).uuid for t in tasks]
+        rows       =                                    \
+            session.execute(
+                select(
+                    [TFFR.task_uuid, TFFR.value],
+                    and_(
+                        TFFR.name == "satzilla/vars-clauses-ratio",
+                        TFFR.task_uuid.in_(task_uuids),
+                        ),
+                    ),
+                )                                       \
+                .fetchall()
+
+        if len(rows) != len(tasks):
+            log.warning(
+                "fetched only %i rows for feature %s of %i tasks",
+                 len(rows),
+                 len(tasks),
+                 feature.name,
+                 )
+        else:
+            log.detail("fetched %i rows for feature %s", len(rows), feature.name)
+
+        # build the array
+        import numpy
+
+        mapped = dict(rows)
+
+        def outcome_for(uuid):
+            value = mapped.get(uuid)
+
+            if value is None:
+                return [0, 0]
+            elif value > 1.0 / 4.36:
+                return [0, 1]
+            else:
+                return [1, 0]
+
+        return numpy.array(map(outcome_for, task_uuids), numpy.uint)
 
     @property
     def features(self):
@@ -267,12 +375,12 @@ class RecyclingAnalyzer(Analyzer):
     Look up precomputed features in a database.
     """
 
-    def __init__(self, names):
+    def __init__(self, features):
         """
         Initialize.
         """
 
-        self._names = names
+        self._features = features
 
     def analyze(self, task, environment):
         """
@@ -286,22 +394,32 @@ class RecyclingAnalyzer(Analyzer):
 
         # look up the features
         with environment.CacheSession() as session:
-            from borg.data import TaskFeatureRow as TFR
+            from borg.data import TaskFloatFeatureRow as TFFR
 
-            constraint = TFR.task == task.get_row(session)
+            feature_rows =                                               \
+                session                                                  \
+                .query(TFFR.name, TFFR.value)                            \
+                .filter(TFFR.task == task.get_row(session))              \
+                .filter(TFFR.name.in_([f.name for f in self._features])) \
+                .all()
 
-            if self._names is not None:
-                constraint = constraint & TFR.name.in_(self._names)
-
-            feature_rows = session.query(TFR.name, TFR.value).filter(constraint).all()
+            if len(feature_rows) != len(self._features):
+                raise RuntimeError("database lacks expected features")
 
             return dict(feature_rows)
+
+    def get_training(self, session, feature, tasks):
+        """
+        Return a tasks-by-outcomes array.
+        """
+
+        raise NotImplementedError()
 
     @property
     def features(self):
         """
-        Return the names of features provided by this analyzer.
+        Return the features provided by this analyzer.
         """
 
-        return self._names
+        return self._features
 

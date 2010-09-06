@@ -8,7 +8,6 @@ install(
 		analyze.py
 		bench_bellman.py
         calibrate.py
-        delete_trial.py
         plot_performance.py
         preprocess_tasks.py
         print_run.py

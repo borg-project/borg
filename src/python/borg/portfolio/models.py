@@ -163,7 +163,7 @@ class DistributionModel(AbstractModel):
 
         from cargo.statistics import TupleSamples
 
-        samples   = TupleSamples(map(trainer.get_data, actions))
+        samples   = TupleSamples(trainer.get_data(actions))
         estimated = estimator.estimate(samples)
 
         return DistributionModel(estimated, actions)
