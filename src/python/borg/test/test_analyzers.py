@@ -14,7 +14,7 @@ def test_no_analyzer():
 
     analyzer = NoAnalyzer()
 
-    assert_equal(analyzer.feature_names, [])
+    assert_equal(analyzer.features, [])
     assert_equal(analyzer.analyze(FileTask("foo.cnf"), Environment()), {})
 
 def get_file_task(relative):
@@ -82,8 +82,8 @@ def assert_recycling_analyzer_ok(Session, session):
     # insert some fake data
     from borg.data import (
         DatumBase,
-        TaskRow        as TR,
-        TaskFeatureRow as TFR,
+        TaskRow             as TR,
+        TaskFloatFeatureRow as TFFR,
         )
 
     DatumBase.metadata.create_all(session.connection())
@@ -91,8 +91,8 @@ def assert_recycling_analyzer_ok(Session, session):
     task_row = TR()
 
     session.add_all([
-        TFR(task = task_row, name = "foo", value = False),
-        TFR(task = task_row, name = "bar", value = True),
+        TFFR(task = task_row, name = "foo", value =  0.1),
+        TFFR(task = task_row, name = "bar", value = -1e2),
         ])
     session.commit()
 
@@ -103,9 +103,12 @@ def assert_recycling_analyzer_ok(Session, session):
         )
     from borg.tasks     import UUID_Task
     from borg.solvers   import Environment
-    from borg.analyzers import RecyclingAnalyzer
+    from borg.analyzers import (
+        Feature,
+        RecyclingAnalyzer,
+        )
 
-    analyzer = RecyclingAnalyzer(["foo", "bar"])
+    analyzer = RecyclingAnalyzer([Feature("foo", float), Feature("bar", float)])
     features = \
         analyzer.analyze(
             UUID_Task(task_row.uuid),
@@ -113,8 +116,8 @@ def assert_recycling_analyzer_ok(Session, session):
             )
 
     assert_true(len(features) == 2)
-    assert_equal(features["foo"], False)
-    assert_equal(features["bar"], True)
+    assert_equal(features["foo"],  0.1)
+    assert_equal(features["bar"], -1e2)
 
 def test_recycling_analyzer():
     """

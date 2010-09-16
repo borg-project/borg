@@ -53,15 +53,18 @@ def enable_output():
     Set up competition-compliant output.
     """
 
-    import sys
+    # configure the default global level
+    from cargo import defaults
+
+    get_logger(level = defaults.root_log_level)
+
+    # set up output
     import logging
 
-    from logging   import StreamHandler
-    from cargo.log import enable_default_logging
+    from sys     import stdout
+    from logging import StreamHandler
 
-    enable_default_logging(add_handlers = False)
-
-    handler = StreamHandler(sys.stdout)
+    handler = StreamHandler(stdout)
 
     handler.setFormatter(CompetitionFormatter())
     handler.setLevel(logging.NOTSET)

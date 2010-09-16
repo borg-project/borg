@@ -2,6 +2,8 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+import numpy
+
 from abc         import (
     abstractmethod,
     abstractproperty,
@@ -13,8 +15,6 @@ from borg.rowed  import Rowed
 
 log = get_logger(__name__)
 
-Feature = namedtuple("Feature", ["name", "value_type"])
-
 class Feature(Rowed):
     """
     Description of a feature.
@@ -22,15 +22,16 @@ class Feature(Rowed):
     Names are assumed to uniquely identify features.
     """
 
-    def __init__(self, name, value_type, row = None):
+    def __init__(self, name, value_type, dimensionality = None, row = None):
         """
         Initialize.
         """
 
         Rowed.__init__(self, row = row)
 
-        self._name       = name
-        self._value_type = value_type
+        self._name           = name
+        self._value_type     = value_type
+        self._dimensionality = dimensionality
 
     @property
     def name(self):
@@ -47,6 +48,14 @@ class Feature(Rowed):
         """
 
         return self._value_type
+
+    @property
+    def dimensionality(self):
+        """
+        The feature dimensionality.
+        """
+
+        return self._dimensionality
 
     def get_new_row(self, session):
         """
@@ -96,48 +105,6 @@ class NoAnalyzer(Analyzer):
 
         return {}
 
-    def get_training(self, session, feature, tasks):
-        """
-        Return a tasks-by-outcomes array.
-        """
-
-        # get stored feature values
-        from sqlalchemy import (
-            and_,
-            select,
-            )
-        from borg.data  import (
-            TaskRow             as TR,
-            TaskFloatFeatureRow as TFFR,
-            )
-
-        task_uuids = [t.get_row(session).uuid for t in tasks]
-        rows       =                                    \
-            session.execute(
-                select(
-                    [TFFR.task_uuid, TFFR.value],
-                    and_(
-                        TFFR.name == feature.name,
-                        TFFR.task_uuid.in_(task_uuids),
-                        ),
-                    ),
-                )                                       \
-                .fetchall()
-
-        log.detail("fetched %i rows for feature %s", len(rows), feature.description)
-
-        # build the array
-        import numpy
-
-        mapped = dict(rows)
-        counts = {
-            True  : [0, 1],
-            False : [1, 0],
-            None  : [0, 0],
-            }
-
-        return numpy.array([counts[mapped.get(u)] for u in task_uuids], numpy.uint)
-
     @property
     def features(self):
         """
@@ -175,6 +142,40 @@ class UncompressingAnalyzer(Analyzer):
         """
 
         return self._analyzer.features
+
+class SubsetAnalyzer(Analyzer):
+    """
+    Acquire no features.
+    """
+
+    def __init__(self, analyzer, names = None):
+        """
+        Initialize.
+        """
+
+        self._analyzer = analyzer
+
+        if names is None:
+            self._names = [f.name for f in analyzer.features]
+        else:
+            self._names = set(names)
+
+    def analyze(self, task, environment):
+        """
+        Acquire features from the specified task.
+        """
+
+        analysis = self._analyzer.analyze(task, environment)
+
+        return dict((k, v) for (k, v) in analysis if k in self._names)
+
+    @property
+    def features(self):
+        """
+        Return the features provided by this analyzer.
+        """
+
+        return [f for f in self._analyzer.features if f.name in self._names]
 
 class SATzillaAnalyzer(Analyzer):
     """
@@ -265,13 +266,6 @@ class SATzillaAnalyzer(Analyzer):
         else:
             return dict(zip([f.name for f in self.features], map(float, values)))
 
-    def get_training(self, session, feature, tasks):
-        """
-        Return a tasks-by-outcomes array.
-        """
-
-        return RecyclingAnalyzer.get_training(session, feature, tasks)
-
     @property
     def features(self):
         """
@@ -279,96 +273,6 @@ class SATzillaAnalyzer(Analyzer):
         """
 
         return [Feature("satzilla/%s" % k.lower(), float) for k in self._feature_names]
-
-class BinarySATzillaAnalyzer(Analyzer):
-    """
-    Acquire features using SATzilla's (old) analyzer.
-    """
-
-    def __init__(self, analyzer = SATzillaAnalyzer()):
-        """
-        Initialize.
-        """
-
-        self._analyzer = analyzer
-
-    def analyze(self, task, environment):
-        """
-        Acquire features of the specified task.
-        """
-
-        analysis = self._analyzer.analyze(task, environment)
-
-        return {
-            "satzilla/vars-clauses-ratio<=1/4.36" : analysis["satzilla/vars-clauses-ratio"] <= (1 / 4.36),
-            }
-
-    def get_training(self, session, feature, tasks):
-        """
-        Return a tasks-by-outcomes array.
-        """
-
-        # sanity
-        if feature.name != self.features[0].name:
-            raise ValueError("feature not appropriate for this analyzer")
-
-        # get stored feature values
-        from sqlalchemy import (
-            and_,
-            select,
-            )
-        from borg.data  import (
-            TaskRow             as TR,
-            TaskFloatFeatureRow as TFFR,
-            )
-
-        task_uuids = [t.get_row(session).uuid for t in tasks]
-        rows       =                                    \
-            session.execute(
-                select(
-                    [TFFR.task_uuid, TFFR.value],
-                    and_(
-                        TFFR.name == "satzilla/vars-clauses-ratio",
-                        TFFR.task_uuid.in_(task_uuids),
-                        ),
-                    ),
-                )                                       \
-                .fetchall()
-
-        if len(rows) != len(tasks):
-            log.warning(
-                "fetched only %i rows for feature %s of %i tasks",
-                 len(rows),
-                 len(tasks),
-                 feature.name,
-                 )
-        else:
-            log.detail("fetched %i rows for feature %s", len(rows), feature.name)
-
-        # build the array
-        import numpy
-
-        mapped = dict(rows)
-
-        def outcome_for(uuid):
-            value = mapped.get(uuid)
-
-            if value is None:
-                return [0, 0]
-            elif value > 1.0 / 4.36:
-                return [0, 1]
-            else:
-                return [1, 0]
-
-        return numpy.array(map(outcome_for, task_uuids), numpy.uint)
-
-    @property
-    def features(self):
-        """
-        Return the names of features provided by this analyzer.
-        """
-
-        return [Feature("satzilla/vars-clauses-ratio<=1/4.36", float)]
 
 class RecyclingAnalyzer(Analyzer):
     """
@@ -404,16 +308,9 @@ class RecyclingAnalyzer(Analyzer):
                 .all()
 
             if len(feature_rows) != len(self._features):
-                raise RuntimeError("database lacks expected features")
+                raise RuntimeError("database does not contain values for expected features")
 
             return dict(feature_rows)
-
-    def get_training(self, session, feature, tasks):
-        """
-        Return a tasks-by-outcomes array.
-        """
-
-        raise NotImplementedError()
 
     @property
     def features(self):
@@ -422,4 +319,186 @@ class RecyclingAnalyzer(Analyzer):
         """
 
         return self._features
+
+class BinningAnalyzer(Analyzer):
+    """
+    Generate histogram features.
+    """
+
+    def __init__(self, analyzer, bins):
+        """
+        Initialize.
+
+        @param analyzer : The raw continuous-feature analyzer.
+        @param bins     : A map from feature names to a bin border array.
+        """
+
+        self._analyzer = analyzer
+        self._bins     = bins
+        self._names    = \
+            dict(
+                zip(
+                    (f.name for f in self.features),
+                    (f.name for f in analyzer.features),
+                    ),
+                )
+
+    def analyze(self, task, environment):
+        """
+        Acquire features of the specified task.
+        """
+
+        analysis = self._analyzer.analyze(task, environment)
+
+        def for_value((name, value)):
+            ((i,),) = numpy.nonzero(numpy.histogram(value, self._bins[name]))
+
+            return i
+
+        return dict(zip(analysis, map(for_value, analysis.items())))
+
+    def get_training(self, session, feature, task_table):
+        """
+        Return a tasks-by-outcomes array.
+        """
+
+        # get stored feature values
+        from sqlalchemy import (
+            and_,
+            select,
+            )
+        from borg.data  import TaskFloatFeatureRow as TFFR
+
+        name = self._names[feature.name]
+        rows =                                               \
+            session.execute(
+                select(
+                    [TFFR.value],
+                    and_(
+                        TFFR.name      == name,
+                        TFFR.task_uuid == task_table.c.uuid,
+                        ),
+                    order_by = task_table.c.uuid,
+                    ),
+                )                                            \
+                .fetchall()
+
+        # build the array
+        def for_value((value,)):
+            (h, _) = numpy.histogram(value, self._bins[name])
+
+            return h
+
+        return numpy.array(map(for_value, rows), numpy.uint)
+
+    @property
+    def features(self):
+        """
+        Return the names of features provided by this analyzer.
+        """
+
+        return [
+            Feature("%s-%s" % (f.name, self._bins[f.name]), int, self._bins[f.name].size)
+            for f in self._analyzer.features
+            ]
+
+    @staticmethod
+    def _spaced_bin_entry_for(session, task_table, feature, d):
+        """
+        Select equally-spaced bin positions for a feature.
+        """
+
+        from sqlalchemy import (
+            func,
+            and_,
+            select,
+            )
+        from borg.data  import TaskFloatFeatureRow as TFFR
+
+        ((min_value, max_value),) =                          \
+            session.execute(
+                select(
+                    [
+                        func.min(TFFR.value),
+                        func.max(TFFR.value),
+                        ],
+                    and_(
+                        TFFR.name      == feature.name,
+                        TFFR.task_uuid == task_table.c.uuid,
+                        ),
+                    ),
+                )
+
+        edges     =  numpy.r_[min_value:max_value:(d + 1) * 1j]
+        edges[ 0] = -numpy.inf
+        edges[-1] =  numpy.inf
+
+        return (feature.name, edges)
+
+    @staticmethod
+    def _percentile_bin_entry_for(session, task_table, feature, d):
+        """
+        Select percentile-spaced bin positions for a feature.
+        """
+
+        from sqlalchemy import (
+            func,
+            select,
+            )
+        from borg.data  import TaskFloatFeatureRow as TFFR
+
+        where = (TFFR.name == feature.name) & (TFFR.task_uuid == task_table.c.uuid)
+        size  = session.execute(select([func.count()], where)).scalar()
+
+        def value_at(p):
+            return                                      \
+                session.execute(
+                    select(
+                        [TFFR.value],
+                        where,
+                        limit    = 1,
+                        offset   = int((size - 1) * p),
+                        order_by = TFFR.value,
+                        ),
+                    )                                   \
+                    .scalar()
+
+        edges = [-numpy.inf] + map(value_at, numpy.r_[0.0:1.0:(d + 1) * 1j][1:-1]) + [numpy.inf]
+
+        return (feature.name, numpy.asarray(edges))
+
+    @staticmethod
+    def _build(trainer, raw_analyzer, d, get_bin_entries):
+        """
+        Return an analyzer with bins fit to training data.
+        """
+
+        with trainer.context() as (session, task_table):
+            bin_entry_for = lambda f: get_bin_entries(session, task_table, f, d)
+            bins          = dict(map(bin_entry_for, raw_analyzer.features))
+
+            for (name, edges) in bins.items():
+                log.detail("bins for %s: %s", name, edges)
+
+            return BinningAnalyzer(raw_analyzer, bins)
+
+    @staticmethod
+    def spaced(trainer, raw_analyzer, d):
+        """
+        Return an analyzer with bins fit to training data.
+        """
+
+        get_bin_entries = BinningAnalyzer._spaced_bin_entry_for
+
+        return BinningAnalyzer._build(trainer, raw_analyzer, d, get_bin_entries)
+
+    @staticmethod
+    def percentile(trainer, raw_analyzer, d):
+        """
+        Return an analyzer with bins fit to training data.
+        """
+
+        get_bin_entries = BinningAnalyzer._percentile_bin_entry_for
+
+        return BinningAnalyzer._build(trainer, raw_analyzer, d, get_bin_entries)
 

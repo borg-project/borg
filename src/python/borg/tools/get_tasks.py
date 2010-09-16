@@ -8,102 +8,110 @@ if __name__ == "__main__":
 
     call(main)
 
-from plac      import annotations
-from cargo.log import get_logger
-from borg      import defaults
+from plac        import annotations
+from cargo.log   import get_logger
+from cargo.sugar import composed
+from borg        import defaults
 
 log = get_logger(__name__, default_level = "INFO")
 
-def get_task(
-    engine_url,
-    task_path,
-    name,
-    collection,
-    domain,
-    ):
+class GetTaskJob(object):
     """
     Add a task.
     """
 
-    # make sure that we're logging
-    from cargo.log import enable_default_logging
+    def __init__(self, engine_url, task_path, name, collection, domain):
+        """
+        Initialize.
+        """
 
-    enable_default_logging()
+        self._engine_url = engine_url
+        self._task_path  = task_path
+        self._name       = name
+        self._collection = collection
+        self._domain     = domain
 
-    # connect to the research database
-    from cargo.sql.alchemy import (
-        SQL_Engines,
-        make_session,
-        )
+    def __call__(self):
+        """
+        Run the job.
+        """
 
-    ResearchSession = make_session(bind = SQL_Engines.default.get(engine_url))
+        # make sure that we're logging
+        from cargo.log import enable_default_logging
 
-    # get the task
-    with ResearchSession() as session:
-        # has this task already been stored?
-        from sqlalchemy import and_
-        from borg.data  import TaskNameRow as TNR
+        enable_default_logging()
 
-        task_name_row =                           \
-            session                               \
-            .query(TNR)                           \
-            .filter(
-                and_(
-                    TNR.name       == name,
-                    TNR.collection == collection,
-                ),
-            )                                     \
-            .first()
+        # connect to the research database
+        from cargo.sql.alchemy import (
+            SQL_Engines,
+            make_session,
+            )
 
-        if task_name_row is not None:
-            log.note("database already contains %s", name)
+        ResearchSession = make_session(bind = SQL_Engines.default.get(self._engine_url))
 
-            return
+        # get the task
+        with ResearchSession() as session:
+            # has this task already been stored?
+            from sqlalchemy import and_
+            from borg.data  import TaskNameRow as TNR
 
-        # find or create the task row
-        from cargo.sql.alchemy import lock_table
-        from borg.data         import FileTaskRow as FTR
-        from borg.tasks        import get_task_file_hash
+            task_name_row =                           \
+                session                               \
+                .query(TNR)                           \
+                .filter(
+                    and_(
+                        TNR.name       == self._name,
+                        TNR.collection == self._collection,
+                    ),
+                )                                     \
+                .first()
 
-        lock_table(session.connection(), FTR.__tablename__, "share row exclusive")
+            if task_name_row is not None:
+                log.note("database already contains %s", self._name)
 
-        file_hash = get_task_file_hash(task_path, domain)
-        task_row  = session.query(FTR).filter(FTR.hash == buffer(file_hash)).first()
+                return
 
-        if task_row is None:
-            task_row = FTR(hash = buffer(file_hash))
+            # find or create the task row
+            from cargo.sql.alchemy import lock_table
+            from borg.data         import FileTaskRow as FTR
+            from borg.tasks        import get_task_file_hash
 
-            session.add(task_row)
+            lock_table(session.connection(), FTR.__tablename__, "share row exclusive")
 
-        session.commit()
+            file_hash = get_task_file_hash(self._task_path, self._domain)
+            task_row  = session.query(FTR).filter(FTR.hash == buffer(file_hash)).first()
 
-        # create the task name row
-        task_name_row = TNR(task = task_row, name = name, collection = collection)
+            if task_row is None:
+                task_row = FTR(hash = buffer(file_hash))
 
-        session.add(task_name_row)
-        session.commit()
+                session.add(task_row)
 
-        # tell the world
-        log.info("added task %s with hash %s", task_row.uuid, file_hash.encode("hex_codec"))
-        print "added task %s with hash %s" % (task_row.uuid, file_hash.encode("hex_codec"))
-        print "name", name
+            session.commit()
 
-def yield_get_task_jobs(session, tasks_path, relative_to, collection, domain_name):
+            # create the task name row
+            task_name_row = TNR(task = task_row, name = self._name, collection = self._collection)
+
+            session.add(task_name_row)
+            session.commit()
+
+            # tell the world
+            log.info("added task %s with hash %s", task_row.uuid, file_hash.encode("hex_codec"))
+
+@composed(list)
+def get_task_jobs(session, tasks_path, relative_to, collection, domain_name):
     """
     Find tasks to hash and name.
     """
 
     # build tasks
-    from os.path          import relpath
-    from cargo.io         import files_under
-    from cargo.labor.jobs import CallableJob
-    from borg.tasks       import builtin_domains
+    from os.path    import relpath
+    from cargo.io   import files_under
+    from borg.tasks import builtin_domains
 
     domain = builtin_domains[domain_name]
 
     for task_path in files_under(tasks_path, domain.patterns):
-        yield CallableJob(
-            get_task,
+        yield GetTaskJob(
             engine_url = session.connection().engine.url,
             task_path  = task_path,
             name       = relpath(task_path, relative_to),
@@ -143,7 +151,7 @@ def main(
 
             jobs = \
                 list(
-                    yield_get_task_jobs(
+                    get_task_jobs(
                         session,
                         abspath(tasks_path),
                         abspath(relative_to),
@@ -153,8 +161,8 @@ def main(
                     )
 
         # run the jobs
-        from cargo.labor.storage import outsource_or_run
-        from cargo.temporal      import utc_now
+        from cargo.labor    import outsource_or_run
+        from cargo.temporal import utc_now
 
         outsource_or_run(jobs, False, "adding task rows (at %s)" % utc_now())
 

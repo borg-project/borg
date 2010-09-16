@@ -35,9 +35,9 @@ def assert_instance_analyzed(session):
     """
 
     from nose.tools import assert_equal
-    from borg.data  import TaskFeatureRow as TFR
+    from borg.data  import TaskFloatFeatureRow as TFFR
 
-    assert_equal(session.query(TFR).count(), 1)
+    assert_equal(session.query(TFFR).count(), 48)
 
 def test_analyze_instance():
     """

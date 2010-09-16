@@ -6,6 +6,7 @@ from abc                  import (
     abstractmethod,
     abstractproperty,
     )
+from contextlib           import contextmanager
 from cargo.log            import get_logger
 from cargo.sugar          import ABC
 from borg.portfolio._base import (
@@ -43,11 +44,11 @@ class SolverAction(Action):
 
         return (SolverAction, (self._solver, self._budget))
 
-    def get_training(self, session, tasks):
+    def get_training(self, session, task_table):
         """
         Return a tasks-by-outcomes array.
 
-        Typically invoked through a trainer.
+        Typically invoked through a trainer. Rows are returned in task uuid order.
         """
 
         import numpy
@@ -63,8 +64,7 @@ class SolverAction(Action):
             RunAttemptRow as RAR,
             )
 
-        task_uuids = [t.get_row(session).uuid for t in tasks]
-        rows       =                                                               \
+        rows =                                                                   \
             session.execute(
                 select(
                     [
@@ -75,28 +75,15 @@ class SolverAction(Action):
                         RAR.solver           == self._solver.get_row(session),
                         RAR.budget           >= self.cost,
                         RAR.__table__.c.uuid == AR.uuid,
-                        RAR.task_uuid.in_(task_uuids),
+                        RAR.task_uuid        == task_table.c.uuid,
                         ),
-                    group_by = RAR.task_uuid,
-                    order_by = RAR.task_uuid,
+                    group_by = task_table.c.uuid,
+                    order_by = task_table.c.uuid,
                     ),
-                )                                                                  \
+                )                                                                \
                 .fetchall()
 
-        if len(rows) != len(tasks):
-            log.warning(
-                "fetched only %i rows for action %s on %i tasks",
-                 len(rows),
-                 len(tasks),
-                 self.description,
-                 )
-        else:
-            log.detail("fetched %i rows for action %s", len(rows), self.description)
-
-        order     = sorted(xrange(len(task_uuids)), key = lambda i: task_uuids[i])
-        unordered = numpy.array([[s, (a - s)] for (s, a) in rows], numpy.uint)
-
-        return unordered[numpy.array(order)]
+        return numpy.array([[s, (a - s)] for (s, a) in rows], numpy.uint)
 
     def take(self, task, remaining, random, environment):
         """
@@ -145,12 +132,10 @@ class SolverAction(Action):
 
         return self._solver
 
-class BinaryFeatureAction(Action):
+class DiscreteFeatureAction(Action):
     """
     An action that acquires a static feature of a problem instance.
     """
-
-    outcomes_ = [Outcome(0.0), Outcome(0.0)]
 
     def __init__(self, analyzer, feature):
         """
@@ -161,30 +146,28 @@ class BinaryFeatureAction(Action):
 
         self._analyzer = analyzer
         self._feature  = feature
+        self._outcomes = [Outcome(0.0) for i in xrange(feature.dimensionality)]
 
     def __reduce__(self):
         """
         Reduce this instance for pickling.
         """
 
-        return (BinaryFeatureAction, (self._analyzer, self._feature))
+        return (DiscreteFeatureAction, (self._analyzer, self._feature))
 
-    def get_training(self, session, tasks):
+    def get_training(self, session, task_table):
         """
         Return a tasks-by-outcomes array.
         """
 
-        return self._analyzer.get_training(session, self._feature, tasks)
+        return self._analyzer.get_training(session, self._feature, task_table)
 
     def take(self, features):
         """
         Return an outcome from the relevant feature value.
         """
 
-        if features[self._feature.name]:
-            return BinaryFeatureAction.outcomes_[0]
-        else:
-            return BinaryFeatureAction.outcomes_[1]
+        return self._outcomes[features[self._feature.name]]
 
     @property
     def description(self):
@@ -200,7 +183,7 @@ class BinaryFeatureAction(Action):
         The possible outcomes of this action.
         """
 
-        return BinaryFeatureAction.outcomes_
+        return self._outcomes
 
 class Trainer(ABC):
     """
@@ -228,9 +211,63 @@ class DecisionTrainer(Trainer):
 
     def get_data(self, actions):
         """
-        Provide a tasks-by-outcomes array to the trainee.
+        Provide tasks-by-outcomes arrays.
+        """
+
+        with self.context() as (session, task_table):
+            for_actions = [a.get_training(session, task_table) for a in actions]
+
+            for (action, outcomes) in zip(actions, for_actions):
+                if len(outcomes) != len(self._tasks):
+                    log.warning(
+                        "fetched only %i rows for action %s on %i tasks",
+                         len(outcomes),
+                         action.description,
+                         len(self._tasks),
+                         )
+                else:
+                    log.detail(
+                        "fetched %i rows for action %s",
+                        len(outcomes),
+                        action.description,
+                        )
+
+            #for s in zip(*for_actions):
+                #print " ; ".join(map(str, s))
+
+            return for_actions
+
+    @contextmanager
+    def context(self):
+        """
+        Provide a session instance and training tasks table.
         """
 
         with self._Session() as session:
-            return [a.get_training(session, self._tasks) for a in actions]
+            # store the task uuids in a temporary table
+            from sqlalchemy        import (
+                Table,
+                Column,
+                MetaData,
+                )
+            from cargo.sql.alchemy import SQL_UUID
+
+            metadata   = MetaData()
+            task_table = \
+                Table(
+                    "trainer_tasks_temporary",
+                    metadata,
+                    Column("uuid", SQL_UUID, primary_key = True),
+                    prefixes = ["temporary"],
+                    )
+
+            metadata.create_all(session.connection(), checkfirst = False)
+
+            session.execute(
+                task_table.insert(),
+                [{"uuid" : t.get_row(session).uuid} for t in self._tasks],
+                )
+
+            # the context
+            yield (session, task_table)
 
