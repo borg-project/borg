@@ -15,6 +15,7 @@ install(
         sanitizing.py
         satelite.py
         uncompressing.py
+        zefram.py
 	DESTINATION lib/borg/solvers
 	)
 

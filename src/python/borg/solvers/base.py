@@ -29,16 +29,15 @@ def get_named_solvers(paths = defaults.solver_lists, use_recycled = False):
     from cargo.io     import expandpath
     from borg.solvers import (
         RecyclingSolver,
-        PB_CompetitionSolver,
-        SatELitePreprocessor,
         RecyclingPreprocessor,
-        SAT_CompetitionSolver,
         )
 
     def sat_competition_loader(name, relative, attributes):
         """
         Load a competition solver.
         """
+
+        from borg.solvers import SAT_CompetitionSolver
 
         if use_recycled:
             return RecyclingSolver(name)
@@ -50,6 +49,8 @@ def get_named_solvers(paths = defaults.solver_lists, use_recycled = False):
         Load a competition solver.
         """
 
+        from borg.solvers import PB_CompetitionSolver
+
         if use_recycled:
             return RecyclingSolver(name)
         else:
@@ -60,15 +61,30 @@ def get_named_solvers(paths = defaults.solver_lists, use_recycled = False):
         Load a SatELite solver.
         """
 
+        from borg.solvers import SatELitePreprocessor
+
         if use_recycled:
             return RecyclingPreprocessor(name)
         else:
             return SatELitePreprocessor(attributes["command"], relative)
 
+    def zefram_loader(name, relative, attributes):
+        """
+        Load a Zefram solver.
+        """
+
+        from borg.solvers import ZeframSolver
+
+        if use_recycled:
+            return RecyclingPreprocessor(name)
+        else:
+            return ZeframSolver(attributes["command"], relative)
+
     loaders = {
         "sat_competition" : sat_competition_loader,
         "pb_competition"  : pb_competition_loader,
         "satelite"        : satelite_loader,
+        "zefram"          : zefram_loader,
         }
 
     def yield_solvers_from(raw_path):

@@ -377,6 +377,74 @@ class RunAttempt(Attempt):
 
         return self._run
 
+class ZeframRunAttempt(Attempt):
+    """
+    Outcome of an external SAT solver binary.
+    """
+
+    def __init__(self, solver, task, answer, seed, run):
+        """
+        Initialize.
+        """
+
+        Attempt.__init__(
+            self,
+            solver,
+            run.limit,
+            run.proc_elapsed,
+            task,
+            answer,
+            )
+
+        self._seed = seed
+        self._run  = run
+
+    def get_new_row(self, session, solver_row = None):
+        """
+        Return a database description of this result.
+        """
+
+        from borg.data import RunAttemptRow
+
+        return self._get_new_row(session, RunAttemptRow, solver_row = solver_row)
+
+    def _get_new_row(self, session, Row, solver_row = None, **kwargs):
+        """
+        Create or obtain an ORM row for this object.
+        """
+
+        from borg.data import CPU_LimitedRunRow
+
+        if solver_row is None:
+            solver_row = self._solver.get_row(session)
+
+        return \
+            Attempt._get_new_row(
+                self,
+                session,
+                Row,
+                solver = solver_row,
+                seed   = self._seed,
+                run    = CPU_LimitedRunRow.from_run(self._run),
+                **kwargs
+                )
+
+    @property
+    def seed(self):
+        """
+        The PRNG seed used for the run.
+        """
+
+        return self._seed
+
+    @property
+    def run(self):
+        """
+        The details of the run.
+        """
+
+        return self._run
+
 class WrappedRunAttempt(WrappedAttempt):
     """
     The wrapped outcome of a solver.

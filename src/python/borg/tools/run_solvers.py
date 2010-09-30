@@ -94,7 +94,7 @@ class SolveTaskJob(object):
 
     @staticmethod
     @composed(list)
-    def make_all(session, budget, restarts, seeded_restarts, recycle):
+    def make_all(session, budget, restarts, seeded_restarts, recycle, names = None):
         """
         Generate a set of jobs to distribute.
         """
@@ -113,7 +113,10 @@ class SolveTaskJob(object):
         environment   = Environment(named_solvers = named_solvers)
         task_uuids    = [u for (u,) in session.query(TR.uuid)]
 
-        for (name,) in session.query(SR.name):
+        if names is None:
+            names = [n for (n,) in session.query(SR.name)]
+
+        for name in names:
             solver = LookupSolver(name)
 
             if solver.get_seeded(environment):
@@ -138,6 +141,7 @@ class SolveTaskJob(object):
     budget          = ("solver budget"    , "positional", None , parse_timedelta),
     restarts        = ("minimum attempts" , "option"    , "r"  , int)            ,
     seeded_restarts = ("minimum attempts" , "option"    , "s"  , int)            ,
+    run_only        = ("run one solver"   , "option")   ,
     recycle         = ("reuse past runs"  , "flag")     ,
     outsource       = ("outsource labor"  , "flag")     ,
     )
@@ -145,6 +149,7 @@ def main(
     budget,
     restarts        = 1,
     seeded_restarts = 1,
+    run_only        = None,
     recycle         = False,
     outsource       = False,
     ):
@@ -167,7 +172,15 @@ def main(
         ResearchSession = make_session(bind = research_connect())
 
         with ResearchSession() as session:
-            jobs = SolveTaskJob.make_all(session, budget, restarts, seeded_restarts, recycle)
+            jobs = \
+                SolveTaskJob.make_all(
+                    session,
+                    budget,
+                    restarts,
+                    seeded_restarts,
+                    recycle,
+                    names = None if run_only is None else [run_only],
+                    )
 
         # run the jobs
         from cargo.labor import outsource_or_run
