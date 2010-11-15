@@ -3,9 +3,10 @@
 """
 
 if __name__ == "__main__":
+    from plac                       import call
     from borg.tools.plot_validation import main
 
-    raise SystemExit(main())
+    call(main)
 
 from cargo.log import get_logger
 
@@ -156,17 +157,10 @@ def plot_validation(session, output_path):
     pylab.draw()
     pylab.savefig(output_path)
 
-def main():
+def main(output):
     """
     Run the script.
     """
-
-    # get command line arguments
-    import borg.data
-
-    from cargo.flags import parse_given
-
-    (output,) = parse_given(usage = "%prog [options] <output>")
 
     # set up logging
     from cargo.log import enable_default_logging

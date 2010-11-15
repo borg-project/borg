@@ -6,28 +6,66 @@ from abc         import (
     abstractmethod,
     abstractproperty,
     )
+from contextlib  import contextmanager
+from collections import namedtuple
 from cargo.log   import get_logger
-from cargo.flags import (
-    Flag,
-    Flags,
-    )
 from borg.rowed  import (
     Rowed,
     AbstractRowed,
     )
+from borg        import defaults
 
-log          = get_logger(__name__)
-module_flags = \
-    Flags(
-        "Script Options",
-        Flag(
-            "--task-collections",
-            metavar = "PATH",
-            help    = "read collection paths from PATH [%default]",
-            )
+log = get_logger(__name__)
+
+DomainProperties = namedtuple("DomainProperties", ["patterns", "extension", "sanitizer"])
+
+def get_builtin_domains():
+    """
+    Return the properties of built-in domains.
+    """
+
+    from borg.sat.cnf import yield_sanitized_cnf
+    from borg.pb.opb  import yield_sanitized_opb
+
+    return {
+        "sat" : \
+            DomainProperties(
+                ["*.cnf", "*.cnf.gz", "*.cnf.bz2", "*.cnf.xz"],
+                "cnf",
+                yield_sanitized_cnf,
+                ),
+        "pb" : \
+            DomainProperties(
+                ["*.opb", "*.opb.gz", "*.opb.bz2", "*.opb.xz"],
+                "opb",
+                yield_sanitized_opb,
+                ),
+        }
+
+builtin_domains = get_builtin_domains()
+
+def get_task_file_hash(path, domain):
+    """
+    Return the hash of the specified task file.
+    """
+
+    from os.path  import join
+    from cargo.io import (
+        decompress_if,
+        mkdtemp_scoped,
+        hash_yielded_bytes,
         )
 
-def get_collections(path = None, default = {None: "."}):
+    with mkdtemp_scoped(prefix = "borg.tasks.") as sandbox_path:
+        uncompressed_name = "uncompressed.%s" % domain.extension
+        uncompressed_path = decompress_if(path, join(sandbox_path, uncompressed_name))
+
+        with open(uncompressed_path) as file:
+            (_, file_hash) = hash_yielded_bytes(domain.sanitizer(file), "sha512")
+
+            return file_hash
+
+def get_collections(path = defaults.collections, default = {None: "."}):
     """
     Get paths to task collections from a configuration file.
     """
@@ -36,19 +74,52 @@ def get_collections(path = None, default = {None: "."}):
     from cargo.json import load_json
 
     if path is None:
-        json_path = module_flags.given.task_collections
-    else:
-        json_path = path
-
-    if json_path is None:
         return default
+    else:
+        return dict((k, expandpath(v)) for (k, v) in load_json(path))
 
-    return dict((k, expandpath(v)) for (k, v) in load_json(json_path))
+@contextmanager
+def uncompressed_task(task):
+    """
+    Provide an uncompressed task in a managed context.
+    """
+
+    # it it's not file-backed, pass it along
+    from borg.tasks import AbstractFileTask
+
+    if not isinstance(task, AbstractFileTask):
+        yield task
+    else:
+        # create the context
+        from cargo.io import mkdtemp_scoped
+
+        with mkdtemp_scoped(prefix = "uncompressing.") as sandbox_path:
+            # decompress the instance, if necessary
+            from os.path  import join
+            from cargo.io import decompress_if
+
+            sandboxed_path    = join(sandbox_path, "uncompressed.cnf")
+            uncompressed_path = decompress_if(task.path, sandboxed_path)
+
+            log.info("maybe-decompressed %s to %s", task.path, uncompressed_path)
+
+            # provide the task
+            from borg.tasks import UncompressedFileTask
+
+            yield UncompressedFileTask(uncompressed_path, task)
 
 class AbstractTask(AbstractRowed):
     """
     Interface for a task.
     """
+
+    @property
+    def description(self):
+        """
+        Return an arbitrary description of this task.
+        """
+
+        return str(self)
 
 class AbstractFileTask(AbstractTask):
     """
@@ -106,6 +177,52 @@ class Task(Rowed, AbstractTask):
         """
 
         Rowed.__init__(self, row)
+
+class UUID_Task(Task):
+    """
+    An unbacked task identified by UUID.
+    """
+
+    def __init__(self, uuid, row = None):
+        """
+        Initialize.
+        """
+
+        if row is not None and uuid != row.uuid:
+            raise ValueError("uuid and row uuid do not match")
+
+        Rowed.__init__(self, row)
+
+        self._uuid = uuid
+
+    def get_new_row(self, session):
+        """
+        Create or obtain an ORM row for this object.
+        """
+
+        from borg.data import TaskRow as TR
+
+        return session.query(TR).get(self._uuid)
+
+    @property
+    def description(self):
+        """
+        Describe this task.
+        """
+
+        return str(self._uuid)
+
+    @staticmethod
+    def with_prefix(session, prefix):
+        """
+        Return the task uuids associated with a name prefix.
+        """
+
+        from borg.data import TaskRow
+
+        task_rows = TaskRow.with_prefix(session, prefix)
+
+        return [UUID_Task(task_row.uuid) for task_row in task_rows]
 
 class WrappedTask(Rowed, AbstractTask):
     """

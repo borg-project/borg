@@ -12,12 +12,12 @@ class FakeAction(Action):
     An action strictly for testing.
     """
 
-    def __init__(self, value, outcomes = None):
+    def __init__(self, value, outcomes = None, cost = 16.0):
         """
         Initialize.
         """
 
-        Action.__init__(self, 16.0)
+        Action.__init__(self, cost)
 
         self.value = value
 

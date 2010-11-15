@@ -4,9 +4,9 @@
 
 from nose.tools import assert_equal
 
-def test_tools_portfolio_solve():
+def test_solve():
     """
-    Test the portfolio solver execution script.
+    Test the solver execution tool.
     """
 
     # output we care about
@@ -31,10 +31,6 @@ def test_tools_portfolio_solve():
         pickle_file.flush()
 
         # prepare to invoke the "solve" script
-        from borg.tools.portfolio.test.support import clean_up_environment
-
-        clean_up_environment() # suboptimal, since we modify our own environment; whatever
-
         with NamedTemporaryFile(suffix = ".cnf") as cnf_file:
             # write a SAT instance to disk
             cnf_file.write(
@@ -48,20 +44,20 @@ def test_tools_portfolio_solve():
             # invoke the script solver
             import numpy
 
-            from cargo.temporal import TimeDelta
+            from datetime       import timedelta
+            from cargo.io       import env_restored
             from borg.tasks     import FileTask
             from borg.solvers   import (
                 Environment,
                 SAT_CompetitionSolver,
                 )
 
-
             script_solver = \
                 SAT_CompetitionSolver(
                     command = [
                         "python",
                         "-m",
-                        "borg.tools.portfolio.solve",
+                        "borg.tools.solve",
                         pickle_file.name,
                         cnf_file.name,
                         "42",
@@ -69,8 +65,15 @@ def test_tools_portfolio_solve():
                     )
             task          = FileTask(cnf_file.name)
             environment   = Environment()
-            budget        = TimeDelta(seconds = 16.0)
-            attempt       = script_solver.solve(task, budget, numpy.random, environment)
+            budget        = timedelta(seconds = 16.0)
+
+            with env_restored():
+                from os   import environ
+                from borg import export_clean_defaults_path
+
+                export_clean_defaults_path()
+
+                attempt = script_solver.solve(task, budget, numpy.random, environment)
 
     # does the result match expectations?
     assert_equal(attempt.answer, fixed_solver.answer)

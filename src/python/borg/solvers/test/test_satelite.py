@@ -57,11 +57,11 @@ while True: pass
             satelite = SatELitePreprocessor(["python", code_file.name])
 
             # run the preprocessor
-            from cargo.temporal import TimeDelta
-            from borg.tasks     import FileTask
+            from datetime   import timedelta
+            from borg.tasks import FileTask
 
             task    = FileTask("/tmp/path_irrelevant.cnf")
-            budget  = TimeDelta(seconds = 8.0)
+            budget  = timedelta(seconds = 8.0)
             attempt = satelite.preprocess(task, budget, "/tmp/arbitrary", None, None)
 
             # verify its response

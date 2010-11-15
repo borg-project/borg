@@ -11,27 +11,15 @@ from cargo.sugar import ABC
 
 log = get_logger(__name__)
 
-def build_planner(request, trainer, model):
-    """
-    Build an action planner as requested.
-    """
-
-    builders = {
-        "hard_myopic" : HardMyopicPlanner.build,
-        "soft_myopic" : SoftMyopicPlanner.build,
-        }
-
-    return builders[request["type"]](request, trainer, model)
-
 class AbstractPlanner(ABC):
     """
     Interface for action selection schemes.
     """
 
     @abstractmethod
-    def select(self, predicted, budget, random):
+    def select(self, model, history, budget, random):
         """
-        Select an action given the probabilities of outcomes.
+        Select an action.
         """
 
 class HardMyopicPlanner(AbstractPlanner):
@@ -39,28 +27,37 @@ class HardMyopicPlanner(AbstractPlanner):
     Deterministic greedy action selection.
     """
 
-    def __init__(self, actions, discount):
+    def __init__(self, discount, enabled = None):
         """
         Initialize.
         """
 
-        self.actions  = actions
-        self.discount = discount
+        self._discount = discount
+        self._enabled  = enabled
 
-    def select(self, predicted, budget, random):
+    def select(self, model, history, budget, random):
         """
-        Select an action given the probabilities of outcomes.
+        Select an action.
         """
 
+        # compute next-step predictions
+        predicted = model.predict(history, random)
+
+        # select an apparently-best action
         from itertools import izip
 
         best_action      = None
         best_expectation = None
 
-        for (i, action) in enumerate(self.actions):
-            if action.cost <= budget:
+        for (i, action) in enumerate(model.actions):
+            if self._enabled is None:
+                on = True
+            else:
+                on = self._enabled[i]
+
+            if on and action.cost <= budget:
                 e  = sum(p * o.utility for (p, o) in izip(predicted[i], action.outcomes))
-                e *= self.discount**action.cost
+                e *= self._discount**action.cost
 
                 if best_action is None or best_expectation < e:
                     best_action      = action
@@ -68,54 +65,32 @@ class HardMyopicPlanner(AbstractPlanner):
 
         return best_action
 
-    @staticmethod
-    def build(request, trainer, model):
-        """
-        Build a sequence strategy as requested.
-        """
-
-        return HardMyopicPlanner(model.actions, request["discount"])
-
-class SoftMyopicPlanner(AbstractPlanner):
+class BellmanPlanner(AbstractPlanner):
     """
-    Probabilistic greedy action selection.
+    Fixed-horizon optimal replanning.
     """
 
-    def __init__(self, discount, temperature = 1.0):
+    def __init__(self, horizon, discount, enabled = None):
         """
         Initialize.
         """
 
-        self.discount    = discount
-        self.temperature = temperature
+        self._horizon  = horizon
+        self._discount = discount
+        self._enabled  = enabled
 
-    def select(self, predicted, actions, random):
+    def select(self, model, history, budget, random):
         """
-        Select an action given the probabilities of outcomes.
-        """
-
-        # FIXME does this respect budget? (clearly not: the signature isn't even correct)
-
-        # convert to expectation
-        import numpy
-
-        expected       = numpy.sum(predicted * self.world.utilities, 1)
-        discounted     = numpy.fromiter((expected[a.n]*(self.discount**a.cutoff.as_s) for a in actions), numpy.double)
-        probabilities  = numpy.exp(discounted / self.temperature)
-        probabilities /= numpy.sum(probabilities)
-        ((naction,),)  = numpy.nonzero(random.multinomial(1, probabilities))
-        action         = actions[naction]
-
-        log.detail("probabilities: %s", probabilities)
-        log.detail("selected action %i (p = %.4f): %s", naction, probabilities[naction], action)
-
-        return action
-
-    @staticmethod
-    def build(request, trainer, model):
-        """
-        Build a sequence strategy as requested.
+        Select an action.
         """
 
-        return SoftMyopicPlanner(request["discount"], request["temperature"])
+        from borg.portfolio.bellman import BellmanCore
+
+        core = BellmanCore(model, self._discount, self._enabled)
+
+        (utility, plan) = core.plan(self._horizon, budget, history)
+
+        log.detail("computed Bellman plan: %s", " -> ".join(a.description for a in plan))
+
+        return plan[0]
 

@@ -8,64 +8,67 @@ from cargo.sugar import ABC
 
 log = get_logger(__name__)
 
-def build_strategy(request, trainer):
-    """
-    Build a selection strategy as requested.
-    """
-
-    builders = {
-        "sequence" : SequenceStrategy.build,
-        "fixed"    : FixedStrategy.build,
-        "modeling" : ModelingStrategy.build,
-        "bellman"  : BellmanStrategy.build,
-        }
-
-    return builders[request["type"]](request, trainer)
-
-class AbstractStrategy(ABC):
+class Strategy(ABC):
     """
     Abstract base for selection strategies.
     """
 
     @abstractmethod
-    def select(self, budget, random):
+    def reset(self):
         """
-        A generator that yields actions and receives (outcome, next_budget).
+        Prepare to solve a new task.
         """
 
-class SequenceStrategy(AbstractStrategy):
+    @abstractmethod
+    def see(self, action, outcome):
+        """
+        Witness the outcome of an action.
+        """
+
+    @abstractmethod
+    def choose(self, budget, random):
+        """
+        Return the selected action.
+        """
+
+class SequenceStrategy(Strategy):
     """
     A strategy the follows an iterable sequence for every task.
     """
 
-    def __init__(self, actions):
+    def __init__(self, sequence):
         """
         Initialize.
         """
 
-        self.actions = actions
+        self._sequence = sequence
 
-    def select(self, budget, random):
+    def reset(self):
         """
-        A generator that yields actions and receives (outcome, next_budget).
+        Prepare to solve a new task.
         """
 
-        for selected in self.actions:
+        self._iterable = iter(self._sequence)
+
+    def see(self, action, outcome):
+        """
+        Witness the outcome of an action.
+        """
+
+    def choose(self, budget, random):
+        """
+        Return the selected action.
+        """
+
+        try:
+            selected = self._iterable.next()
+
             if selected.cost <= budget:
-                (_, budget) = yield selected
-            else:
-                break
+                return selected
+        except StopIteration:
+            pass
 
-        while True:
-            yield None
-
-    @staticmethod
-    def build(request, trainer):
-        """
-        Build a sequence strategy as requested.
-        """
-
-        raise NotImplementedError()
+        return None
 
 class FixedStrategy(SequenceStrategy):
     """
@@ -81,15 +84,7 @@ class FixedStrategy(SequenceStrategy):
 
         SequenceStrategy.__init__(self, repeat(action))
 
-    @staticmethod
-    def build(request, trainer):
-        """
-        Build a fixed strategy as requested.
-        """
-
-        raise NotImplementedError()
-
-class ModelingStrategy(AbstractStrategy):
+class ModelingStrategy(Strategy):
     """
     A strategy that employs a model of its actions.
     """
@@ -99,41 +94,34 @@ class ModelingStrategy(AbstractStrategy):
         Initialize.
         """
 
-        self.model   = model
-        self.planner = planner
-        self._action_indices = dict((a, i) for (i, a) in enumerate(self.model.actions))
-
-    def select(self, budget, random):
-        """
-        Select an action, yield it, and receive its outcome.
-        """
-
         import numpy
 
-        dimensions = (len(self.model.actions), max(len(a.outcomes) for a in self.model.actions))
-        history    = numpy.zeros(dimensions, numpy.uint)
+        dimensions = (len(model.actions), max(len(a.outcomes) for a in model.actions))
 
-        while True:
-            # predict, then make a selection
-            predicted         = self.model.predict(history, random)
-            selected          = self.planner.select(predicted, budget, random)
-            (outcome, budget) = yield selected
+        self._model   = model
+        self._planner = planner
+        self._history = numpy.zeros(dimensions, numpy.uint)
 
-            history[self.model.actions.index(selected), selected.outcomes.index(outcome)] += 1
-
-    @staticmethod
-    def build(request, trainer):
+    def reset(self):
         """
-        Build a modeling selection strategy as requested.
+        Prepare to solve a new task.
         """
 
-        from borg.portfolio.models   import build_model
-        from borg.portfolio.planners import build_planner
+        self._history[:, :] = 0
 
-        model   = build_model(request["model"], trainer)
-        planner = build_planner(request["planner"], trainer, model)
+    def see(self, action, outcome):
+        """
+        Witness the outcome of an action.
+        """
 
-        return ModelingStrategy(model, planner)
+        self._history[self._model.actions.index(action), action.outcomes.index(outcome)] += 1
+
+    def choose(self, budget, random):
+        """
+        Return the selected action.
+        """
+
+        return self._planner.select(self._model, self._history, budget, random)
 
 class BellmanStrategy(SequenceStrategy):
     """
@@ -145,13 +133,13 @@ class BellmanStrategy(SequenceStrategy):
         Initialize.
         """
 
-        from cargo.temporal                import TimeDelta
+        from datetime                      import timedelta
         from borg.portfolio.bellman        import compute_bellman_plan
-        from borg.portfolio.decision_world import DecisionWorldAction
+        from borg.portfolio.decision_world import SolverAction
 
         plan = compute_bellman_plan(model, horizon, budget, discount)
 
-        plan[-1] = DecisionWorldAction(plan[-1].solver, TimeDelta(seconds = 1e6))
+        plan[-1] = SolverAction(plan[-1].solver, timedelta(seconds = 1e6))
 
         log.info("Bellman plan follows (horizon %i, budget %f)", horizon, budget)
 
@@ -160,15 +148,63 @@ class BellmanStrategy(SequenceStrategy):
 
         SequenceStrategy.__init__(self, plan)
 
-    @staticmethod
-    def build(request, trainer):
+class ChainedStrategy(Strategy):
+    """
+    Employ a sequence of strategies.
+    """
+
+    def __init__(self, strategies):
         """
-        Build a modeling selection strategy as requested.
+        Initialize.
         """
 
-        from borg.portfolio.models import build_model
+        self._strategies = strategies
 
-        model = build_model(request["model"], trainer)
+    def _yield_choices(self):
+        """
+        Iterate over this strategy's choices.
+        """
 
-        return BellmanStrategy(model, request["horizon"], request["budget"], request["discount"])
+        (budget, random) = yield
+
+        for strategy in self._strategies:
+            while True:
+                chosen = strategy.choose(budget, random)
+
+                if chosen is None:
+                    break
+                else:
+                    (budget, random) = yield chosen
+
+        while True:
+            yield None
+
+    def reset(self):
+        """
+        Prepare to solve a new task.
+        """
+
+        # reset the substrategies
+        for strategy in self._strategies:
+            strategy.reset()
+
+        # reset our iteration
+        self._iterable = self._yield_choices()
+
+        self._iterable.next()
+
+    def see(self, action, outcome):
+        """
+        Witness the outcome of an action.
+        """
+
+        for strategy in self._strategies:
+            strategy.see(action, outcome)
+
+    def choose(self, budget, random):
+        """
+        Return the selected action.
+        """
+
+        return self._iterable.send((budget, random))
 

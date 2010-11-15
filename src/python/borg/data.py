@@ -14,6 +14,7 @@ from sqlalchemy                 import (
     String,
     Integer,
     Boolean,
+    DateTime,
     ForeignKey,
     LargeBinary,
     UniqueConstraint,
@@ -29,44 +30,20 @@ from cargo.sql.alchemy          import (
     SQL_JSON,
     SQL_UUID,
     SQL_Engines,
-    UTC_DateTime,
     SQL_TimeDelta,
     )
-from cargo.flags                import (
-    Flag,
-    Flags,
-    )
+from borg                       import defaults
 
-log          = get_logger(__name__)
-DatumBase    = declarative_base()
-module_flags = \
-    Flags(
-        "Research Data Storage",
-        Flag(
-            "--research-database",
-            default = "sqlite:///:memory:",
-            metavar = "DATABASE",
-            help    = "use research DATABASE by default [%default]",
-            ),
-        Flag(
-            "--create-research-schema",
-            action  = "store_true",
-            help    = "create the research data schema, if necessary",
-            ),
-        )
+log       = get_logger(__name__)
+DatumBase = declarative_base()
+meta      = DatumBase.metadata
 
-def research_connect(engines = SQL_Engines.default, flags = module_flags.given):
+def research_connect(engines = SQL_Engines.default, url = defaults.research_url):
     """
     Connect to research data storage.
     """
 
-    flags  = module_flags.merged(flags)
-    engine = engines.get(flags.research_database)
-
-    if flags.create_research_schema:
-        DatumBase.metadata.create_all(engine)
-
-    return engine
+    return engines.get(url)
 
 class CPU_LimitedRunRow(DatumBase):
     """
@@ -76,7 +53,7 @@ class CPU_LimitedRunRow(DatumBase):
     __tablename__ = "cpu_limited_runs"
 
     uuid          = Column(SQL_UUID, primary_key = True, default = uuid4)
-    started       = Column(UTC_DateTime)
+    started       = Column(DateTime)
     usage_elapsed = Column(SQL_TimeDelta)
     proc_elapsed  = Column(SQL_TimeDelta)
     cutoff        = Column(SQL_TimeDelta)
@@ -275,6 +252,7 @@ class TaskRow(DatumBase):
     __mapper_args__ = {"polymorphic_on": type}
 
     # backref "names" from TaskNameRow
+    # backref "features" from TaskFeatureRow
 
     def get_task(self, environment):
         """
@@ -414,6 +392,33 @@ class TaskNameRow(DatumBase):
     collection = Column(String)
 
     task = relationship(TaskRow, backref = "names")
+
+    task_unique = UniqueConstraint("task_uuid", "collection")
+    name_unique = UniqueConstraint("name", "collection")
+
+class FeatureRow(DatumBase):
+    """
+    Record feature metadata.
+    """
+
+    __tablename__ = "features"
+
+    name = Column(String, primary_key = True)
+    type = Column(String)
+
+class TaskFloatFeatureRow(DatumBase):
+    """
+    Record the features of a task.
+    """
+
+    __tablename__ = "task_float_features"
+
+    name      = Column(String, ForeignKey("features.name"), primary_key = True)
+    task_uuid = Column(SQL_UUID, ForeignKey("tasks.uuid"), primary_key = True)
+    value     = Column(Float)
+
+    feature = relationship(FeatureRow)
+    task    = relationship(TaskRow, backref = "analysis")
 
 class AnswerRow(DatumBase):
     """
@@ -655,7 +660,7 @@ class RunAttemptRow(AttemptRow):
     __mapper_args__ = {"polymorphic_identity": "run"}
 
     uuid        = Column(SQL_UUID, ForeignKey("attempts.uuid"), primary_key = True)
-    solver_name = Column(String, ForeignKey("solvers.name"), nullable = False)
+    solver_name = Column(String, ForeignKey("solvers.name"), nullable = False, index = True)
     seed        = Column(Integer)
     run_uuid    = Column(SQL_UUID, ForeignKey("cpu_limited_runs.uuid"), nullable = False)
 
@@ -674,23 +679,4 @@ class PreprocessorAttemptRow(RunAttemptRow):
     output_task_uuid  = Column(SQL_UUID, ForeignKey("tasks.uuid"), nullable = False)
 
     output_task = relationship(TaskRow)
-
-class ValidationRunRow(DatumBase):
-    """
-    Place a task in the context of a collection.
-    """
-
-    __tablename__ = "validation_runs"
-
-    uuid             = Column(SQL_UUID, primary_key = True, default = uuid4)
-    solver_name      = Column(String, ForeignKey("solvers.name"), nullable = False)
-    solver_request   = Column(SQL_JSON)
-    train_task_uuids = Column(SQL_List(SQL_UUID))
-    test_task_uuids  = Column(SQL_List(SQL_UUID))
-    group            = Column(String)
-    score            = Column(Float)
-    components       = Column(Integer)
-    model_type       = Column(String)
-
-    solver = relationship(SolverRow)
 

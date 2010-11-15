@@ -5,36 +5,15 @@ Calculate a machine speed score.
 """
 
 if __name__ == "__main__":
+    from plac                   import call
     from utexas.tools.calibrate import main
 
-    raise SystemExit(main())
+    call(main)
 
-from cargo.log   import get_logger
-from cargo.flags import (
-    Flag,
-    Flags,
-    with_flags_parsed,
-    )
+from plac      import annotations
+from cargo.log import get_logger
 
-log          = get_logger(__name__, default_level = "NOTSET")
-module_flags = \
-    Flags(
-        "Script Options",
-        Flag(
-            "-r",
-            "--repeats",
-            type    = int,
-            default = 4,
-            metavar = "INT",
-            help    = "run each solver INT times [%default]",
-            ),
-        Flag(
-            "-c",
-            "--calibration",
-            metavar = "FILE",
-            help    = "use calibration configuration FILE [%default]",
-            ),
-        )
+log = get_logger(__name__, default_level = "NOTSET")
 
 def get_solver(named_solvers, name):
     """
@@ -48,17 +27,14 @@ def get_solver(named_solvers, name):
 
     return SAT_UncompressingSolver(SAT_SanitizingSolver(named_solvers[name]), name)
 
-def main():
+@annotations(
+    calibration = ("configuration file", "positional"),
+    repeats     = ("run count"         , "option"     , "r", int),
+    )
+def main(calibration, repeats = 4):
     """
     Application body.
     """
-
-    # get command line arguments
-    import utexas.sat.solvers
-
-    from cargo.flags import parse_given
-
-    parse_given()
 
     # set up log output
     from cargo.log import enable_default_logging
@@ -75,31 +51,31 @@ def main():
     # build the calibration runs
     import json
 
-    with open(module_flags.given.calibration) as file:
+    with open(calibration) as file:
         runs = json.load(file)
 
     # and execute them
+    from datetime       import timedelta
     from cargo.io       import expandpath
-    from cargo.temporal import TimeDelta
+    from cargo.temporal import seconds
 
-    nrepeats    = module_flags.given.repeats
-    outer_total = TimeDelta()
+    outer_total = timedelta()
 
     for (solver_name, path, seed) in runs:
         solver      = get_solver(named_solvers, solver_name)
         full_path   = expandpath(path)
-        inner_total = TimeDelta()
+        inner_total = timedelta()
 
-        for i in xrange(nrepeats):
-            result       = solver.solve(full_path, TimeDelta(seconds = 1e6), seed)
+        for i in xrange(repeats):
+            result       = solver.solve(full_path, timedelta(seconds = 1e6), seed)
             inner_total += result.run.usage_elapsed
 
-        average      = inner_total / nrepeats
+        average      = inner_total / repeats
         outer_total += average
 
-        log.detail("run average is %f", TimeDelta.from_timedelta(average).as_s)
+        log.detail("run average is %f", seconds(average))
 
     score = outer_total / len(runs)
 
-    log.note("machine performance score is %f", TimeDelta.from_timedelta(score).as_s)
+    log.note("machine performance score is %f", seconds(score))
 

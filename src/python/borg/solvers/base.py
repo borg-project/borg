@@ -4,50 +4,10 @@
 
 from abc         import abstractmethod
 from cargo.log   import get_logger
-from cargo.flags import (
-    Flag,
-    Flags,
-    )
-from borg.rowed import AbstractRowed
+from borg        import defaults
+from borg.rowed  import AbstractRowed
 
-log          = get_logger(__name__)
-module_flags = \
-    Flags(
-        "Solver Configuration",
-        Flag(
-            "--solvers-file",
-            default = [],
-            action  = "append",
-            metavar = "FILE",
-            help    = "read solver descriptions from FILE [%default]",
-            ),
-        )
-
-def solver_from_request(request, trainer):
-    """
-    Build a portfolio object as requested.
-    """
-
-    from borg.solvers import (
-        LookupSolver,
-        PortfolioSolver,
-        )
-
-    builders = {
-        "portfolio" : PortfolioSolver.build,
-        "lookup"    : LookupSolver.build,
-        }
-
-    return builders[request["type"]](request, trainer)
-
-def model_from_request(request, trainer):
-    """
-    Build a portfolio object as requested.
-    """
-
-    from borg.portfolio.models import build_model
-
-    return build_model(request, trainer)
+log = get_logger(__name__)
 
 def get_random_seed(random):
     """
@@ -60,29 +20,24 @@ def get_random_seed(random):
 
     return random.randint(iinfo(numpy.int32).max)
 
-def get_named_solvers(paths = [], flags = {}, use_recycled = False):
+def get_named_solvers(paths = defaults.solver_lists, use_recycled = False):
     """
     Retrieve a list of named solvers.
     """
-
-    import json
 
     from os.path      import dirname
     from cargo.io     import expandpath
     from borg.solvers import (
         RecyclingSolver,
-        PB_CompetitionSolver,
-        SatELitePreprocessor,
         RecyclingPreprocessor,
-        SAT_CompetitionSolver,
         )
-
-    flags = module_flags.merged(flags)
 
     def sat_competition_loader(name, relative, attributes):
         """
         Load a competition solver.
         """
+
+        from borg.solvers import SAT_CompetitionSolver
 
         if use_recycled:
             return RecyclingSolver(name)
@@ -94,6 +49,8 @@ def get_named_solvers(paths = [], flags = {}, use_recycled = False):
         Load a competition solver.
         """
 
+        from borg.solvers import PB_CompetitionSolver
+
         if use_recycled:
             return RecyclingSolver(name)
         else:
@@ -104,15 +61,30 @@ def get_named_solvers(paths = [], flags = {}, use_recycled = False):
         Load a SatELite solver.
         """
 
+        from borg.solvers import SatELitePreprocessor
+
         if use_recycled:
             return RecyclingPreprocessor(name)
         else:
             return SatELitePreprocessor(attributes["command"], relative)
 
+    def zefram_loader(name, relative, attributes):
+        """
+        Load a Zefram solver.
+        """
+
+        from borg.solvers import ZeframSolver
+
+        if use_recycled:
+            return RecyclingPreprocessor(name)
+        else:
+            return ZeframSolver(attributes["command"], relative)
+
     loaders = {
         "sat_competition" : sat_competition_loader,
         "pb_competition"  : pb_competition_loader,
         "satelite"        : satelite_loader,
+        "zefram"          : zefram_loader,
         }
 
     def yield_solvers_from(raw_path):
@@ -120,11 +92,11 @@ def get_named_solvers(paths = [], flags = {}, use_recycled = False):
         (Recursively) yield solvers from a solvers file.
         """
 
+        from cargo.json import load_json
+
         path     = expandpath(raw_path)
         relative = dirname(path)
-
-        with open(path) as file:
-            loaded = json.load(file)
+        loaded   = load_json(path)
 
         log.note("read named-solvers file: %s", raw_path)
 
@@ -140,7 +112,7 @@ def get_named_solvers(paths = [], flags = {}, use_recycled = False):
     # build the solvers dictionary
     from itertools import chain
 
-    return dict(chain(*(yield_solvers_from(p) for p in chain(paths, flags.solvers_file))))
+    return dict(chain(*(yield_solvers_from(p) for p in paths)))
 
 class AbstractSolver(AbstractRowed):
     """
@@ -152,6 +124,13 @@ class AbstractSolver(AbstractRowed):
         """
         Attempt to solve the specified instance.
         """
+
+    def name(self):
+        """
+        An arbitrary name for this solver.
+        """
+
+        return "anonymous"
 
 class AbstractPreprocessor(AbstractSolver):
     """
@@ -198,4 +177,42 @@ class Environment(object):
         self.collections   = collections
         self.MainSession   = MainSession
         self.CacheSession  = CacheSession
+
+class TypicalEnvironmentFactory(object):
+    """
+    Build a typical environment.
+    """
+
+    def __init__(self, main_url = None, cache_path = None, **kwargs):
+        """
+        Initialize.
+        """
+
+        self._main_url   = main_url
+        self._cache_path = cache_path
+        self._kwargs     = kwargs
+
+    def __call__(self, engines):
+        """
+        Build an environment.
+        """
+
+        from cargo.sql.alchemy import make_session
+
+        MainSession = make_session(bind = engines.get(self._main_url))
+
+        if self._cache_path is None:
+            CacheSession = MainSession
+        else:
+            from cargo.io import cache_file
+
+            cache_engine = engines.get("sqlite:///%s" % cache_file(self._cache_path))
+            CacheSession = make_session(bind = cache_engine)
+
+        return \
+            Environment(
+                MainSession  = MainSession,
+                CacheSession = CacheSession,
+                **self._kwargs
+                )
 

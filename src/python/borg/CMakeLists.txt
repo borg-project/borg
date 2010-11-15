@@ -5,10 +5,12 @@
 install(
     FILES
         __init__.py
+		analyzers.py
         cache.py
         data.py
         rowed.py
         tasks.py
+        defaults.py
     DESTINATION lib/borg
     )
 
@@ -24,4 +26,5 @@ add_subdirectory(sat)
 add_subdirectory(solvers)
 add_subdirectory(test)
 add_subdirectory(tools)
+add_subdirectory(_files)
 

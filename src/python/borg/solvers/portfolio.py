@@ -2,11 +2,14 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+from cargo.log    import get_logger
 from borg.rowed   import Rowed
 from borg.solvers import (
     RunAttempt,
     AbstractSolver,
     )
+
+log = get_logger(__name__)
 
 # FIXME hack---shouldn't really be a RunAttempt
 # FIXME (if the *only* distinction between a run and non-run attempt
@@ -54,55 +57,71 @@ class PortfolioSolver(Rowed, AbstractSolver):
     Solve tasks with a portfolio.
     """
 
-    def __init__(self, strategy):
+    def __init__(self, strategy, analyzer):
         """
         Initialize.
         """
 
         Rowed.__init__(self)
 
-        self.strategy        = strategy
-        self.max_invocations = 50
+        self._strategy        = strategy
+        self._analyzer        = analyzer
+        self._max_invocations = 50
 
     def solve(self, task, budget, random, environment):
         """
         Execute the solver and return its outcome, given an input path.
         """
 
-        from cargo.temporal import TimeDelta
+        # first, compute features
+        features = self._analyzer.analyze(task, environment)
 
-        # solve the instance
+        for (name, value) in features.items():
+            log.detail("feature %s has value %s", name, value)
+
+        # then invoke solvers
+        from datetime             import timedelta
+        from borg.portfolio.world import (
+            SolverAction,
+            DiscreteFeatureAction,
+            )
+        from cargo.temporal       import seconds
+
         remaining = budget
-        nleft     = self.max_invocations
+        nleft     = self._max_invocations
         record    = []
-        selector  = self.strategy.select(remaining.as_s, random)
-        message   = None
 
-        while remaining > TimeDelta() and nleft > 0:
-            # select and take an action
-            from cargo.temporal                import TimeDelta
-            from borg.portfolio.decision_world import DecisionWorldOutcome
+        self._strategy.reset()
 
-            action = selector.send(message)
+        while remaining > timedelta() and nleft > 0:
+            # select an action
+            log.debug("selecting an action with %s remaining", remaining)
 
+            action = self._strategy.choose(seconds(remaining), random)
+
+            # take the action
             if action is None:
                 break
-            else:
-                calibrated = \
-                    min(
-                        remaining,
-                        TimeDelta(seconds = action.cost * environment.time_ratio),
-                        )
-                attempt    = action.solver.solve(task, calibrated, random, environment)
-                outcome    = DecisionWorldOutcome.from_result(attempt)
-                nleft     -= 1
-                remaining  = TimeDelta.from_timedelta(remaining - attempt.cost)
-                message    = (outcome, remaining.as_s)
+            elif isinstance(action, DiscreteFeatureAction):
+                log.info("taking feature action %s", action.description)
+
+                outcome = action.take(features)
+            elif isinstance(action, SolverAction):
+                log.info("taking solver action %s", action.description)
+
+                (attempt, outcome)  = action.take(task, remaining, random, environment)
+                nleft              -= 1
+                remaining           = remaining - action.budget
 
                 record.append((action.solver, attempt))
 
-                if attempt.answer is not None:
+                if outcome.utility > 0.0:
                     break
+            else:
+                raise TypeError("cannot handle unexpected action type")
+
+            # witness its outcome
+            self._strategy.see(action, outcome)
 
         return PortfolioAttempt(self, task, budget, budget - remaining, record)
 
@@ -130,13 +149,11 @@ class PortfolioSolver(Rowed, AbstractSolver):
 
         return "portfolio"
 
-    @staticmethod
-    def build(request, trainer):
+    @property
+    def analyzer(self):
         """
-        Build a solver as requested.
+        Return the analyzer employed.
         """
 
-        from borg.portfolio.strategies import build_strategy
-
-        return PortfolioSolver(build_strategy(request["strategy"], trainer))
-
+        return self._analyzer
+ 

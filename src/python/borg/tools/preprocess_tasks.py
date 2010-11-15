@@ -3,28 +3,17 @@
 """
 
 if __name__ == "__main__":
+    from plac                        import call
     from borg.tools.preprocess_tasks import main
 
-    raise SystemExit(main())
+    call(main)
 
-from cargo.log   import get_logger
-from cargo.flags import (
-    Flag,
-    Flags,
-    )
+from plac           import annotations
+from cargo.log      import get_logger
+from cargo.json     import load_json
+from cargo.temporal import parse_timedelta
 
-log          = get_logger(__name__, default_level = "INFO")
-module_flags = \
-    Flags(
-        "Script Options",
-        Flag(
-            "--restarts",
-            type    = int,
-            default = 1,
-            metavar = "INT",
-            help    = "make INT restarts per task [%default]",
-            ),
-        )
+log = get_logger(__name__, default_level = "INFO")
 
 def preprocess_task(
     engine_url,
@@ -127,7 +116,7 @@ def preprocess_task(
             # flush this row to the database
             session.commit()
 
-def yield_jobs(session, preprocessor_names, budget, task_uuids, collections):
+def yield_jobs(session, preprocessor_names, budget, task_uuids, collections, restarts):
     """
     Generate a set of jobs to distribute.
     """
@@ -151,7 +140,6 @@ def yield_jobs(session, preprocessor_names, budget, task_uuids, collections):
         )
 
     named_solvers = get_named_solvers()
-    restarts      = module_flags.given.restarts
 
     for preprocessor_name in preprocessor_names:
         preprocessor = UncompressingPreprocessor(LookupPreprocessor(preprocessor_name))
@@ -169,24 +157,15 @@ def yield_jobs(session, preprocessor_names, budget, task_uuids, collections):
                 collections     = collections,
                 )
 
-def main():
+@annotations(
+    budget    = ("solver budget"    , "positional", None, parse_timedelta),
+    arguments = ("arguments in JSON", "positional", None, load_json)   ,
+    restarts  = ("restarts per task", "option"    , "r" , int)         ,
+    )
+def main(budget, arguments, restarts = 1):
     """
     Run the script.
     """
-
-    # get command line arguments
-    import cargo.labor.storage
-    import borg.data
-    import borg.solvers
-
-    from cargo.json     import load_json
-    from cargo.flags    import parse_given
-    from cargo.temporal import TimeDelta
-
-    (budget, arguments) = parse_given(usage = "%prog <budget> <args.json> [options]")
-
-    budget    = TimeDelta(seconds = float(budget))
-    arguments = load_json(arguments)
 
     # set up logging
     from cargo.log import enable_default_logging
@@ -220,6 +199,7 @@ def main():
                         budget,
                         map(UUID, arguments["tasks"]),
                         get_collections(),
+                        restarts,
                         ),
                     )
 

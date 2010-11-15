@@ -3,61 +3,22 @@
 """
 
 if __name__ == "__main__":
+    from plac                      import call
     from borg.tools.run_validation import main
 
-    raise SystemExit(main())
+    call(main)
 
-from cargo.log   import get_logger
-from cargo.flags import (
-    Flag,
-    Flags,
-    )
+from uuid       import UUID
+from datetime   import parse_timedelta
+from plac       import annotations
+from cargo.log  import get_logger
+from cargo.json import load_json
 
-log          = get_logger(__name__, default_level = "INFO")
-module_flags = \
-    Flags(
-        "Script Options",
-        Flag(
-            "-t",
-            "--trial",
-            default = "random",
-            metavar = "UUID",
-            help    = "place attempts in trial UUID [%default]",
-            ),
-        Flag(
-            "-p",
-            "--parent-trial",
-            default = None,
-            metavar = "UUID",
-            help    = "use a child trial of UUID [%default]",
-            ),
-        Flag(
-            "-r",
-            "--runs",
-            type    = int,
-            default = 1,
-            metavar = "INT",
-            help    = "make INT validation runs [%default]",
-            ),
-        Flag(
-            "-f",
-            "--training-fraction",
-            type    = float,
-            default = 0.0,
-            metavar = "FLOAT",
-            help    = "use fraction FLOAT of tasks for training [%default]",
-            ),
-        Flag(
-            "--cache-path",
-            metavar = "PATH",
-            help    = "read data from PATH when possible [%default]",
-            ),
-        )
+log = get_logger(__name__, default_level = "INFO")
 
 def make_validation_run(
     engine_url,
     request,
-    domain,
     fraction,
     task_uuids,
     budget,
@@ -106,11 +67,11 @@ def make_validation_run(
         CacheSession = make_session(bind = cache_engine)
 
     # build the solver
-    from borg.portfolio.world import build_trainer
-    from borg.solvers         import solver_from_request
+    from borg.solvers         import AbstractSolver
+    from borg.portfolio.world import Trainer
 
-    trainer = build_trainer(domain, train_uuids, CacheSession, extrapolation = 6)
-    solver  = solver_from_request(request, trainer)
+    trainer   = DecisionTrainer.build(ResearchSession, train_uuids, request["trainer"])
+    requested = AbstractSolver.build(trainer, request["solver"])
 
     log.info("built solver from request")
 
@@ -151,11 +112,13 @@ def make_validation_run(
         log.info("solver succeeded on %i of %i task(s)", solved, len(test_uuids))
 
         if solver.name == "portfolio":
-            components = request["strategy"]["model"]["components"]
-            model_type = request["strategy"]["model"]["type"]
+            components    = request["solver"]["strategy"]["model"]["components"]
+            model_type    = request["solver"]["strategy"]["model"]["type"]
+            analyzer_type = request["solver"]["analyzer"]["type"]
         else:
-            components = None
-            model_type = None
+            components    = None
+            model_type    = None
+            analyzer_type = None
 
         run = \
             ValidationRunRow(
@@ -167,124 +130,82 @@ def make_validation_run(
                 score            = solved,
                 components       = components,
                 model_type       = model_type,
+                analyzer_type    = analyzer_type,
                 )
 
         session.add(run)
         session.commit()
 
-def yield_solver_requests():
+def outsource_validation_jobs(
+    engine_url,
+    builders,
+    task_uuids,
+    budget,
+    fraction,
+    group = None,
+    repeats = 1,
+    ):
     """
-    Build the solvers as configured.
+    Outsource validation runs.
     """
 
-    import numpy
+    # build its jobs
+    def yield_jobs():
+        from cargo.labor.jobs import CallableJob
+        from cargo.random     import get_random_random
+        from borg.solvers     import get_named_solvers
 
-    sat_2009_subsolvers = [
-        "sat/2009/adaptg2wsat2009++",
-        "sat/2009/CirCUs",
-        "sat/2009/clasp",
-        "sat/2009/glucose",
-        "sat/2009/gnovelty+2",
-        "sat/2009/gNovelty+-T",
-        "sat/2009/hybridGM3",
-        "sat/2009/iPAWS",
-        "sat/2009/IUT_BMB_SAT",
-        "sat/2009/LySAT_c",
-        "sat/2009/LySAT_i",
-        "sat/2009/ManySAT",
-        "sat/2009/march_hi",
-        "sat/2009/minisat_09z",
-        "sat/2009/minisat_cumr_p",
-        "sat/2009/mxc_09",
-        "sat/2009/precosat",
-        "sat/2009/rsat_09",
-        "sat/2009/SApperloT",
-        "sat/2009/TNM",
-        "sat/2009/VARSAT-industrial"
-        ]
-    sat_2009_satzillas = [
-        "sat/2009/SATzilla2009_R",
-        "sat/2009/SATzilla2009_C",
-        "sat/2009/SATzilla2009_I",
-        ]
+        for builder in builders:
+            for i in xrange(repeats):
+                yield CallableJob(
+                    make_validation_run,
+                    engine_url    = engine_url,
+                    builder       = builder,
+                    fraction      = fraction,
+                    task_uuids    = task_uuids,
+                    budget        = budget,
+                    random        = get_random_random(),
+                    named_solvers = get_named_solvers(use_recycled = True),
+                    group         = group,
+                    cache_path    = None,
+                    )
 
-    # the individual solvers
-#     for name in sat_2009_subsolvers + sat_2009_satzillas:
-#         yield { "type" : "lookup", "name" : name }
+    jobs = list(yield_jobs())
 
-    # the DCM portfolio solver(s)
-#     for k in xrange(1, 65):
-    for k in [63]:
-        yield {
-            "type"     : "portfolio",
-            "strategy" : {
-                "type"     : "modeling",
-                "model"    : {
-                    "type"        : "dcm",
-                    "components"  : int(k),
-                    "em_restarts" : 4,
-                    "actions"     : {
-                        "solvers" : sat_2009_subsolvers,
-                        "budgets" : numpy.r_[25.0:4000.0:10j].tolist(),
-                        },
-                    },
-                "planner" : {
-                    "type"     : "hard_myopic",
-                    "discount" : 1.0 - 1e-4,
-                    },
-                },
-            }
+    # run the jobs
+    from cargo.temporal      import utc_now
+    from cargo.labor.storage import outsource_or_run
 
-    # the multinomial portfolio solver(s)
-#     for k in xrange(1, 65):
-#         yield {
-#             "type"     : "portfolio",
-#             "strategy" : {
-#                 "type"     : "modeling",
-#                 "model"    : {
-#                     "type"        : "multinomial",
-#                     "components"  : int(k),
-#                     "em_restarts" : 4,
-#                     "actions"     : {
-#                         "solvers" : sat_2009_subsolvers,
-#                         "budgets" : numpy.r_[25.0:4000.0:10j].tolist(),
-#                         },
-#                     },
-#                 "planner" : {
-#                     "type"     : "hard_myopic",
-#                     "discount" : 1.0 - 1e-4,
-#                     },
-#                 },
-#             }
+    outsource_or_run(jobs, "validation runs (at %s)" % utc_now())
 
-def main():
+@annotations(
+    group        = ("group name")       ,
+    budget       = ("solver time budget", "positional", None , parse_timedelta),
+    fraction     = ("train set fraction", "positional", None , float)          ,
+    uuids        = ("task uuids json"   , "positional", None , lambda p: map(UUID, load_json(p))),
+    trial        = ("attempts trial"    , "option"    , "t"  , UUID)           ,
+    parent_trial = ("trial parent"      , "option"    , "p"  , UUID)
+    runs         = ("number of runs"    , "option"    , "r"  , int)            ,
+    cache_path   = ("local database"    , "option"    , None),
+    )
+def main(
+    group,
+    budget,
+    fraction,
+    uuids,
+    trial        = "random",
+    parent_trial = None,
+    runs         = 1,
+    cache_path   = None,
+    ):
     """
     Run the script.
     """
 
-    # get command line arguments
-    import cargo.labor.storage
-    import borg.data
-    import borg.tasks
-    import borg.solvers
+    if cache_path is not None:
+        from os.path import abspath
 
-    from uuid           import UUID
-    from os.path        import abspath
-    from cargo.json     import load_json
-    from cargo.flags    import parse_given
-    from cargo.temporal import TimeDelta
-
-    (group, budget, fraction, uuids) = \
-        parse_given(usage = "%prog [options] <group> <budget> <fraction> <uuids.json>")
-
-    budget   = TimeDelta(seconds = float(budget))
-    fraction = float(fraction)
-    uuids    = map(UUID, load_json(uuids))
-
-    if module_flags.given.cache_path is None:
-        cache_path = None
-    else:
-        cache_path = abspath(module_flags.given.cache_path)
+        cache_path = abspath(cache_path)
 
     # set up logging
     from cargo.log import enable_default_logging
@@ -318,12 +239,11 @@ def main():
                 named_solvers = get_named_solvers(use_recycled = True)
 
                 for request in yield_solver_requests():
-                    for i in xrange(module_flags.given.runs):
+                    for i in xrange(runs):
                         yield CallableJob(
                             make_validation_run,
                             engine_url    = session.connection().engine.url,
                             request       = request,
-                            domain        = "sat",
                             fraction      = fraction,
                             task_uuids    = uuids,
                             budget        = budget,

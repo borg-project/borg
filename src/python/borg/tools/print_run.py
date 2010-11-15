@@ -3,27 +3,16 @@
 """
 
 if __name__ == "__main__":
+    from plac                 import call
     from borg.tools.print_run import main
 
-    raise SystemExit(main())
+    call(main)
 
-from cargo.log   import get_logger
-from cargo.flags import (
-    Flag,
-    Flags,
-    parse_given,
-    )
+from uuid      import UUID
+from plac      import annotations
+from cargo.log import get_logger
 
-log          = get_logger(__name__, default_level = "NOTSET")
-module_flags = \
-    Flags(
-        "Run Printing",
-        Flag(
-            "--run-uuid",
-            metavar = "UUID",
-            help    = "print run UUID [%default]",
-            ),
-        )
+log = get_logger(__name__, default_level = "NOTSET")
 
 def print_run(session, run_uuid):
     """
@@ -59,18 +48,13 @@ def print_run(session, run_uuid):
         stderr,
         )
 
-def main():
+@annotations(
+    run_uuid = ("run to print", "positional", None, UUID),
+    )
+def main(run_uuid):
     """
     Application body.
     """
-
-    # get command line arguments
-    import borg.data
-
-    from cargo.sql.alchemy import SQL_Engines
-    from cargo.flags       import parse_given
-
-    parse_given()
 
     # set up log output
     from cargo.log import enable_default_logging
@@ -85,7 +69,5 @@ def main():
         ResearchSession = make_session(bind = research_connect())
 
         with ResearchSession() as session:
-            from uuid import UUID
-
-            print_run(session, UUID(module_flags.given.run_uuid))
+            print_run(session, run_uuid)
 

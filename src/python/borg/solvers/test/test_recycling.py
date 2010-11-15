@@ -7,19 +7,19 @@ def generated_callable(fake_data, solver, task_uuid, seconds, answer, output_tas
     Test the recycling solver.
     """
 
-    from nose.tools     import assert_equal
-    from cargo.temporal import TimeDelta
-    from borg.data      import TaskRow
-    from borg.tasks     import Task
-    from borg.solvers   import Environment
+    from datetime     import timedelta
+    from nose.tools   import assert_equal
+    from borg.data    import TaskRow
+    from borg.tasks   import Task
+    from borg.solvers import Environment
 
     task        = Task(TaskRow(uuid = task_uuid))
     environment = Environment(CacheSession = fake_data.Session)
 
     if output_task_uuid is None:
-        attempt = solver.solve(task, TimeDelta(seconds = seconds), None, environment)
+        attempt = solver.solve(task, timedelta(seconds = seconds), None, environment)
     else:
-        attempt = solver.preprocess(task, TimeDelta(seconds = seconds), None, None, environment)
+        attempt = solver.preprocess(task, timedelta(seconds = seconds), None, None, environment)
 
         with fake_data.Session() as session:
             output_task_row = attempt.output_task.get_row(session)

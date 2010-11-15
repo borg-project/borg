@@ -2,9 +2,17 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-cdef class AbstractAction:
-    cdef double cost
+cdef class Action:
+    """
+    An action in the world.
+    """
 
-cdef class AbstractOutcome:
-    cdef double utility
+    cdef double _cost
+
+cdef class Outcome:
+    """
+    The outcome of an action in the world.
+    """
+
+    cdef double _utility
 

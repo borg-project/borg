@@ -38,14 +38,15 @@ def test_random_model():
     model   = RandomModel(actions)
 
     # generate a bunch of predictions
+    import numpy
+
     from numpy.random import RandomState
 
     random    = RandomState(42)
-    predicted = [model.predict([], random) for i in xrange(1024)]
+    history   = numpy.zeros((4, 4), numpy.uint)
+    predicted = [model.predict(history, random) for i in xrange(1024)]
 
     # verify that they're valid probabilities
-    import numpy
-
     for predictions in predicted:
         for p in predictions:
             assert_almost_equal(numpy.sum(p), 1.0)
@@ -59,67 +60,51 @@ def test_random_model():
 
         assert_true(numpy.sum(numpy.abs(mean - expected)) < 0.05)
 
-class FakeDCM_Estimator(object):
+def test_distribution_model():
     """
-    Estimate some fixed mixture.
-    """
-
-    def __init__(self, mixture):
-        """
-        Initialize.
-        """
-
-        self._mixture = mixture
-
-    def estimate(self, samples):
-        """
-        Pretend to estimate.
-        """
-
-        return self._mixture
-
-def test_dcm_model():
-    """
-    Test the DCM-mixture portfolio model.
+    Test the probability-distribution portfolio model.
     """
 
     # set up the model
     from cargo.statistics.dcm        import DirichletCompoundMultinomial
+    from cargo.statistics.tuple      import TupleDistribution
     from cargo.statistics.mixture    import FiniteMixture
-    from borg.portfolio.models       import DCM_MixtureModel
+    from borg.portfolio.models       import DistributionModel
     from borg.portfolio.test.support import (
         FakeAction,
         FakeOutcome,
         )
 
-    foo_action = FakeAction("foo", map(FakeOutcome, [0.0, 1.0]))
-    bar_action = FakeAction("bar", map(FakeOutcome, [0.0, 1.0]))
-    mixture    = \
+    actions = [
+        FakeAction("foo", map(FakeOutcome, [0.0, 1.0])),
+        FakeAction("bar", map(FakeOutcome, [0.0, 1.0])),
+        ]
+    mixture = \
         FiniteMixture(
             [0.25, 0.75],
             [
-                [
-                    DirichletCompoundMultinomial([1e-4, 1.0]),
-                    DirichletCompoundMultinomial([1.0,  1e-4]),
-                    ],
-                [
-                    DirichletCompoundMultinomial([1.0,  1e-4]),
-                    DirichletCompoundMultinomial([1e-4, 1.0]),
-                    ],
+                TupleDistribution((
+                    DirichletCompoundMultinomial([1e-4, 1.0],  1),
+                    DirichletCompoundMultinomial([1.0,  1e-4], 1),
+                    )),
+                TupleDistribution((
+                    DirichletCompoundMultinomial([1.0,  1e-4], 1),
+                    DirichletCompoundMultinomial([1e-4, 1.0],  1),
+                    )),
                 ],
             )
-    estimator = FakeDCM_Estimator(mixture)
-    training  = {foo_action: [], bar_action: []}
-    model     = DCM_MixtureModel(training, estimator)
+    model   = DistributionModel(mixture, actions)
 
     # verify its a priori predictions
     import numpy
-    import numpy.random as r
 
+    from numpy.random  import RandomState
     from cargo.testing import assert_almost_equal_deep
 
+    rs = RandomState(42)
+
     assert_almost_equal_deep(
-        model.predict(numpy.zeros((2, 2), numpy.uint), r).tolist(),
+        model.predict(numpy.zeros((2, 2), numpy.uint), rs).tolist(),
         [
             [0.74995000499950015, 0.25004999500049996],
             [0.25004999500049996, 0.74995000499950015],
@@ -128,17 +113,17 @@ def test_dcm_model():
 
     # verify its a posteriori predictions
     assert_almost_equal_deep(
-        model.predict(numpy.array([[1, 0], [0, 1]], numpy.uint), r).tolist(),
+        model.predict(numpy.array([[1, 0], [0, 1]], numpy.uint), rs).tolist(),
         [
-            [0.99995000083345764, 4.9999166541667325e-05],
-            [4.9999166541667325e-05, 0.99995000083345764],
+            [0.99990000666633339, 0.00010001999499990015],
+            [0.00010001999499990015, 0.99990000666633339],
             ],
         )
     assert_almost_equal_deep(
-        model.predict(numpy.array([[0, 1], [1, 0]], numpy.uint), r).tolist(),
+        model.predict(numpy.array([[0, 1], [1, 0]], numpy.uint), rs).tolist(),
         [
-            [5.0012497874656265e-05, 0.9999499875021246],
-            [0.9999499875021246, 5.0012497874656265e-05],
+            [0.00010001999499990015, 0.99990000666633339],
+            [0.99990000666633339, 0.00010001999499990015],
             ],
         )
 

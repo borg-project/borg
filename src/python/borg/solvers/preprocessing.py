@@ -45,11 +45,11 @@ class PreprocessingSolver(Rowed, AbstractSolver):
 
             if p_attempt.answer is None:
                 # the preprocessor did not solve the instance
-                from cargo.temporal import TimeDelta
+                from datetime import timedelta
 
-                remaining = TimeDelta.from_timedelta(max(TimeDelta(), budget - p_attempt.cost))
+                remaining = max(timedelta(), budget - p_attempt.cost)
 
-                if remaining > TimeDelta():
+                if remaining > timedelta():
                     if p_attempt.output_task == task:
                         # ... it did not generate a preprocessed instance
                         s_attempt = self._solver.solve(task, remaining, random, environment)

@@ -3,47 +3,16 @@
 """
 
 if __name__ == "__main__":
-    from borg.tools.portfolio.solve import main
+    from plac             import call
+    from borg.tools.solve import main
 
-    raise SystemExit(main())
+    call(main)
 
-import borg.solvers
-
-from logging     import Formatter
-from cargo.log   import get_logger
-from cargo.flags import (
-    Flag,
-    Flags,
-    with_flags_parsed,
-    )
+from logging   import Formatter
+from plac      import annotations
+from cargo.log import get_logger
 
 log = get_logger(__name__, default_level = "NOTE")
-
-module_flags = \
-    Flags(
-        "Solver Execution Options",
-        Flag(
-            "-c",
-            "--calibration",
-            type    = float,
-            default = 5.59,
-            metavar = "FLOAT",
-            help    = "assume machine speed FLOAT [%default]",
-            ),
-        Flag(
-            "-p",
-            "--preprocessor",
-            default = None,
-            metavar = "NAME",
-            help    = "use preprocessor NAME [%default]",
-            ),
-        Flag(
-            "-v",
-            "--verbose",
-            action  = "store_true",
-            help    = "be noisier [%default]",
-            ),
-        )
 
 class CompetitionFormatter(Formatter):
     """
@@ -84,44 +53,59 @@ def enable_output():
     Set up competition-compliant output.
     """
 
-    import sys
+    # configure the default global level
+    from cargo import defaults
+
+    get_logger(level = defaults.root_log_level)
+
+    # set up output
     import logging
 
-    from logging   import StreamHandler
-    from cargo.log import enable_default_logging
+    from sys     import stdout
+    from logging import StreamHandler
 
-    enable_default_logging(add_handlers = False)
-
-    handler = StreamHandler(sys.stdout)
+    handler = StreamHandler(stdout)
 
     handler.setFormatter(CompetitionFormatter())
     handler.setLevel(logging.NOTSET)
 
     logging.root.addHandler(handler)
 
-@with_flags_parsed(
-    usage = "usage: %prog [options] <solver.pickle> <task> <seed>",
+@annotations(
+    solver_path  = ("path to solver pickle", )           ,
+    input_path   = ("path to instance"     , )           ,
+    seed         = ("PRNG seed"            , "positional", None, int)  ,
+    calibration  = ("speed factor"         , "option"    , "c" , float),
+    preprocessor = ("preprocessor name"    , "option"    , "p"),
+    quiet        = ("be less noisy"        , "flag"      , "q")
     )
-def main((solver_path, input_path, seed_string)):
+def main(
+    solver_path,
+    input_path,
+    seed         = 42,
+    calibration  = 5.59,
+    preprocessor = None,
+    quiet        = False,
+    ):
     """
-    Main.
+    Solve a problem instance.
     """
 
     # allow some logging output
     enable_output()
 
-    # basic flag handling
-    flags = module_flags.given
-
-    if flags.verbose:
-        get_logger("cargo.unix.accounting", level = "DETAIL")
-        get_logger("borg.portfolio.models", level = "NOTSET")
-        get_logger("borg.solvers.satelite", level = "INFO")
+    # configure logging
+    if not quiet:
+        get_logger("cargo.unix.accounting"  , level = "DETAIL")
+        get_logger("borg.portfolio.models"  , level = "NOTSET")
+        get_logger("borg.portfolio.planners", level = "NOTSET")
+        get_logger("borg.solvers.satelite"  , level = "INFO")
+        get_logger("borg.solvers.portfolio" , level = "INFO")
 
     # build our PRNG
     from numpy.random import RandomState
 
-    random = RandomState(int(seed_string))
+    random = RandomState(seed)
 
     # instantiate the strategy
     import cPickle as pickle
@@ -130,7 +114,7 @@ def main((solver_path, input_path, seed_string)):
         solver = pickle.load(file)
 
     # build the solver environment
-    from borg.solvers import (
+    from borg.solvers           import (
         Environment,
         get_named_solvers,
         )
@@ -138,11 +122,11 @@ def main((solver_path, input_path, seed_string)):
     environment = \
         Environment(
             named_solvers = get_named_solvers(),
-            time_ratio    = flags.calibration / 2.2,
+            time_ratio    = calibration / 2.2,
             )
 
     # solve
-    from cargo.temporal import TimeDelta
+    from datetime       import timedelta
     from borg.tasks     import FileTask
     from borg.solvers   import (
         LookupPreprocessor,
@@ -150,14 +134,14 @@ def main((solver_path, input_path, seed_string)):
         PreprocessingSolver,
         )
 
-    if flags.preprocessor is None:
+    if preprocessor is None:
         secondary = solver
     else:
-        secondary = PreprocessingSolver(LookupPreprocessor(flags.preprocessor), solver)
+        secondary = PreprocessingSolver(LookupPreprocessor(preprocessor), solver)
 
     primary = UncompressingSolver(secondary)
     task    = FileTask(input_path)
-    attempt = primary.solve(task, TimeDelta(seconds = 2e6), random, environment)
+    attempt = primary.solve(task, timedelta(seconds = 2e6), random, environment)
     answer  = attempt.answer
 
     # tell the world

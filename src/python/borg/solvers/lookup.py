@@ -80,12 +80,16 @@ class LookupSolver(Rowed, AbstractSolver):
         return self._name
 
     @staticmethod
-    def build(request, trainer):
+    def with_prefix(session, prefix):
         """
-        Build a solver as requested.
+        Query for named solvers with prefix.
         """
 
-        return LookupSolver(request["name"])
+        from borg.data import SolverRow
+
+        names = session.query(SolverRow.name).filter(SolverRow.name.startswith(prefix))
+
+        return map(LookupSolver, names)
 
 class LookupPreprocessor(LookupSolver, AbstractPreprocessor):
     """

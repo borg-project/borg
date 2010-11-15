@@ -3,9 +3,10 @@
 """
 
 if __name__ == "__main__":
+    from plac                        import call
     from borg.tools.plot_performance import main
 
-    raise SystemExit(main())
+    call(main)
 
 from cargo.log import get_logger
 
@@ -67,13 +68,14 @@ def plot_trial(session, trial_rows):
     # plot the series
     import pylab
 
-    from cargo.plot import get_color_list
+    from cargo.plot     import get_color_list
+    from cargo.temporal import seconds
 
     colors = get_color_list(len(costs))
 
     for (i, (name, costs)) in enumerate(costs.iteritems()):
         # set up the coordinates
-        x_values      = [0.0] + [c.as_s for (c, _) in costs] + [budget.as_s]
+        x_values      = [0.0] + [seconds(c) for (c, _) in costs] + [seconds(budget)]
         y_values      = range(len(costs) + 1) + [len(costs)]
         tick_x_values = {True: [], False: []}
         tick_y_values = {True: [], False: []}
@@ -95,17 +97,10 @@ def plot_trial(session, trial_rows):
     pylab.legend(loc = "lower right")
     pylab.show()
 
-def main():
+def main(*trial_uuids):
     """
     Run the script.
     """
-
-    # get command line arguments
-    import borg.data
-
-    from cargo.flags import parse_given
-
-    trial_uuids = parse_given(usage = "%prog [options] <trial_uuid> [...]")
 
     # set up logging
     from cargo.log import enable_default_logging

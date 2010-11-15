@@ -3,10 +3,10 @@
 #
 
 if(NOT NUMPY_INCLUDE_DIRS)
-    find_package(PythonInterp REQUIRED)
-
     execute_process(
-        COMMAND "${PYTHON_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/src/scripts/echo_numpy_path.py"
+        COMMAND
+            "python"
+            "${PROJECT_SOURCE_DIR}/src/scripts/echo_numpy_path.py"
         OUTPUT_VARIABLE NUMPY_FOUND_PATH
         ERROR_VARIABLE NUMPY_FOUND_PATH
         RESULT_VARIABLE ECHO_NUMPY_PATH_FAILED
