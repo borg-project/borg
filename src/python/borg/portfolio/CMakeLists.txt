@@ -23,7 +23,6 @@ install(
 		bellman.py
 		models.py
 		planners.py
-		strategies.py
 		world.py
     DESTINATION lib/borg/portfolio
     )
@@ -33,4 +32,5 @@ install(
 #
 
 add_subdirectory(test)
+add_subdirectory(strategies)
 
