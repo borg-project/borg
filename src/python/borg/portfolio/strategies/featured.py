@@ -11,7 +11,7 @@ log = get_logger(__name__)
 
 def featured_model(feature_count, solver_count, K):
     """
-    XXX
+    Build a mixture model as specified.
     """
 
     from cargo.statistics import (
@@ -130,9 +130,16 @@ class FeaturedMixture(object):
 
         theta = numpy.empty((), mixture.model.parameter_dtype)
 
-        theta["p"]       = self.parameter["p"]
-        theta["c"]["d0"] = self.parameter["c"]["d0"][..., self.feature_indices(mixture.feature_actions)]
-        theta["c"]["d1"] = self.parameter["c"]["d1"][..., self.solver_indices(mixture.solver_actions  )]
+        d0_indices = self.feature_indices(mixture.feature_actions)
+        d1_indices = self.solver_indices(mixture.solver_actions  )
+
+        theta["p"] = self.parameter["p"]
+
+        if len(d0_indices) > 0:
+            theta["c"]["d0"] = self.parameter["c"]["d0"][..., d0_indices]
+
+        if len(d1_indices) > 0:
+            theta["c"]["d1"] = self.parameter["c"]["d1"][..., d1_indices]
 
         mixture.parameter = theta
 
@@ -145,8 +152,14 @@ class FeaturedMixture(object):
 
         sub = numpy.empty(samples.shape, mixture.model.sample_dtype)
 
-        sub["d0"] = samples["d0"][..., self.feature_indices(mixture.feature_actions)]
-        sub["d1"] = samples["d1"][..., self.solver_indices(mixture.solver_actions  )]
+        d0_indices = self.feature_indices(mixture.feature_actions)
+        d1_indices = self.solver_indices(mixture.solver_actions  )
+
+        if len(d0_indices) > 0:
+            sub["d0"] = samples["d0"][..., d0_indices]
+
+        if len(d1_indices) > 0:
+            sub["d1"] = samples["d1"][..., d1_indices]
 
         return sub
 
@@ -156,7 +169,7 @@ class FeaturedMixture(object):
         """
 
         # compute the posterior component probabilities
-        post_pi = numpy.empty((samples.shape[0],) + self.parameter["p"].shape)
+        post = numpy.empty(len(samples) + self.parameter["p"].shape)
 
         if len(some_feature_actions) + len(some_solver_actions) > 0:
             # condition the model on available data
@@ -165,25 +178,21 @@ class FeaturedMixture(object):
             submixture = self.submixture(some_feature_actions, some_solver_actions)
             subsamples = self.subsamples(submixture, samples)
 
-            post_pi[:] = ModelEngine(submixture.model).given(submixture.parameter, subsamples[..., None])["p"]
+            given = ModelEngine(submixture.model).given
+
+            post[:] = given(submixture.parameter, subsamples[..., None])["p"]
         else:
             # no data is available
-            post_pi[:] = self.parameter["p"]
+            post[:] = self.parameter["p"]
 
-        return post_pi
+        return post
 
-    #def predict(self, post_thetas):
-        #"""
-        #Return the marginal solver outcome probabilities.
-        #"""
+    def solver_marginals(self):
+        """
+        Return the marginal solver outcome probabilities.
+        """
 
-        ## XXX not right; we want to marginalize
-        #post_outcomes["d0"] = past_samples["d1"]
-
-        #lls = ModelEngine(post_model).ll(post_thetas, post_outcomes)
-
-        #if first_lls is None:
-            #first_lls = lls
+        return numpy.sum(self.parameter["p"][..., None] * self.parameter["c"]["d1"], 0)
 
 class FeaturedStrategy(object):
     """
@@ -195,52 +204,79 @@ class FeaturedStrategy(object):
         Initialize.
         """
 
-        self._mixture = mixture
+        self.mixture = mixture
+        self._feature_history = {}
+        self._solver_history = {}
 
     def reset(self):
         """
         Prepare to solve a new task.
         """
 
-        del self._feature_history[:]
-        del self._solver_history[:]
+        self._feature_history.clear()
+        self._solver_history.clear()
 
     def see(self, action, outcome):
         """
         Witness the outcome of an action.
         """
 
-        if action in self._mixture.feature_actions:
-            self._feature_history.append((action, outcome))
-        elif action in self._mixture.solver_actions:
-            self._solver_history.append((action, outcome))
+        if action in self.mixture.feature_actions:
+            if action in self._feature_history:
+                raise RuntimeError("repeated feature action")
+            else:
+                self._feature_history[action] = action.outcomes.index(outcome)
+        elif action in self.mixture.solver_actions:
+            if action in self._solver_history:
+                (k, n) = self._solver_history[action]
+            else:
+                k = 0
+                n = 0
+
+            j = 1 if outcome.utility > 0.0 else 0
+
+            self._solver_history[action] = (k + j, n + 1)
         else:
-            raise ValueError("where did this action come from?")
+            raise ValueError("action of unknown origin")
 
     def choose(self, budget, random):
         """
         Return the selected action.
         """
 
-        # XXX call the mixture model
-        # XXX discounting and argmax
+        # first collect features
+        for action in self.mixture.feature_actions:
+            if action not in self._feature_history:
+                return action
 
-    def _make_samples_array(self):
-        """
-        Build an array of past action outcomes.
-        """
+        # then run solvers
+        if len(self._feature_history) + len(self._solver_history) > 0:
+            # condition the model on history
+            from cargo.statistics import ModelEngine
 
-        @composed(list)
-        def get_samples():
-            feature_outcomes = trainer.get_data(feature_actions)
-            solver_outcomes  = trainer.get_data(solver_actions)
-
-            for task in trainer.tasks:
-                yield (
-                    # XXX
-                    [feature_history[(a, task.uuid)] for a in feature_actions],
-                    [solver_outcomes [(a, task.uuid)] for a in solver_actions ],
+            post       = self.mixture.submixture([], self.mixture.solver_actions)
+            submixture = \
+                self.mixture.submixture(
+                    self._feature_history.keys(),
+                    self._solver_history.keys(),
                     )
+            samples = [(
+                self._feature_history.values(),
+                self._solver_history.values(),
+                )]
 
-        return numpy.array(get_samples(), self._model.sample_dtype)
+            post.parameter["p"] = submixture.model.posterior(submixture.parameter, samples)
+        else:
+            # no history yet
+            post = self.mixture
+
+        # select the best-looking feasible solver
+        discounts = numpy.array([0.9999**a.cost for a in self.mixture.solver_actions])
+        marginals = post.solver_marginals() * discounts
+
+        for i in reversed(numpy.argsort(marginals)):
+            action = self.mixture.solver_actions[i]
+
+            if action.cost <= budget:
+                return action
 
