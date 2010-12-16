@@ -2,6 +2,11 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+from tasks     import *
+from solvers   import *
+from analyzers import *
+from portfolio import *
+
 def get_support_path(name):
     """
     Return the absolute path to a support file.

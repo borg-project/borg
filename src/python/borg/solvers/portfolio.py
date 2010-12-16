@@ -64,8 +64,8 @@ class PortfolioSolver(Rowed, AbstractSolver):
 
         Rowed.__init__(self)
 
-        self._strategy        = strategy
-        self._analyzer        = analyzer
+        self.strategy = strategy
+        self.analyzer = analyzer
         self._max_invocations = 50
 
     def solve(self, task, budget, random, environment):
@@ -74,7 +74,7 @@ class PortfolioSolver(Rowed, AbstractSolver):
         """
 
         # first, compute features
-        features = self._analyzer.analyze(task, environment)
+        features = self.analyzer.analyze(task, environment)
 
         for (name, value) in features.items():
             log.detail("feature %s has value %s", name, value)
@@ -91,13 +91,13 @@ class PortfolioSolver(Rowed, AbstractSolver):
         nleft     = self._max_invocations
         record    = []
 
-        self._strategy.reset()
+        self.strategy.reset()
 
         while remaining > timedelta() and nleft > 0:
             # select an action
             log.debug("selecting an action with %s remaining", remaining)
 
-            action = self._strategy.choose(seconds(remaining), random)
+            action = self.strategy.choose(seconds(remaining), random)
 
             # take the action
             if action is None:
@@ -121,7 +121,7 @@ class PortfolioSolver(Rowed, AbstractSolver):
                 raise TypeError("cannot handle unexpected action type")
 
             # witness its outcome
-            self._strategy.see(action, outcome)
+            self.strategy.see(action, outcome)
 
         return PortfolioAttempt(self, task, budget, budget - remaining, record)
 
@@ -148,12 +148,4 @@ class PortfolioSolver(Rowed, AbstractSolver):
         """
 
         return "portfolio"
-
-    @property
-    def analyzer(self):
-        """
-        Return the analyzer employed.
-        """
-
-        return self._analyzer
  
