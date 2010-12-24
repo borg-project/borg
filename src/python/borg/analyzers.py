@@ -8,7 +8,6 @@ from abc         import (
     abstractmethod,
     abstractproperty,
     )
-from collections import namedtuple
 from cargo.log   import get_logger
 from cargo.sugar import ABC
 from borg.rowed  import Rowed
@@ -145,7 +144,7 @@ class UncompressingAnalyzer(Analyzer):
 
 class SubsetAnalyzer(Analyzer):
     """
-    Acquire no features.
+    Filter certain features from another analyzer.
     """
 
     def __init__(self, analyzer, names = None):
@@ -232,6 +231,7 @@ class SATzillaAnalyzer(Analyzer):
         "cluster-coeff-entropy",
         "CG-featuretime",
         ]
+    _features = [Feature("satzilla/%s" % k.lower(), float) for k in _feature_names]
 
     def __init__(self):
         """
@@ -272,7 +272,7 @@ class SATzillaAnalyzer(Analyzer):
         Return the features provided by this analyzer.
         """
 
-        return [Feature("satzilla/%s" % k.lower(), float) for k in self._feature_names]
+        return self._features
 
 class RecyclingAnalyzer(Analyzer):
     """
@@ -312,6 +312,82 @@ class RecyclingAnalyzer(Analyzer):
 
             return dict(feature_rows)
 
+    def get_training(self, session, task_table):
+        """
+        Return the value of each feature on each task.
+        """
+
+        # get stored feature values
+        from sqlalchemy import (
+            and_,
+            select,
+            )
+        from borg.data  import TaskFloatFeatureRow as TFFR
+
+        features_table = self._create_features_table(session)
+        rows           =                                         \
+            session.execute(
+                select(
+                    [
+                        features_table.c.id,
+                        TFFR.task_uuid,
+                        TFFR.value,
+                        ],
+                    and_(
+                        TFFR.name      == features_table.c.name,
+                        TFFR.task_uuid == task_table.c.uuid,
+                        ),
+                    ),
+                )                                                \
+
+        # package the outcomes
+        training = {}
+
+        for (id_, task_uuid, value) in rows:
+            training[(self._features[id_], task_uuid)] = value
+
+        features_table.drop()
+
+        return training
+
+    def _create_features_table(self, session):
+        """
+        Build a temporary features table.
+        """
+
+        from sqlalchemy import (
+            Table,
+            String,
+            Column,
+            Integer,
+            MetaData,
+            )
+
+        metadata = MetaData(bind = session.connection())
+        table    = \
+            Table(
+                "trainer_features_temporary",
+                metadata,
+                Column("id"  , Integer  , primary_key = True),
+                Column("name", String                       ),
+                prefixes = ["temporary"],
+                )
+
+        table.create(checkfirst = False)
+
+        session.execute(
+            table.insert(),
+            [
+                {
+                    "id"   : i     ,
+                    "name" : f.name,
+                    }
+                for (i, f) in enumerate(self._features)
+                ],
+            )
+
+        return table
+
     @property
     def features(self):
         """
@@ -322,7 +398,7 @@ class RecyclingAnalyzer(Analyzer):
 
 class BinningAnalyzer(Analyzer):
     """
-    Generate histogram features.
+    Generate categorical features.
     """
 
     def __init__(self, analyzer, bins):
@@ -333,13 +409,17 @@ class BinningAnalyzer(Analyzer):
         @param bins     : A map from feature names to a bin border array.
         """
 
-        self._analyzer = analyzer
-        self._bins     = bins
-        self._names    = \
+        self._analyzer  = analyzer
+        self._bins      = bins
+        self._features  = [
+            Feature("%s-%s" % (f.name, bins[f.name]), int, bins[f.name].size)
+            for f in analyzer.features
+            ]
+        self._feature_raw_names = \
             dict(
                 zip(
-                    (f.name for f in self.features),
                     (f.name for f in analyzer.features),
+                    self._features,
                     ),
                 )
 
@@ -351,45 +431,29 @@ class BinningAnalyzer(Analyzer):
         analysis = self._analyzer.analyze(task, environment)
 
         def for_value((name, value)):
-            ((i,),) = numpy.nonzero(numpy.histogram(value, self._bins[name]))
+            ((i,),) = numpy.nonzero(numpy.histogram(value, sekeylf._bins[name]))
 
             return i
 
         return dict(zip(analysis, map(for_value, analysis.items())))
 
-    def get_training(self, session, feature, task_table):
+    def get_training(self, session, task_table):
         """
-        Return a tasks-by-outcomes array.
+        Return a mapping from task-feature pairs to feature values.
         """
 
-        # get stored feature values
-        from sqlalchemy import (
-            and_,
-            select,
-            )
-        from borg.data  import TaskFloatFeatureRow as TFFR
+        raw_training = self._analyzer.get_training(session, task_table)
+        our_training = {}
 
-        name = self._names[feature.name]
-        rows =                                               \
-            session.execute(
-                select(
-                    [TFFR.value],
-                    and_(
-                        TFFR.name      == name,
-                        TFFR.task_uuid == task_table.c.uuid,
-                        ),
-                    order_by = task_table.c.uuid,
-                    ),
-                )                                            \
-                .fetchall()
+        for ((feature, task_uuid), value) in raw_training.items():
+            (h, _)  = numpy.histogram(value, self._bins[feature.name])
+            ((i,),) = numpy.nonzero(h)
 
-        # build the array
-        def for_value((value,)):
-            (h, _) = numpy.histogram(value, self._bins[name])
+            our_feature = self._feature_raw_names[feature.name]
 
-            return h
+            our_training[(our_feature, task_uuid)] = i
 
-        return numpy.array(map(for_value, rows), numpy.uint)
+        return our_training
 
     @property
     def features(self):
@@ -397,10 +461,7 @@ class BinningAnalyzer(Analyzer):
         Return the names of features provided by this analyzer.
         """
 
-        return [
-            Feature("%s-%s" % (f.name, self._bins[f.name]), int, self._bins[f.name].size)
-            for f in self._analyzer.features
-            ]
+        return self._features
 
     @staticmethod
     def _spaced_bin_entry_for(session, task_table, feature, d):
@@ -488,9 +549,7 @@ class BinningAnalyzer(Analyzer):
         Return an analyzer with bins fit to training data.
         """
 
-        get_bin_entries = BinningAnalyzer._spaced_bin_entry_for
-
-        return BinningAnalyzer._build(trainer, raw_analyzer, d, get_bin_entries)
+        return BinningAnalyzer._build(trainer, raw_analyzer, d, BinningAnalyzer._spaced_bin_entry_for)
 
     @staticmethod
     def percentile(trainer, raw_analyzer, d):
@@ -498,7 +557,5 @@ class BinningAnalyzer(Analyzer):
         Return an analyzer with bins fit to training data.
         """
 
-        get_bin_entries = BinningAnalyzer._percentile_bin_entry_for
-
-        return BinningAnalyzer._build(trainer, raw_analyzer, d, get_bin_entries)
+        return BinningAnalyzer._build(trainer, raw_analyzer, d, BinningAnalyzer._percentile_bin_entry_for)
 

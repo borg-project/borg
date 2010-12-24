@@ -192,7 +192,7 @@ class TypicalEnvironmentFactory(object):
         self._cache_path = cache_path
         self._kwargs     = kwargs
 
-    def __call__(self, engines):
+    def __call__(self, engines, copy_cache = False):
         """
         Build an environment.
         """
@@ -204,9 +204,13 @@ class TypicalEnvironmentFactory(object):
         if self._cache_path is None:
             CacheSession = MainSession
         else:
-            from cargo.io import cache_file
+            if copy_cache:
+                from cargo.io import cache_file
 
-            cache_engine = engines.get("sqlite:///%s" % cache_file(self._cache_path))
+                cache_engine = engines.get("sqlite:///%s" % cache_file(self._cache_path))
+            else:
+                cache_engine = engines.get("sqlite:///%s" % self._cache_path)
+
             CacheSession = make_session(bind = cache_engine)
 
         return \

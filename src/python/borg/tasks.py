@@ -212,6 +212,14 @@ class UUID_Task(Task):
 
         return str(self._uuid)
 
+    @property
+    def uuid(self):
+        """
+        Return the uuid of this task.
+        """
+
+        return self._uuid
+
     @staticmethod
     def with_prefix(session, prefix):
         """

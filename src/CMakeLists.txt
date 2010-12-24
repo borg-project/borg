@@ -2,8 +2,8 @@
 # default compiler flags
 #
 
-set(CMAKE_C_FLAGS_EXTRA         "-Wall"                              CACHE STRING "")
-set(CMAKE_C_FLAGS_DEBUG_EXTRA   "-ggdb -O2"                          CACHE STRING "")
+set(CMAKE_C_FLAGS_EXTRA         ""                                   CACHE STRING "")
+set(CMAKE_C_FLAGS_DEBUG_EXTRA   "-fno-strict-aliasing -ggdb -O2"     CACHE STRING "")
 set(CMAKE_CXX_FLAGS_EXTRA       "${CMAKE_C_FLAGS_EXTRA} --std=c++0x" CACHE STRING "")
 set(CMAKE_CXX_FLAGS_DEBUG_EXTRA "${CMAKE_C_FLAGS_DEBUG_EXTRA}"       CACHE STRING "")
 

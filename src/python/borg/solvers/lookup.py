@@ -89,7 +89,7 @@ class LookupSolver(Rowed, AbstractSolver):
 
         names = session.query(SolverRow.name).filter(SolverRow.name.startswith(prefix))
 
-        return map(LookupSolver, names)
+        return [LookupSolver(name) for (name,) in names]
 
 class LookupPreprocessor(LookupSolver, AbstractPreprocessor):
     """
