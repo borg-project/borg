@@ -178,6 +178,16 @@ class Environment(object):
         self.MainSession   = MainSession
         self.CacheSession  = CacheSession
 
+        # XXX build map: (solver, task) -> [(budget, outcome), ...]
+        # XXX where outcomes are ordered by budget
+        # XXX *forget* about stdout and certificate---if we truly care, we can store
+        # XXX the associated primary key and pull them off disk on demand
+
+    def _build_outcomes_map(self):
+        """
+        Store observed solver outcomes in memory.
+        """
+
 class TypicalEnvironmentFactory(object):
     """
     Build a typical environment.
