@@ -2,12 +2,14 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from abc         import abstractmethod
-from cargo.log   import get_logger
-from borg        import defaults
-from borg.rowed  import AbstractRowed
+import abc
+import collections
+import borg
 
-log = get_logger(__name__)
+from cargo.log  import get_logger
+from borg.rowed import AbstractRowed
+
+logger = get_logger(__name__)
 
 def get_random_seed(random):
     """
@@ -20,7 +22,7 @@ def get_random_seed(random):
 
     return random.randint(iinfo(numpy.int32).max)
 
-def get_named_solvers(paths = defaults.solver_lists, use_recycled = False):
+def get_named_solvers(paths = borg.defaults.solver_lists, use_recycled = False):
     """
     Retrieve a list of named solvers.
     """
@@ -98,12 +100,12 @@ def get_named_solvers(paths = defaults.solver_lists, use_recycled = False):
         relative = dirname(path)
         loaded   = load_json(path)
 
-        log.note("read named-solvers file: %s", raw_path)
+        logger.note("read named-solvers file: %s", raw_path)
 
         for (name, attributes) in loaded.get("solvers", {}).items():
             yield (name, loaders[attributes["type"]](name, relative, attributes))
 
-            log.debug("constructed named solver %s", name)
+            logger.debug("constructed named solver %s", name)
 
         for included in loaded.get("includes", []):
             for solver in yield_solvers_from(expandpath(included, relative)):
@@ -119,7 +121,7 @@ class AbstractSolver(AbstractRowed):
     Abstract base for a solver.
     """
 
-    @abstractmethod
+    @abc.abstractmethod
     def solve(self, task, budget, random, environment):
         """
         Attempt to solve the specified instance.
@@ -137,23 +139,29 @@ class AbstractPreprocessor(AbstractSolver):
     Abstract base for a preprocessor.
     """
 
-    @abstractmethod
+    @abc.abstractmethod
     def preprocess(self, task, budget, output_path, random, environment):
         """
         Preprocess an instance.
         """
 
-    @abstractmethod
+    @abc.abstractmethod
     def extend(self, task, answer, environment):
         """
         Extend an answer to a preprocessed task back to its parent task.
         """
 
-    @abstractmethod
+    @abc.abstractmethod
     def make_task(self, seed, input_task, output_path, environment, row = None):
         """
         Construct an appropriate preprocessed task from its output directory.
         """
+
+AttemptCached = \
+    collections.namedtuple(
+        "AttemptCached",
+        ["budget", "cost", "answer_uuid"],
+        )
 
 class Environment(object):
     """
@@ -183,10 +191,45 @@ class Environment(object):
         # XXX *forget* about stdout and certificate---if we truly care, we can store
         # XXX the associated primary key and pull them off disk on demand
 
-    def _build_outcomes_map(self):
+        with self.CacheSession() as session:
+            self.attempts_cache = self._build_outcomes_map(session)
+
+    def _build_outcomes_map(self, session):
         """
         Store observed solver outcomes in memory.
         """
+
+        import sqlalchemy as sql
+
+        attempt_rows = \
+            session.execute(
+                sql.select(
+                    [
+                        borg.AttemptRow.budget,
+                        borg.AttemptRow.cost,
+                        borg.AttemptRow.task_uuid,
+                        borg.AttemptRow.answer_uuid,
+                        borg.RunAttemptRow.solver_name,
+                        ],
+                    borg.AttemptRow.uuid == borg.RunAttemptRow.__table__.c.uuid,
+                    ),
+                )
+
+        cache = {}
+        i = 0
+
+        for (i, row) in enumerate(attempt_rows):
+            key = (row.solver_name, row.task_uuid)
+            value = AttemptCached(row.budget, row.cost, row.answer_uuid)
+
+            if key in cache:
+                cache[key].append(value)
+            else:
+                cache[key] = [value]
+
+        logger.detail("cached %i solver attempt rows", i + 1)
+
+        return cache
 
 class TypicalEnvironmentFactory(object):
     """

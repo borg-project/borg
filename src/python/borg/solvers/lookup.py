@@ -2,6 +2,8 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+import borg
+
 from borg.rowed   import Rowed
 from borg.solvers import (
     AbstractSolver,
@@ -27,19 +29,17 @@ class LookupSolver(Rowed, AbstractSolver):
         Look up the named solver and use it on the task.
         """
 
-        from borg.solvers.attempts import (
-            WrappedAttempt,
-            WrappedRunAttempt,
-            AbstractRunAttempt,
-            )
-
         looked_up = self.look_up(environment)
         inner     = looked_up.solve(task, budget, random, environment)
 
-        if isinstance(inner, AbstractRunAttempt):
-            return WrappedRunAttempt(self, inner)
-        else:
-            return WrappedAttempt(self, inner)
+        return \
+            borg.RecycledAttempt(
+                self,
+                inner.budget,
+                inner.cost,
+                inner.task,
+                inner.answer,
+                )
 
     def look_up(self, environment):
         """

@@ -2,17 +2,26 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from cargo.log    import get_logger
-from borg.rowed   import Rowed
-from borg.solvers import (
-    Attempt,
-    AbstractSolver,
-    AbstractPreprocessor,
-    )
+import borg
+import base
 
-log = get_logger(__name__)
+class RecycledAttempt(object):
+    """
+    The outcome of a solver's attempt on a task.
+    """
 
-class RecyclingSolver(Rowed, AbstractSolver):
+    def __init__(self, solver, budget, cost, task, answer):
+        """
+        Initialize.
+        """
+
+        self.solver = solver
+        self.budget = budget
+        self.cost   = cost
+        self.task   = task
+        self.answer = answer
+
+class RecyclingSolver(borg.Rowed, base.AbstractSolver):
     """
     Fake competition solver behavior by recycling past data.
     """
@@ -22,7 +31,7 @@ class RecyclingSolver(Rowed, AbstractSolver):
         Initialize.
         """
 
-        Rowed.__init__(self)
+        borg.Rowed.__init__(self)
 
         self._solver_name = solver_name
 
@@ -31,69 +40,14 @@ class RecyclingSolver(Rowed, AbstractSolver):
         Execute the solver and return its outcome, given a concrete input path.
         """
 
-        # argument sanity
-        from borg.tasks import AbstractTask
+        from cargo.random import grab
 
-        assert isinstance(task, AbstractTask)
+        attempts = environment.attempts_cache[self._solver_name, task.uuid]
+        compatible = [a for a in attempts if a.budget >= budget]
+        grabbed = grab(compatible, random)
+        answer = grabbed.answer_uuid if grabbed.cost <= budget else None
 
-        # generate a recycled result
-        with environment.CacheSession() as session:
-            from cargo.unix.accounting import CPU_LimitedRun
-            from borg.data             import RunAttemptRow
-            from borg.solvers          import RunAttempt
-
-            attempt_row = self._get_attempt_row(session, task, budget, RunAttemptRow)
-
-            if attempt_row.cost <= budget:
-                return \
-                    RunAttempt(
-                        self,
-                        task,
-                        attempt_row.get_short_answer(),
-                        attempt_row.seed,
-                        CPU_LimitedRun(None, budget, None, None, None, attempt_row.cost, None, None),
-                        )
-            else:
-                return \
-                    RunAttempt(
-                        self,
-                        task,
-                        None,
-                        attempt_row.seed,
-                        CPU_LimitedRun(None, budget, None, None, None, budget, None, None),
-                        )
-
-    def _get_attempt_row(self, session, task, budget, AR):
-        """
-        Query the database for a matching attempt to recycle.
-        """
-
-        # mise en place
-        from sqlalchemy               import and_
-        from sqlalchemy.sql.functions import random as sql_random
-        from borg.data                import TrialRow as TR
-
-        # select an appropriate attempt to recycle
-        task_row    = task.get_row(session)
-        solver_row  = self.get_row(session)
-        attempt_row =                                               \
-            session                                                 \
-            .query(AR)                                              \
-            .filter(
-                and_(
-                    AR.task   == task_row,
-                    AR.budget >= budget,
-                    AR.solver == solver_row,
-                    AR.trials.contains(TR.get_recyclable(session)),
-                    )
-                )                                                   \
-            .order_by(sql_random())                                 \
-            .first()
-
-        if attempt_row is None:
-            raise RuntimeError("database does not contain a matching recyclable run")
-        else:
-            return attempt_row
+        return RecycledAttempt(self, task, budget, grabbed.cost, answer)
 
     def get_new_row(self, session):
         """
@@ -111,7 +65,7 @@ class RecyclingSolver(Rowed, AbstractSolver):
 
         return solver_row
 
-class RecyclingPreprocessor(RecyclingSolver, AbstractPreprocessor):
+class RecyclingPreprocessor(RecyclingSolver, base.AbstractPreprocessor):
     """
     Execute a solver after a preprocessor pass.
     """
