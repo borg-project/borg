@@ -431,11 +431,14 @@ class BinningAnalyzer(Analyzer):
         analysis = self._analyzer.analyze(task, environment)
 
         def for_value((name, value)):
-            ((i,),) = numpy.nonzero(numpy.histogram(value, sekeylf._bins[name]))
+            (h, _)  = numpy.histogram(value, self._bins[name])
+            ((i,),) = numpy.nonzero(h)
 
             return i
 
-        return dict(zip(analysis, map(for_value, analysis.items())))
+        names = [f.name for f in self._features]
+
+        return dict(zip(names, map(for_value, analysis.items())))
 
     def get_training(self, session, task_table):
         """

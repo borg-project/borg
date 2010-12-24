@@ -2,6 +2,7 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+from data      import *
 from tasks     import *
 from solvers   import *
 from analyzers import *

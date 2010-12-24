@@ -2,6 +2,9 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+import datetime
+import borg
+
 from cargo.log    import get_logger
 from borg.rowed   import Rowed
 from borg.solvers import (
@@ -80,12 +83,7 @@ class PortfolioSolver(Rowed, AbstractSolver):
             log.detail("feature %s has value %s", name, value)
 
         # then invoke solvers
-        from datetime             import timedelta
-        from borg.portfolio.world import (
-            SolverAction,
-            DiscreteFeatureAction,
-            )
-        from cargo.temporal       import seconds
+        from cargo.temporal import seconds
 
         remaining = budget
         nleft     = self._max_invocations
@@ -93,7 +91,7 @@ class PortfolioSolver(Rowed, AbstractSolver):
 
         self.strategy.reset()
 
-        while remaining > timedelta() and nleft > 0:
+        while remaining > datetime.timedelta() and nleft > 0:
             # select an action
             log.debug("selecting an action with %s remaining", remaining)
 
@@ -102,11 +100,11 @@ class PortfolioSolver(Rowed, AbstractSolver):
             # take the action
             if action is None:
                 break
-            elif isinstance(action, DiscreteFeatureAction):
+            elif isinstance(action, borg.BinaryFeatureAction):
                 log.info("taking feature action %s", action.description)
 
                 outcome = action.take(features)
-            elif isinstance(action, SolverAction):
+            elif isinstance(action, borg.SolverAction):
                 log.info("taking solver action %s", action.description)
 
                 (attempt, outcome)  = action.take(task, remaining, random, environment)

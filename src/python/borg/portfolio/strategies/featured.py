@@ -244,11 +244,6 @@ class FeaturedStrategy(object):
         Return the selected action.
         """
 
-        # first collect features
-        for action in self.mixture.feature_actions:
-            if action not in self._feature_history:
-                return action
-
         # then run solvers
         if len(self._feature_history) + len(self._solver_history) > 0:
             # condition the model on history
@@ -270,9 +265,19 @@ class FeaturedStrategy(object):
             # no history yet
             post = self.mixture
 
+        print budget, ":", " ".join("%.2f" % p for p in post.solver_marginals())
+
+        # first collect features
+        # XXX move this back above conditioning
+        for action in self.mixture.feature_actions:
+            if action not in self._feature_history:
+                return action
+
         # select the best-looking feasible solver
         discounts = numpy.array([0.9999**a.cost for a in self.mixture.solver_actions])
         marginals = post.solver_marginals() * discounts
+
+        print budget, ":", " ".join("%.2f" % p for p in marginals), "(discounted)"
 
         for i in reversed(numpy.argsort(marginals)):
             action = self.mixture.solver_actions[i]
