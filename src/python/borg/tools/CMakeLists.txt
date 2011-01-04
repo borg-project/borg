@@ -18,6 +18,7 @@ install(
         build_solver.py
         get_tasks.py
         check_solvers.py
+        sanitize_cnfs.py
 	DESTINATION lib/borg/tools
 	)
 

@@ -2,9 +2,10 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-from data      import *
-from tasks     import *
-from solvers   import *
+from sat import *
+from data import *
+from tasks import *
+from solvers import *
 from analyzers import *
 from portfolio import *
 
