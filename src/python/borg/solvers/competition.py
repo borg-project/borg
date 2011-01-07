@@ -43,6 +43,9 @@ def scan_sat_competition_output(lines, satisfiable = None, certificate = None):
     else:
         from borg.sat import Decision
 
+        if certificate and certificate[-1] == 0:
+            certificate = certificate[:-1]
+
         return Decision(satisfiable, certificate)
 
 def scan_pb_competition_output(lines, satisfiable = None, certificate = None):
