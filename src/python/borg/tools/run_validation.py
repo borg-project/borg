@@ -261,3 +261,5 @@ def main(
 
         outsource_or_run(jobs, "validation runs (at %s)" % utc_now())
 
+# XXX solver, seed, budget, cost, success, answer
+

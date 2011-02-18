@@ -13,6 +13,7 @@ install(
         print_run.py
         run_solvers.py
         run_validation.py
+        run_validation2.py
         plot_validation.py
         solve.py
         build_solver.py
