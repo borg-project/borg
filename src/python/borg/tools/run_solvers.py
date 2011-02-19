@@ -2,188 +2,138 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+import plac
+
 if __name__ == "__main__":
-    from plac                   import call
     from borg.tools.run_solvers import main
 
-    call(main)
+    plac.call(main)
 
-from uuid           import UUID
-from plac           import annotations
-from cargo.log      import get_logger
-from cargo.sugar    import composed
-from cargo.temporal import parse_timedelta
+import re
+import os.path
+import csv
+import numpy
+import cargo
 
-log = get_logger(__name__, default_level = "INFO")
+logger = cargo.get_logger(__name__, default_level = "INFO")
 
-class SolveTaskJob(object):
-    """
-    Attempt to solve a given task.
-    """
+def solve_competition(command, cnf_path, budget):
+    """Run the CryptoMiniSat solver; report its cost and success."""
 
-    def __init__(self, url, solver, task_uuid, budget, named, recycle):
-        """
-        Initialize.
-        """
+    command_prefix = [
+        "/scratch/cluster/bsilvert/sat-competition-2011/solvers/run-1.4/run",
+        "-k",
+        "--time-limit={0}".format(int(round(budget))),
+        ]
 
-        from cargo.random import get_random_random
-        from borg.tasks   import get_collections
+    (stdout, stderr, code) = cargo.call_capturing(command_prefix + command)
 
-        self._url         = url
-        self._solver      = solver
-        self._task_uuid   = task_uuid
-        self._budget      = budget
-        self._named       = named
-        self._recycle     = recycle
-        self._random      = get_random_random()
-        self._collections = get_collections()
+    match = re.search(r"^\[run\] time:[ \t]*(\d+.\d+) seconds$", stderr, re.M)
+    (cost,) = map(float, match.groups())
 
-    def __call__(self):
-        """
-        Make some number of solver runs on a task.
-        """
+    if code == 10:
+        answer = True
+    elif code == 20:
+        answer = False
+    else:
+        answer = None
 
-        # log as appropriate
-        get_logger("cargo.unix.accounting",      level = "DEBUG")
-        get_logger("borg.solvers.competition",   level = "DEBUG")
-        get_logger("borg.solvers.uncompressing", level = "DEBUG")
+    return (cost, answer)
 
-        # connect to the database
-        from cargo.sql.alchemy import SQL_Engines
+def solve_tnm(cnf_path, budget):
+    """Run the TNM solver; report its cost and success."""
 
-        MainSession = SQL_Engines.default.make_session(self._url)
+    seed = numpy.random.randint(0, 2**31)
+    command = [
+        "/scratch/cluster/bsilvert/sat-competition-2011/solvers/TNM/TNM",
+        cnf_path,
+        str(seed),
+        ]
 
-        with MainSession() as session:
-            # set up the environment
-            from borg.solvers import Environment
+    return (seed,) + solve_competition(command, cnf_path, budget)
 
-            environment = \
-                Environment(
-                    MainSession   = MainSession,
-                    named_solvers = self._named,
-                    collections   = self._collections,
-                    )
+def solve_cryptominisat(cnf_path, budget):
+    """Run the CryptoMiniSat solver; report its cost and success."""
 
-            # prepare the run
-            from borg.data import TaskRow
+    seed = numpy.random.randint(0, 2**31)
+    command = [
+        "/scratch/cluster/bsilvert/sat-competition-2011/solvers/cryptominisat-2.9.0Linux64",
+        "--randomize={0}".format(seed),
+        cnf_path,
+        ]
 
-            task_row = session.query(TaskRow).get(self._task_uuid)
+    return (seed,) + solve_competition(command, cnf_path, budget)
 
-            if self._recycle:
-                from borg.tasks import UUID_Task
+def solve_march_hi(cnf_path, budget):
+    """Run the solver; report its cost and success."""
 
-                full_solver = self._solver
-                task        = UUID_Task(self._task_uuid, row = task_row)
-            else:
-                from borg.solvers import UncompressingSolver
+    seed = numpy.random.randint(0, 2**31)
+    command = [
+        "/scratch/cluster/bsilvert/sat-competition-2011/solvers/march_hi",
+        cnf_path,
+        str(seed),
+        ]
 
-                full_solver = UncompressingSolver(self._solver)
-                task        = task_row.get_task(environment)
+    return (seed,) + solve_competition(command, cnf_path, budget)
 
-            # make the run
-            log.info("running %s on %s", self._solver.name, task_row.uuid)
+def solve_satzilla2009_r(cnf_path, budget):
+    """Run the solver; report its cost and success."""
 
-            session.commit()
+    seed = numpy.random.randint(0, 2**31)
+    command = [
+        "/scratch/cluster/bsilvert/sat-competition-2011/solvers/SATzilla2009/SATzilla2009_R",
+        cnf_path,
+        str(seed),
+        ]
 
-            attempt = full_solver.solve(task, self._budget, self._random, environment)
+    return (seed,) + solve_competition(command, cnf_path, budget)
 
-            # store the attempt
-            attempt.get_row(session)
+solve_methods = {
+    #"TNM": solve_tnm,
+    #"cryptominisat-2.9.0": solve_cryptominisat,
+    #"march_hi": solve_march_hi,
+    "SATzilla2009_R": solve_satzilla2009_r,
+    }
 
-            session.commit()
+def run_solver_on(solver_name, cnf_path, budget):
+    """Run a solver."""
 
-    @staticmethod
-    @composed(list)
-    def make_all(session, budget, restarts, seeded_restarts, recycle, names = None):
-        """
-        Generate a set of jobs to distribute.
-        """
+    solve = solve_methods[solver_name]
+    (seed, cost, answer) = solve(cnf_path, budget)
 
-        from borg.data    import (
-            TaskRow as TR,
-            SolverRow as SR,
-            )
-        from borg.solvers import (
-            Environment,
-            LookupSolver,
-            get_named_solvers,
-            )
+    logger.info("%s reported %s in %.2f (of %.2f) on %s", solver_name, answer, cost, budget, cnf_path)
 
-        named_solvers = get_named_solvers(use_recycled = recycle)
-        environment   = Environment(named_solvers = named_solvers)
-        task_uuids    = [u for (u,) in session.query(TR.uuid)]
+    return (solver_name, seed, budget, cost, answer)
 
-        if names is None:
-            names = [n for (n,) in session.query(SR.name)]
-
-        for name in names:
-            solver = LookupSolver(name)
-
-            if solver.get_seeded(environment):
-                restarts_of = max(restarts, seeded_restarts)
-            else:
-                restarts_of = restarts
-
-            log.info("making %i restarts of %s", restarts_of, solver.name)
-
-            for task_uuid in task_uuids:
-                for i in xrange(restarts_of):
-                    yield SolveTaskJob(
-                        session.connection().engine.url,
-                        solver,
-                        task_uuid,
-                        budget,
-                        named_solvers,
-                        recycle,
-                        )
-
-@annotations(
-    budget          = ("solver budget"    , "positional", None , parse_timedelta),
-    restarts        = ("minimum attempts" , "option"    , "r"  , int)            ,
-    seeded_restarts = ("minimum attempts" , "option"    , "s"  , int)            ,
-    run_only        = ("run one solver"   , "option")   ,
-    recycle         = ("reuse past runs"  , "flag")     ,
-    outsource       = ("outsource labor"  , "flag")     ,
+@plac.annotations(
+    tasks_root = ("path to task files", "positional", None, os.path.abspath),
+    workers = ("submit jobs?", "option", "w", int),
     )
-def main(
-    budget,
-    restarts        = 1,
-    seeded_restarts = 1,
-    run_only        = None,
-    recycle         = False,
-    outsource       = False,
-    ):
-    """
-    Run the script.
-    """
+def main(tasks_root, workers = 0):
+    """Collect solver running-time data."""
 
-    # enable log output
-    from cargo.log import enable_default_logging
+    cargo.enable_default_logging()
 
-    enable_default_logging()
+    def yield_runs():
+        paths = list(cargo.files_under(tasks_root, ["*.cnf"]))
 
-    # connect to the database and go
-    from cargo.sql.alchemy import SQL_Engines
+        for _ in xrange(4):
+            for solver_name in solve_methods:
+                for path in paths:
+                    yield (run_solver_on, [solver_name, path, 6000.0])
 
-    with SQL_Engines.default:
-        from cargo.sql.alchemy import make_session
-        from borg.data         import research_connect
+    def collect_run((_, arguments), row):
+        (_, cnf_path, _) = arguments
+        csv_path = cnf_path + ".rtd.csv"
+        existed = os.path.exists(csv_path)
 
-        ResearchSession = make_session(bind = research_connect())
+        with open(csv_path, "a") as csv_file:
+            writer = csv.writer(csv_file)
 
-        with ResearchSession() as session:
-            jobs = \
-                SolveTaskJob.make_all(
-                    session,
-                    budget,
-                    restarts,
-                    seeded_restarts,
-                    recycle,
-                    names = None if run_only is None else [run_only],
-                    )
+            if not existed:
+                writer.writerow(["solver", "seed", "budget", "cost", "answer"])
 
-        # run the jobs
-        from cargo.labor import outsource_or_run
+            writer.writerow(row)
 
-        outsource_or_run(jobs, outsource)
+    cargo.distribute_or_labor(yield_runs(), workers, collect_run)
 

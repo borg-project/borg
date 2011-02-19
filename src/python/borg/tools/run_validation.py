@@ -2,264 +2,230 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+import plac
+
 if __name__ == "__main__":
-    from plac                      import call
     from borg.tools.run_validation import main
 
-    call(main)
+    plac.call(main)
 
-from uuid       import UUID
-from datetime   import parse_timedelta
-from plac       import annotations
-from cargo.log  import get_logger
-from cargo.json import load_json
+import re
+import os.path
+import csv
+import uuid
+import itertools
+import scikits.learn.linear_model
+import numpy
+import cargo
 
-log = get_logger(__name__, default_level = "INFO")
+logger = cargo.get_logger(__name__, default_level = "INFO")
 
-def make_validation_run(
-    engine_url,
-    request,
-    fraction,
-    task_uuids,
-    budget,
-    random,
-    named_solvers,
-    group,
-    cache_path,
-    ):
-    """
-    Train and test a solver.
-    """
+def solve_fake(solver_name, cnf_path, budget):
+    """Recycle a previous solver run."""
 
-    # make sure that we're logging
-    from cargo.log import enable_default_logging
+    csv_path = cnf_path + ".rtd.csv"
+    answer_map = {"": None, "True": True, "False": False}
+    runs = []
 
-    enable_default_logging()
+    if os.path.exists(csv_path):
+        with open(csv_path) as csv_file:
+            reader = csv.reader(csv_file)
 
-    get_logger("cargo.statistics.mixture", level = "DETAIL")
+            for (name, seed, run_budget, cost, answer) in reader:
+                if name == solver_name and float(run_budget) >= budget:
+                    runs.append((seed, cost, answer))
 
-    # generate train-test splits
-    from cargo.iterators import shuffled
+    if runs:
+        (seed, cost, answer) = cargo.grab(runs)
+        cost = float(cost)
 
-    shuffled_uuids = shuffled(task_uuids, random)
-    len_train      = int(round(fraction * len(shuffled_uuids)))
-    train_uuids    = shuffled_uuids[:len_train]
-    test_uuids     = shuffled_uuids[len_train:]
-
-    log.info("split tasks into %i training and %i test", len(train_uuids), len(test_uuids))
-
-    # connect to the database
-    from cargo.sql.alchemy import (
-        SQL_Engines,
-        make_session,
-        )
-
-    main_engine = SQL_Engines.default.get(engine_url)
-    MainSession = make_session(bind = main_engine)
-
-    # retrieve the local cache
-    from cargo.io import cache_file
-
-    if cache_path is None:
-        CacheSession = MainSession
-    else:
-        cache_engine = SQL_Engines.default.get("sqlite:///%s" % cache_file(cache_path))
-        CacheSession = make_session(bind = cache_engine)
-
-    # build the solver
-    from borg.solvers         import AbstractSolver
-    from borg.portfolio.world import Trainer
-
-    trainer   = DecisionTrainer.build(ResearchSession, train_uuids, request["trainer"])
-    requested = AbstractSolver.build(trainer, request["solver"])
-
-    log.info("built solver from request")
-
-    with MainSession() as session:
-        # set up the environment
-        from borg.solvers import Environment
-
-        environment = \
-            Environment(
-                MainSession   = MainSession,
-                CacheSession  = CacheSession,
-                named_solvers = named_solvers,
-                )
-
-        # run over specified tasks
-        solved = 0
-
-        for test_uuid in test_uuids:
-            from borg.data  import TaskRow
-            from borg.tasks import Task
-
-            task_row = session.query(TaskRow).get(test_uuid)
-            task     = Task(row = task_row)
-
-            session.commit()
-
-            # run on this task
-            attempt = solver.solve(task, budget, random, environment)
-
-            if attempt.answer is not None:
-                solved += 1
-
-            log.info("ran on %s (success? %s)", task_row.uuid, attempt.answer is not None)
-
-        # store the result
-        from borg.data import ValidationRunRow
-
-        log.info("solver succeeded on %i of %i task(s)", solved, len(test_uuids))
-
-        if solver.name == "portfolio":
-            components    = request["solver"]["strategy"]["model"]["components"]
-            model_type    = request["solver"]["strategy"]["model"]["type"]
-            analyzer_type = request["solver"]["analyzer"]["type"]
+        if cost > budget:
+            cost = budget
+            answer = None
         else:
-            components    = None
-            model_type    = None
-            analyzer_type = None
+            answer = answer_map[answer]
 
-        run = \
-            ValidationRunRow(
-                solver           = solver.get_row(session),
-                solver_request   = request,
-#                 train_task_uuids = train_uuids,
-#                 test_task_uuids  = test_uuids,
-                group            = group,
-                score            = solved,
-                components       = components,
-                model_type       = model_type,
-                analyzer_type    = analyzer_type,
-                )
+        return (int(seed), cost, answer)
+    else:
+        raise RuntimeError("no applicable runs of {0} on {1}".format(solver_name, cnf_path))
 
-        session.add(run)
-        session.commit()
+def train_random_portfolio(solvers, train_paths):
+    """Build a random-action portfolio."""
 
-def outsource_validation_jobs(
-    engine_url,
-    builders,
-    task_uuids,
-    budget,
-    fraction,
-    group = None,
-    repeats = 1,
-    ):
-    """
-    Outsource validation runs.
-    """
+    def solve_random_portfolio(cnf_path, budget):
+        return cargo.grab(solvers.values())(cnf_path, budget)
 
-    # build its jobs
-    def yield_jobs():
-        from cargo.labor.jobs import CallableJob
-        from cargo.random     import get_random_random
-        from borg.solvers     import get_named_solvers
+    return solve_random_portfolio
 
-        for builder in builders:
-            for i in xrange(repeats):
-                yield CallableJob(
-                    make_validation_run,
-                    engine_url    = engine_url,
-                    builder       = builder,
-                    fraction      = fraction,
-                    task_uuids    = task_uuids,
-                    budget        = budget,
-                    random        = get_random_random(),
-                    named_solvers = get_named_solvers(use_recycled = True),
-                    group         = group,
-                    cache_path    = None,
-                    )
+def action_rates_from_runs(solver_index, budget_index, runs):
+    """Build a per-action success-rate matrix from running times."""
 
-    jobs = list(yield_jobs())
+    rates = numpy.zeros((len(solver_index), len(budget_index)))
+    counts = numpy.zeros((len(solver_index), len(budget_index)), int)
 
-    # run the jobs
-    from cargo.temporal      import utc_now
-    from cargo.labor.storage import outsource_or_run
+    for (run_solver, _, run_budget, run_cost, run_answer) in runs:
+        if run_solver in solver_index:
+            solver_i = solver_index[run_solver]
 
-    outsource_or_run(jobs, "validation runs (at %s)" % utc_now())
+            for budget in budget_index:
+                budget_i = budget_index[budget]
 
-@annotations(
-    group        = ("group name")       ,
-    budget       = ("solver time budget", "positional", None , parse_timedelta),
-    fraction     = ("train set fraction", "positional", None , float)          ,
-    uuids        = ("task uuids json"   , "positional", None , lambda p: map(UUID, load_json(p))),
-    trial        = ("attempts trial"    , "option"    , "t"  , UUID)           ,
-    parent_trial = ("trial parent"      , "option"    , "p"  , UUID)
-    runs         = ("number of runs"    , "option"    , "r"  , int)            ,
-    cache_path   = ("local database"    , "option"    , None),
+                if run_budget >= budget and run_cost <= budget and run_answer is not None:
+                    rates[solver_i, budget_i] += 1.0
+
+                counts[solver_i, budget_i] += 1
+
+    rates /= counts
+
+    return rates
+
+def get_task_run_data(task_paths):
+    """Load running times associated with tasks."""
+
+    logger.detail("loading running time data from %i files", len(task_paths))
+
+    data = {}
+
+    for path in task_paths:
+        csv_path = "{0}.rtd.csv".format(path)
+        data[path] = numpy.recfromcsv(csv_path)
+
+    return data
+
+def train_baseline_portfolio(solvers, train_paths):
+    """Build a baseline portfolio."""
+
+    budgets = [500]
+    solver_rindex = dict(enumerate(solvers))
+    solver_index = dict(map(reversed, solver_rindex.items()))
+    budget_rindex = dict(enumerate(budgets))
+    budget_index = dict(map(reversed, budget_rindex.items()))
+    train = get_task_run_data(train_paths)
+    rates = None
+
+    for runs in train.values():
+        task_rates = action_rates_from_runs(solver_index, budget_index, runs)
+
+        if rates is None:
+            rates = task_rates
+        else:
+            rates += task_rates
+
+    rates /= len(train)
+    best = solvers[solver_rindex[numpy.argmax(rates)]]
+
+    def solve_random_portfolio(cnf_path, budget):
+        return best(cnf_path, budget)
+
+    return solve_random_portfolio
+
+def train_classifier_portfolio(solvers, train_paths):
+    """Build a classifier-based portfolio."""
+
+    action_budget = 500
+    solver_rindex = dict(enumerate(solvers))
+    solver_index = dict(map(reversed, solver_rindex.items()))
+    budget_rindex = dict(enumerate([action_budget]))
+    budget_index = dict(map(reversed, budget_rindex.items()))
+
+    train_xs = dict((s, []) for s in solver_index)
+    train_ys = dict((s, []) for s in solver_index)
+
+    for train_path in train_paths:
+        features = numpy.recfromcsv(train_path + ".features.csv")
+        (runs,) = get_task_run_data([train_path]).values()
+        rates = action_rates_from_runs(solver_index, budget_index, runs)
+
+        for solver in solver_index:
+            successes = int(round(rates[solver_index[solver], 0] * 4))
+            failures = 4 - successes
+
+            train_xs[solver].extend([list(features.tolist())] * 4)
+            train_ys[solver].extend([0] * failures + [1] * successes)
+
+    models = {}
+
+    for solver in solver_index:
+        models[solver] = model = scikits.learn.linear_model.LogisticRegression()
+
+        model.fit(train_xs[solver], train_ys[solver])
+
+    def solve_classifier_portfolio(cnf_path, budget):
+        features = numpy.recfromcsv(cnf_path + ".features.csv")
+        scores = [(s, m.predict_proba([features.tolist()])[0, -1]) for (s, m) in models.items()]
+        (name, probability) = max(scores, key = lambda (_, p): p)
+        selected = solvers[name]
+        (run_seed, run_cost, run_answer) = selected(cnf_path, budget)
+
+        return (run_seed, features.cost + run_cost, run_answer)
+
+    return solve_classifier_portfolio
+
+core_solvers = {
+    "TNM": lambda *args: solve_fake("TNM", *args),
+    "march_hi": lambda *args: solve_fake("march_hi", *args),
+    "cryptominisat-2.9.0": lambda *args: solve_fake("cryptominisat-2.9.0", *args),
+    }
+trainers = {
+    #"TNM": lambda *_: lambda *args: solve_fake("TNM", *args),
+    #"SATzilla2009_R": lambda *args: solve_fake("SATzilla2009_R", *args),
+    "random": train_random_portfolio,
+    "baseline": train_baseline_portfolio,
+    "classifier": train_classifier_portfolio,
+    }
+
+def run_validation(name, train_paths, test_paths, budget, split):
+    """Make a validation run."""
+
+    solve = trainers[name](core_solvers, train_paths)
+    successes = []
+
+    for test_path in test_paths:
+        (seed, cost, answer) = solve(test_path, budget)
+
+        if answer is not None:
+            successes.append(cost)
+
+    rate = float(len(successes)) / len(test_paths)
+
+    logger.info("method %s had final success rate %.2f", name, rate)
+
+    return \
+        zip(
+            itertools.repeat(name),
+            itertools.repeat(budget),
+            sorted(successes),
+            numpy.arange(len(successes) + 1.0) / len(test_paths),
+            itertools.repeat(split),
+            )
+
+@plac.annotations(
+    out_path = ("path to results file", "positional", None, os.path.abspath),
+    tasks_root = ("path to task files", "positional", None, os.path.abspath),
+    workers = ("submit jobs?", "option", "w", int),
     )
-def main(
-    group,
-    budget,
-    fraction,
-    uuids,
-    trial        = "random",
-    parent_trial = None,
-    runs         = 1,
-    cache_path   = None,
-    ):
-    """
-    Run the script.
-    """
+def main(out_path, tasks_root, workers = 0):
+    """Collect validation results."""
 
-    if cache_path is not None:
-        from os.path import abspath
+    cargo.enable_default_logging()
 
-        cache_path = abspath(cache_path)
+    def yield_runs():
+        paths = list(cargo.files_under(tasks_root, ["*.cnf"]))
+        examples = int(round(min(500, len(paths)) * 0.50))
 
-    # set up logging
-    from cargo.log import enable_default_logging
+        for _ in xrange(8):
+            shuffled = sorted(paths, key = lambda _ : numpy.random.rand())
+            train_paths = shuffled[:examples]
+            test_paths = shuffled[examples:]
+            split = uuid.uuid4()
 
-    enable_default_logging()
+            for name in trainers:
+                yield (run_validation, [name, train_paths, test_paths, 5000.0, split])
 
-    get_logger("sqlalchemy.engine",        level = "WARNING")
-    get_logger("cargo.unix.accounting",    level = "WARNING")
-    get_logger("borg.solvers.competition", level = "NOTE")
+    with open(out_path, "w") as out_file:
+        writer = csv.writer(out_file)
 
-    # connect to the database and go
-    from cargo.sql.alchemy import SQL_Engines
+        writer.writerow(["name", "budget", "cost", "rate", "split"])
 
-    with SQL_Engines.default:
-        from cargo.sql.alchemy import make_session
-        from borg.data         import research_connect
-
-        ResearchSession = make_session(bind = research_connect())
-
-        with ResearchSession() as session:
-            # build its jobs
-            def yield_jobs():
-                """
-                Generate a set of jobs to distribute.
-                """
-
-                from cargo.labor.jobs import CallableJob
-                from cargo.random     import get_random_random
-                from borg.solvers     import get_named_solvers
-
-                named_solvers = get_named_solvers(use_recycled = True)
-
-                for request in yield_solver_requests():
-                    for i in xrange(runs):
-                        yield CallableJob(
-                            make_validation_run,
-                            engine_url    = session.connection().engine.url,
-                            request       = request,
-                            fraction      = fraction,
-                            task_uuids    = uuids,
-                            budget        = budget,
-                            random        = get_random_random(),
-                            named_solvers = named_solvers,
-                            group         = group,
-                            cache_path    = cache_path,
-                            )
-
-            jobs = list(yield_jobs())
-
-        # run the jobs
-        from cargo.temporal      import utc_now
-        from cargo.labor.storage import outsource_or_run
-
-        outsource_or_run(jobs, "validation runs (at %s)" % utc_now())
-
-# XXX solver, seed, budget, cost, success, answer
+        cargo.distribute_or_labor(yield_runs(), workers, lambda _, r: writer.writerows(r))
 
