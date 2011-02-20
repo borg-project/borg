@@ -1,7 +1,0 @@
-{
-	"PYTHONPATH" : {
-		"action" : "prepend",
-		"value"  : ["$HERE/../../lib"]
-		}
-	}
-

@@ -12,6 +12,5 @@ set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/src/cmake CACHE PATH "")
 # project contents
 #
 
-add_subdirectory(etc)
 add_subdirectory(src)
 

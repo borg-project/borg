@@ -4,14 +4,10 @@
 
 install(
     FILES
-        __init__.py
-		analyzers.py
-        cache.py
-        data.py
-        rowed.py
-        tasks.py
         defaults.py
-    DESTINATION lib/borg
+        portfolios.py
+        solvers.py
+        __init__.py
     )
 
 #cython_include_directories(${CMAKE_CURRENT_SOURCE_DIR})
@@ -20,11 +16,5 @@ install(
 # descend
 #
 
-add_subdirectory(pb)
-add_subdirectory(portfolio)
-add_subdirectory(sat)
-add_subdirectory(solvers)
-add_subdirectory(test)
 add_subdirectory(tools)
-add_subdirectory(_files)
 

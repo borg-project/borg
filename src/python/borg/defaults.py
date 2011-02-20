@@ -2,9 +2,7 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
-research_url = None
-solver_lists = []
-collections  = None
+solvers_root = "/scratch/cluster/bsilvert/sat-competition-2011/solvers"
 
 try:
     from borg_site_defaults import *

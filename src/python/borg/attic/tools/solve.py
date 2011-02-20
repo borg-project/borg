@@ -55,10 +55,11 @@ def enable_output():
     logging.root.addHandler(handler)
 
 @plac.annotations(
-    solver_path  = ("path to solver pickle"),
-    input_path = ("path to instance"),
-    seed = ("PRNG seed", "positional", None, int),
-    quiet = ("be less noisy", "flag", "q"),
+    solver_path  = ("path to solver pickle",),
+    input_path   = ("path to instance",),
+    seed         = ("PRNG seed", "positional", None, int),
+    calibration  = ("processor calibration factor", "option", "c", float),
+    quiet        = ("be less noisy", "flag", "q"),
     )
 def main(solver_path, input_path, seed = 42, calibration = 1.0, quiet = False):
     """Solve a problem instance."""
@@ -66,24 +67,37 @@ def main(solver_path, input_path, seed = 42, calibration = 1.0, quiet = False):
     # configure logging
     enable_output()
 
+    if not quiet:
+        cargo.get_logger("cargo.unix.accounting"  , level = "DETAIL")
+        cargo.get_logger("borg.portfolio.models"  , level = "NOTSET")
+        cargo.get_logger("borg.portfolio.planners", level = "NOTSET")
+        cargo.get_logger("borg.solvers.satelite"  , level = "INFO")
+        cargo.get_logger("borg.solvers.portfolio" , level = "INFO")
+
     # build our PRNG
     numpy.random.seed(seed)
     random.seed(numpy.random.randint(2**31))
 
-    # run the solver
+    # instantiate the strategy
+
     with open(solver_path) as file:
         solver = pickle.load(file)
 
-    (_, answer) = solver(task, 2e6)
+    # build the solver environment
+    # XXX load named solvers, etc
+
+    # solve
+    attempt = primary.solve(task, 2e6, random, environment)
+    answer  = attempt.answer
 
     # tell the world
     if answer is None:
         print "s UNKNOWN"
 
         return 0
-    elif isinstance(answer, list):
+    elif answer.satisfiable:
         print "s SATISFIABLE"
-        print "v", " ".join(map(str, answer))
+        print "v %s" % " ".join(map(str, answer.certificate))
 
         return 10
     else:
