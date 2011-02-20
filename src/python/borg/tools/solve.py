@@ -16,7 +16,7 @@ import cPickle as pickle
 import numpy
 import cargo
 
-logger = cargo.get_logger(__name__, default_level = "NOTE")
+logger = cargo.get_logger(__name__, default_level = "INFO")
 
 class CompetitionFormatter(logging.Formatter):
     """A concise log formatter for output during competition."""
@@ -44,7 +44,7 @@ def enable_output():
     """Set up competition-compliant output."""
 
     # configure the default global level
-    get_logger(level = cargo.defaults.root_log_level)
+    cargo.get_logger(level = cargo.defaults.root_log_level)
 
     # set up output
     handler = logging.StreamHandler(sys.stdout)
@@ -60,30 +60,36 @@ def enable_output():
     seed = ("PRNG seed", "positional", None, int),
     quiet = ("be less noisy", "flag", "q"),
     )
-def main(solver_path, input_path, seed = 42, calibration = 1.0, quiet = False):
+def main(solver_path, input_path, seed = 42, quiet = False):
     """Solve a problem instance."""
 
-    # configure logging
+    # general setup
     enable_output()
 
-    # build our PRNG
+    if not quiet:
+        cargo.get_logger("borg.solvers", level = "DETAIL")
+
     numpy.random.seed(seed)
     random.seed(numpy.random.randint(2**31))
 
     # run the solver
+    logger.info("loaded portfolio from %s", solver_path)
+
     with open(solver_path) as file:
         solver = pickle.load(file)
 
-    (_, answer) = solver(task, 2e6)
+    logger.info("solving %s", input_path)
+
+    (_, answer) = solver(input_path, 2e6)
 
     # tell the world
     if answer is None:
         print "s UNKNOWN"
 
         return 0
-    elif isinstance(answer, list):
+    elif answer:
         print "s SATISFIABLE"
-        print "v", " ".join(map(str, answer))
+        print "v", " ".join(map(str, answer)), "0"
 
         return 10
     else:

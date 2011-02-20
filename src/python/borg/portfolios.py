@@ -2,7 +2,10 @@
 @author: Bryan Silverthorn <bcs@cargo-cult.org>
 """
 
+import os.path
+import itertools
 import numpy
+import scipy.stats
 import scikits.learn.linear_model
 import cargo
 import borg
@@ -85,7 +88,7 @@ class ClassifierPortfolio(object):
     def __init__(self, solvers, train_paths):
         self._solvers = solvers
 
-        action_budget = 500
+        action_budget = 5000
         solver_rindex = dict(enumerate(solvers))
         solver_index = dict(map(reversed, solver_rindex.items()))
         budget_rindex = dict(enumerate([action_budget]))
@@ -116,13 +119,25 @@ class ClassifierPortfolio(object):
             model.fit(train_xs[solver], train_ys[solver])
 
     def __call__(self, cnf_path, budget):
-        features = numpy.recfromcsv(cnf_path + ".features.csv")
-        scores = [(s, m.predict_proba([features.tolist()])[0, -1]) for (s, m) in self._models.items()]
+        # obtain features
+        csv_path = cnf_path + ".features.csv"
+
+        if os.path.exists(csv_path):
+            features = numpy.recfromcsv(csv_path).tolist()
+            features_cost = features.cost
+        else:
+            (_, features) = borg.features.get_features_for(cnf_path)
+            features_cost = features[0]
+
+        # select a solver
+        scores = [(s, m.predict_proba([features])[0, -1]) for (s, m) in self._models.items()]
         (name, probability) = max(scores, key = lambda (_, p): p)
         selected = self._solvers[name]
-        (run_seed, run_cost, run_answer) = selected(cnf_path, budget - features.cost)
 
-        return (run_seed, features.cost + run_cost, run_answer)
+        # run the solver
+        (run_cost, run_answer) = selected(cnf_path, budget - features_cost)
+
+        return (features_cost + run_cost, run_answer)
 
 def fit_mixture_model(observed, counts):
     """Use EM to fit a discrete mixture."""
@@ -161,8 +176,8 @@ class MixturePortfolio(object):
     def __init__(self, solvers, train_paths):
         self._solvers = solvers
 
-        budgets = [1000]
-        solver_rindex = dict(enumerate(solvers))
+        self._budgets = budgets = [1000]
+        self._solver_rindex = solver_rindex = dict(enumerate(solvers))
         solver_index = dict(map(reversed, solver_rindex.items()))
         budget_rindex = dict(enumerate(budgets))
         budget_index = dict(map(reversed, budget_rindex.items()))
@@ -189,13 +204,13 @@ class MixturePortfolio(object):
             probabilities = numpy.sum(self._components * new_weights[:, None], axis = 0)
 
             best_solver_i = numpy.argmax(probabilities)
-            best_solver_name = solver_rindex[best_solver_i]
+            best_solver_name = self._solver_rindex[best_solver_i]
             best = self._solvers[best_solver_name]
 
             #print best_solver_name, probabilities, budget - total_cost
 
             # run it
-            (_, run_cost, run_answer) = best(cnf_path, budgets[0]) # XXX
+            (run_cost, run_answer) = best(cnf_path, self._budgets[0]) # XXX
             total_cost += run_cost
 
             if run_answer is not None:
@@ -213,15 +228,12 @@ class MixturePortfolio(object):
 
         return (total_cost, None)
 
-trainers = {
+named = {
     #"TNM": lambda *_: lambda *args: solve_fake("TNM", *args),
-    "SATzilla2009_R": lambda *_: lambda *args: solve_fake("SATzilla2009_R", *args),
-    "random": train_random_portfolio,
-    "baseline": train_baseline_portfolio,
-    "classifier": train_classifier_portfolio,
-    "mixture": train_mixture_portfolio,
+    #"SATzilla2009_R": lambda *_: lambda *args: solve_fake("SATzilla2009_R", *args),
+    "random": RandomPortfolio,
+    "baseline": BaselinePortfolio,
+    "classifier": ClassifierPortfolio,
+    "mixture": MixturePortfolio,
     }
-
-# XXX best-single-solver portfolio
-# XXX oracle portfolio
 

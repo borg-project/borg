@@ -5,9 +5,11 @@
 install(
     FILES
         defaults.py
-        portfolios.py
         solvers.py
+        features.py
+        portfolios.py
         __init__.py
+	DESTINATION lib/borg
     )
 
 #cython_include_directories(${CMAKE_CURRENT_SOURCE_DIR})
