@@ -81,8 +81,8 @@ named = {
     "TNM": basic_solver("TNM/TNM"),
     "cryptominisat-2.9.0": solve_cryptominisat,
     "march_hi": basic_solver("march_hi/march_hi"),
-    "gnovelty+2": basic_solver("gnovelty+2/gnovelty+2"),
-    "hybridGM3": basic_solver("hybridGM3/hybridGM3"),
+    #"gnovelty+2": basic_solver("gnovelty+2/gnovelty+2"),
+    #"hybridGM3": basic_solver("hybridGM3/hybridGM3"),
     #"adaptg2wsat++": basic_solver("adaptg2wsat2009++/adaptg2wsat2009++"),
     }
 satzillas = {

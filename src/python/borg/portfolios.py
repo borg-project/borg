@@ -3,6 +3,7 @@
 """
 
 import os.path
+import resource
 import itertools
 import numpy
 import scipy.stats
@@ -14,8 +15,6 @@ logger = cargo.get_logger(__name__, default_level = "INFO")
 
 def get_task_run_data(task_paths):
     """Load running times associated with tasks."""
-
-    logger.detail("loading running time data from %i files", len(task_paths))
 
     data = {}
 
@@ -82,6 +81,21 @@ class BaselinePortfolio(object):
     def __call__(self, cnf_path, budget):
         return self._best(cnf_path, budget)
 
+class OraclePortfolio(object):
+    """Oracle-approximate portfolio."""
+
+    def __init__(self, solvers, train_paths):
+        self._solvers = solvers
+
+    def __call__(self, cnf_path, budget):
+        solver_rindex = dict(enumerate(self._solvers))
+        solver_index = dict(map(reversed, solver_rindex.items()))
+        (runs,) = get_task_run_data([cnf_path]).values()
+        (_, _, rates) = action_rates_from_runs(solver_index, {budget: 0}, runs)
+        best = self._solvers[solver_rindex[numpy.argmax(rates)]]
+
+        return best(cnf_path, budget)
+
 class ClassifierPortfolio(object):
     """Classifier-based portfolio."""
 
@@ -124,10 +138,10 @@ class ClassifierPortfolio(object):
 
         if os.path.exists(csv_path):
             features = numpy.recfromcsv(csv_path).tolist()
-            features_cost = features.cost
         else:
             (_, features) = borg.features.get_features_for(cnf_path)
-            features_cost = features[0]
+
+        features_cost = features[0]
 
         # select a solver
         scores = [(s, m.predict_proba([features])[0, -1]) for (s, m) in self._models.items()]
@@ -142,31 +156,26 @@ class ClassifierPortfolio(object):
 def fit_mixture_model(observed, counts):
     """Use EM to fit a discrete mixture."""
 
-    K = 4
-    components = numpy.empty((K, observed.shape[1]))
-    #weights = numpy.random.random(K)
-    #weights /= numpy.sum(weights)
+    K = 32
+    components = numpy.empty((K,) + observed.shape[1:])
     responsibilities = numpy.random.random((K, observed.shape[0]))
     responsibilities /= numpy.sum(responsibilities, axis = 0)
 
     for i in xrange(64):
         # compute new components
         for k in xrange(K):
-            components[k] = numpy.sum(observed * responsibilities[k][:, None], axis = 0)
-            components[k] /= numpy.sum(counts * responsibilities[k][:, None], axis = 0)
+            components[k] = numpy.sum(observed * responsibilities[k][:, None, None], axis = 0)
+            components[k] /= numpy.sum(counts * responsibilities[k][:, None, None], axis = 0)
 
         # compute new responsibilities
         for k in xrange(K):
             mass = scipy.stats.binom.pmf(observed, counts, components[k])
-            responsibilities[k] = numpy.prod(mass, axis = 1)
+            responsibilities[k] = numpy.prod(numpy.prod(mass, axis = 2), axis = 1)
 
         responsibilities /= numpy.sum(responsibilities, axis = 0)
 
     weights = numpy.sum(responsibilities, axis = 1)
     weights /= numpy.sum(weights)
-
-        #print components
-        #print weights
 
     return (components, weights)
 
@@ -175,63 +184,87 @@ class MixturePortfolio(object):
 
     def __init__(self, solvers, train_paths):
         self._solvers = solvers
-
         self._budgets = budgets = [1000]
-        self._solver_rindex = solver_rindex = dict(enumerate(solvers))
-        solver_index = dict(map(reversed, solver_rindex.items()))
+        self._solver_rindex = dict(enumerate(solvers))
+        solver_index = dict(map(reversed, self._solver_rindex.items()))
         budget_rindex = dict(enumerate(budgets))
-        budget_index = dict(map(reversed, budget_rindex.items()))
-        observed = numpy.empty((len(train_paths), len(solvers) * len(budgets)))
-        counts = numpy.empty((len(train_paths), len(solvers) * len(budgets)))
+        self._budget_index = dict(map(reversed, budget_rindex.items()))
+        observed = numpy.empty((len(train_paths), len(solvers), len(budgets)))
+        counts = numpy.empty((len(train_paths), len(solvers), len(budgets)))
 
         for (i, train_path) in enumerate(train_paths):
             (runs,) = get_task_run_data([train_path]).values()
-            (runs_observed, runs_counts, _) = action_rates_from_runs(solver_index, budget_index, runs)
+            (runs_observed, runs_counts, _) = \
+                action_rates_from_runs(
+                    solver_index,
+                    self._budget_index,
+                    runs,
+                    )
 
-            observed[i] = runs_observed.flat
-            counts[i] = runs_counts.flat
+            observed[i] = runs_observed
+            counts[i] = runs_counts
 
         (self._components, self._weights) = fit_mixture_model(observed, counts)
 
     def __call__(self, cnf_path, budget):
-        actions = list(itertools.product(self._solvers, self._budgets))
+        initial_utime = resource.getrusage(resource.RUSAGE_SELF).ru_utime
         total_cost = 0.0
-        history = numpy.zeros(len(actions))
+        total_run_cost = 0.0
+        history = numpy.zeros((len(self._solvers), len(self._budgets)))
         new_weights = self._weights
 
-        while actions:
-            # choose a solver
-            probabilities = numpy.sum(self._components * new_weights[:, None], axis = 0)
+        while True:
+            # choose an action
+            overhead = resource.getrusage(resource.RUSAGE_SELF).ru_utime - initial_utime
+            total_cost = total_run_cost + overhead
+            probabilities = numpy.sum(self._components * new_weights[:, None, None], axis = 0)
+            best_score = -numpy.inf
 
-            best_solver_i = numpy.argmax(probabilities)
-            best_solver_name = self._solver_rindex[best_solver_i]
-            best = self._solvers[best_solver_name]
+            for cost in sorted(self._budgets):
+                adjusted_cost = borg.defaults.machine_speed * cost
 
-            #print best_solver_name, probabilities, budget - total_cost
+                if adjusted_cost <= budget - total_cost:
+                    discount = (1.0 - 5e-4)**cost
+                    budget_i = self._budget_index[cost]
+                    solver_i = numpy.argmax(probabilities[:, budget_i] * discount)
+                    score = probabilities[solver_i, budget_i] * discount
+
+                    if score >= best_score:
+                        best_score = score
+                        best_name = self._solver_rindex[solver_i]
+                        best = self._solvers[best_name]
+                        best_budget = adjusted_cost
+                        best_solver_i = solver_i
+                        best_budget_i = budget_i
+
+            if best_score < 0.0:
+                break
+
+            logger.debug("action %s@%i was chosen with score %.2f", best_name, best_budget, best_score)
 
             # run it
-            (run_cost, run_answer) = best(cnf_path, self._budgets[0]) # XXX
-            total_cost += run_cost
+            (run_cost, answer) = best(cnf_path, best_budget)
+            total_run_cost += run_cost
 
-            if run_answer is not None:
-                return (total_cost, run_answer)
+            if answer is not None:
+                break
 
+            # recalculate cluster probabilities
             history[best_solver_i] += 1.0
-            new_weights = scipy.stats.binom.pmf(numpy.zeros(len(actions)), history, components)
-            new_weights = numpy.prod(new_weights, axis = 1)
+            new_weights = scipy.stats.binom.pmf(numpy.zeros_like(history), history, self._components)
+            new_weights = numpy.prod(numpy.prod(new_weights, axis = 2), axis = 1)
             new_weights *= self._weights
             new_weights /= numpy.sum(new_weights)
 
-            actions = filter(lambda (_, c): c <= budget - total_cost, actions)
+        total_cost = total_run_cost + overhead
 
-            # XXX obviously broken in several ways
+        logger.debug("answer %s with total cost %.2f", answer, total_cost)
 
-        return (total_cost, None)
+        return (total_cost, answer)
 
 named = {
-    #"TNM": lambda *_: lambda *args: solve_fake("TNM", *args),
-    #"SATzilla2009_R": lambda *_: lambda *args: solve_fake("SATzilla2009_R", *args),
     "random": RandomPortfolio,
+    "oracle": OraclePortfolio,
     "baseline": BaselinePortfolio,
     "classifier": ClassifierPortfolio,
     "mixture": MixturePortfolio,

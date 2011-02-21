@@ -15,6 +15,7 @@ import uuid
 import itertools
 import numpy
 import cargo
+import borg
 
 logger = cargo.get_logger(__name__, default_level = "INFO")
 
@@ -29,12 +30,12 @@ def solve_fake(solver_name, cnf_path, budget):
         with open(csv_path) as csv_file:
             reader = csv.reader(csv_file)
 
-            for (name, seed, run_budget, cost, answer) in reader:
+            for (name, _, run_budget, cost, answer) in reader:
                 if name == solver_name and float(run_budget) >= budget:
-                    runs.append((seed, cost, answer))
+                    runs.append((cost, answer))
 
     if runs:
-        (seed, cost, answer) = cargo.grab(runs)
+        (cost, answer) = cargo.grab(runs)
         cost = float(cost)
 
         if cost > budget:
@@ -43,24 +44,27 @@ def solve_fake(solver_name, cnf_path, budget):
         else:
             answer = answer_map[answer]
 
-        return (int(seed), cost, answer)
+        return (cost, answer)
     else:
         raise RuntimeError("no applicable runs of {0} on {1}".format(solver_name, cnf_path))
 
-core_solvers = {
-    "TNM": lambda *args: solve_fake("TNM", *args),
-    "march_hi": lambda *args: solve_fake("march_hi", *args),
-    "cryptominisat-2.9.0": lambda *args: solve_fake("cryptominisat-2.9.0", *args),
-    }
+def fake_solver(solver_name):
+    return lambda *args: solve_fake(solver_name, *args)
+
+core_solvers = dict(zip(borg.solvers.named, map(fake_solver, borg.solvers.named)))
+
+portfolios = borg.portfolios.named.copy()
+
+portfolios["SATzilla2009_R"] = lambda *_: lambda *args: solve_fake("SATzilla2009_R", *args)
 
 def run_validation(name, train_paths, test_paths, budget, split):
     """Make a validation run."""
 
-    solve = borg.portfolios.trainers[name](core_solvers, train_paths)
+    solver = portfolios[name](core_solvers, train_paths)
     successes = []
 
     for test_path in test_paths:
-        (seed, cost, answer) = solve(test_path, budget)
+        (cost, answer) = solver(test_path, budget)
 
         if answer is not None:
             successes.append(cost)
@@ -88,6 +92,8 @@ def main(out_path, tasks_root, workers = 0):
 
     cargo.enable_default_logging()
 
+    cargo.get_logger("borg.portfolios", level = "DETAIL")
+
     def yield_runs():
         paths = list(cargo.files_under(tasks_root, ["*.cnf"]))
         examples = int(round(min(500, len(paths)) * 0.50))
@@ -98,7 +104,7 @@ def main(out_path, tasks_root, workers = 0):
             test_paths = shuffled[examples:]
             split = uuid.uuid4()
 
-            for name in trainers:
+            for name in portfolios:
                 yield (run_validation, [name, train_paths, test_paths, 5000.0, split])
 
     with open(out_path, "w") as out_file:

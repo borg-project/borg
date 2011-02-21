@@ -57,10 +57,11 @@ def enable_output():
 @plac.annotations(
     solver_path  = ("path to solver pickle"),
     input_path = ("path to instance"),
-    seed = ("PRNG seed", "positional", None, int),
+    seed = ("PRNG seed", "option", None, int),
+    budget = ("CPU time limit", "option", None, float),
     quiet = ("be less noisy", "flag", "q"),
     )
-def main(solver_path, input_path, seed = 42, quiet = False):
+def main(solver_path, input_path, seed = 42, budget = 2e6, quiet = False):
     """Solve a problem instance."""
 
     # general setup
@@ -80,7 +81,7 @@ def main(solver_path, input_path, seed = 42, quiet = False):
 
     logger.info("solving %s", input_path)
 
-    (_, answer) = solver(input_path, 2e6)
+    (_, answer) = solver(input_path, budget)
 
     # tell the world
     if answer is None:
