@@ -51,11 +51,13 @@ def solve_fake(solver_name, cnf_path, budget):
 def fake_solver(solver_name):
     return lambda *args: solve_fake(solver_name, *args)
 
-core_solvers = dict(zip(borg.solvers.named, map(fake_solver, borg.solvers.named)))
+subsolvers = ["TNM", "march_hi", "gnovelty+2", "hybridGM3", "adaptg2wsat++"]
+
+core_solvers = dict(zip(subsolvers, map(fake_solver, subsolvers)))
 
 portfolios = borg.portfolios.named.copy()
 
-portfolios["SATzilla2009_R"] = lambda *_: lambda *args: solve_fake("SATzilla2009_R", *args)
+#portfolios["SATzilla2009_R"] = lambda *_: lambda *args: solve_fake("SATzilla2009_R", *args)
 
 def run_validation(name, train_paths, test_paths, budget, split):
     """Make a validation run."""

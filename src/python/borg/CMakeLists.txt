@@ -1,4 +1,20 @@
 #
+# build
+#
+
+add_cython_module(borg_dimacs dimacs)
+
+#
+# install
+#
+
+install(
+    TARGETS
+        borg_dimacs
+    DESTINATION lib/borg
+    )
+
+#
 # source
 #
 
@@ -11,8 +27,6 @@ install(
         __init__.py
 	DESTINATION lib/borg
     )
-
-#cython_include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 #
 # descend

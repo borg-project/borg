@@ -47,9 +47,9 @@ def main(tasks_root, workers = 0):
         paths = list(cargo.files_under(tasks_root, ["*.cnf"]))
 
         for _ in xrange(4):
-            for solver_name in ["adaptg2wsat++"]:
+            for solver_name in borg.solvers.named:
                 for path in paths:
-                    yield (run_solver_on, [solver_name, path, 60.0])
+                    yield (run_solver_on, [solver_name, path, 6000.0])
 
     def collect_run((_, arguments), row):
         (_, cnf_path, _) = arguments
