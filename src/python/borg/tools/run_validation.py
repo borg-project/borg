@@ -98,9 +98,9 @@ def main(out_path, tasks_root, workers = 0):
 
     def yield_runs():
         paths = list(cargo.files_under(tasks_root, ["*.cnf"]))
-        examples = int(round(min(500, len(paths)) * 0.50))
+        examples = int(round(len(paths) * 0.50))
 
-        for _ in xrange(8):
+        for _ in xrange(16):
             shuffled = sorted(paths, key = lambda _ : numpy.random.rand())
             train_paths = shuffled[:examples]
             test_paths = shuffled[examples:]

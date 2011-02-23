@@ -82,5 +82,5 @@ class DIMACS_GraphFile(object):
 
         return DIMACS_GraphFile(comments, clauses, N)
 
-parse = DIMACS_GraphFile.parse
+parse_cnf = DIMACS_GraphFile.parse
 

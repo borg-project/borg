@@ -96,6 +96,55 @@ class OraclePortfolio(object):
 
         return best(cnf_path, budget)
 
+def knapsack_plan(rates, solver_rindex, budgets, remaining):
+    """
+    Generate an optimal plan for a static probability table.
+
+    Budgets *must* be in ascending order and *must* be spaced by a fixed
+    interval from zero.
+    """
+
+    # find the index of our starting budget
+    start = None
+
+    for (b, budget) in enumerate(budgets):
+        if budget > remaining:
+            break
+        else:
+            start = b
+
+    if start is None:
+        return []
+
+    # generate the values table and associated policy
+    (nsolvers, nbudgets) = rates.shape
+    values = numpy.ones(nbudgets + 1)
+    policy = {}
+
+    for b in xrange(1, nbudgets + 1):
+        region = (1.0 - rates[:, :b]) * values[None, b - 1::-1]
+        i = numpy.argmin(region)
+        (s, c) = numpy.unravel_index(i, region.shape)
+
+        values[b] = region[s, c]
+        policy[b] = (s, c)
+
+    # build a plan from the policy
+    plan = []
+    b = start + 1
+
+    while b > 0:
+        (_, c) = action = policy[b]
+        b -= c + 1
+
+        plan.append(action)
+
+    # heuristically reorder the plan
+    reordered = sorted(plan, key = lambda (s, c): -rates[s, c] / budgets[c])
+
+    # translate and return it
+    return [(solver_rindex[s], budgets[c]) for (s, c) in reordered]
+
 class UberOraclePortfolio(object):
     """Oracle-approximate planning portfolio."""
 
@@ -110,37 +159,14 @@ class UberOraclePortfolio(object):
     def __call__(self, cnf_path, budget):
         logger.debug("solving %s", cnf_path)
 
+        # grab known run data
         (runs,) = get_task_run_data([cnf_path]).values()
         (_, _, rates) = action_rates_from_runs(self._solver_index, self._budget_index, runs.tolist())
 
-        values = numpy.ones(len(self._budgets) + 1)
-        policy = {}
+        # make a plan
+        plan = knapsack_plan(rates, self._solver_rindex, self._budgets, budget)
 
-        for b in xrange(1, len(self._budgets) + 1):
-            region = (1.0 - rates[:, :b]) * values[None, b - 1::-1]
-            (s, c) = numpy.unravel_index(numpy.argmin(region), region.shape)
-            values[b] = region[s, c]
-            action = (
-                self._solver_rindex[s],
-                self._budget_rindex[c],
-                )
-            policy[self._budgets[b - 1]] = action
-
-        plan = []
-        remaining = budget
-
-        while remaining > 0.0:
-            (_, cost) = action = policy[remaining]
-
-            plan.append(action)
-
-            remaining -= cost
-
-        def heuristic((name, cost)):
-            return -rates[self._solver_index[name], self._budget_index[cost]] / cost
-
-        plan = sorted(plan, key = heuristic)
-
+        # follow through
         total_cost = 0.0
 
         for (name, cost) in plan:
@@ -149,13 +175,12 @@ class UberOraclePortfolio(object):
 
             b = self._budget_index[cost]
             logger.debug(
-                "ran %s@%i with %is; yielded %s (p = %f; v = %f)",
+                "ran %s@%i with %is; yielded %s (p = %f)",
                 name,
                 cost,
                 budget - total_cost,
                 answer,
                 rates[self._solver_index[name], b],
-                values[b + 1],
                 )
 
             total_cost += run_cost
@@ -224,50 +249,102 @@ class ClassifierPortfolio(object):
 
         return (features_cost + run_cost, run_answer)
 
+#def ln_factorial(n):
+    #"""Compute the log of the factorial function."""
+
+    #return scipy.special.gammaln(n + 1.0)
+
+#def ln_choose(n, m):
+    #"""Compute the log of the choose function."""
+
+    #if m == n or m == 0.0:
+        #return 0.0
+    #else:
+        #if m * 2.0 > n:
+            #k = n - m
+        #else:
+            #k = m
+
+        #return ln_factorial(n) - ln_factorial(k) - ln_factorial(n - k)
+
+#def binomial_log_pmf(k, n, p):
+    #"""Compute the binomial PMF."""
+
+    #if k > n:
+        #return -numpy.inf
+    #elif p == 0.0:
+        #if k == 0.0
+            #return 0.0:
+        #else:
+            #return -numpy.inf
+    #elif p == 1.0:
+        #if k == n:
+            #return 0.0
+        #else:
+            #return -numpy.inf
+    #else:
+        #return ln_choose(n, k) + k * numpy.log(p) + (n - k) * numpy.log1p(-p)
+
 def fit_mixture_model(observed, counts, K):
     """Use EM to fit a discrete mixture."""
 
-    N = observed.shape[0]
-    components = numpy.empty((K,) + observed.shape[1:])
-    responsibilities = numpy.empty((K, N))
     concentration = 1e-6
+    N = observed.shape[0]
+    rates = (observed + concentration / 2.0) / (counts + concentration)
+    components = rates[numpy.random.randint(N, size = K)]
+    responsibilities = numpy.empty((K, N))
 
-    for k in xrange(K):
-        n = numpy.random.randint(N)
-        components[k] = (observed[n] + concentration / 2.0) / (counts[n] + concentration)
-
-    for i in xrange(64):
+    for i in xrange(1):
         # compute new responsibilities
-        for k in xrange(K):
-            mass = scipy.stats.binom.pmf(observed, counts, components[k])
-            responsibilities[k] = numpy.prod(numpy.prod(mass, axis = 2), axis = 1)
+        raw_mass = scipy.stats.binom.pmf(observed[None, ...], counts[None, ...], components[:, None, ...])
+        log_mass = numpy.sum(numpy.sum(numpy.log(raw_mass), axis = 3), axis = 2)
+        responsibilities = log_mass - numpy.logaddexp.reduce(log_mass, axis = 0)
 
-        responsibilities /= numpy.sum(responsibilities, axis = 0)
+        print repr(log_mass[:, :4])
+        print repr(numpy.logaddexp.reduce(log_mass[:, :4], axis = 0))
+        #print numpy.logaddexp.reduce(log_mass, axis = 0)
+        #print responsibilities
+        #print numpy.exp(responsibilities)
+
+        raise SystemExit()
+
+        log_weights = numpy.exp(numpy.logaddexp.reduce(responsibilities, axis = 1))
+        log_weights -= numpy.logaddexp.reduce(log_weights)
+
+        ll = numpy.sum(numpy.sum(log_weights[:, None] + log_mass, axis = 0))
+
+        logger.info("l-l at iteration %i is %f", i, ll)
 
         # compute new components
-        for k in xrange(K):
-            components[k] = numpy.sum(observed * responsibilities[k][:, None, None], axis = 0)
-            components[k] += concentration / 2.0
-            components[k] /= numpy.sum(counts * responsibilities[k][:, None, None], axis = 0) + concentration
+        old_components = components
+        map_observed = observed[None, ...] * numpy.exp(responsibilities[..., None, None])
+        map_counts = counts[None, ...] * numpy.exp(responsibilities[..., None, None])
+        components = numpy.sum(map_observed, axis = 1) + concentration / 2.0
+        components /= numpy.sum(map_counts, axis = 1) + concentration
 
-    weights = numpy.sum(responsibilities, axis = 1)
-    weights /= numpy.sum(weights)
+        # check for termination
+        delta = numpy.mean(numpy.abs(components - old_components))
+
+        #logger.info("delta at iteration %i is %f", i, delta)
+
+        if delta == 0.0:
+            break
 
     assert numpy.all(components >= 0.0)
     assert numpy.all(components <= 1.0)
 
-    return (components, weights, responsibilities)
+    return (components, weights, responsibilities, ll)
 
 class MixturePortfolio(object):
     """Mixture-model portfolio."""
 
     def __init__(self, solvers, train_paths):
         self._solvers = solvers
-        #self._budgets = budgets = numpy.r_[10:4000:12j]
-        self._budgets = budgets = [5000]
+        self._budgets = budgets = [(b + 1) * 100.0 for b in xrange(50)]
+        #self._budgets = budgets = [5000]
 
         # fit the mixture model
-        K = 32
+        K = 4
         self._solver_rindex = dict(enumerate(solvers))
         self._solver_index = dict(map(reversed, self._solver_rindex.items()))
         budget_rindex = dict(enumerate(budgets))
@@ -289,15 +366,16 @@ class MixturePortfolio(object):
 
         best = -numpy.inf
 
-        for i in xrange(8):
-            (components, weights, _) = fit_mixture_model(observed, counts, K)
-            ps = scipy.stats.binom.pmf(observed[None, ...], counts[None, ...], components[:, None, ...])
-            p = numpy.sum(numpy.prod(ps * weights[:, None, None, None], axis = 1))
+        for i in xrange(2):
+            (components, weights, _, ll) = fit_mixture_model(observed, counts, K)
 
-            if p > best:
+            if ll > best:
                 self._components = components
                 self._weights = weights
-                best = p
+                best = ll
+
+        print self._components
+        logger.info("fit the mixture model; best l-l = %f", best)
 
         # fit the cluster classifiers
         targets = numpy.empty((K, observed.shape[0]))
@@ -332,32 +410,34 @@ class MixturePortfolio(object):
 
             self._models.append(model)
 
+        logger.info("trained the cluster classifiers")
+
     def __call__(self, cnf_path, budget):
         ## obtain features
-        csv_path = cnf_path + ".features.csv"
+        #csv_path = cnf_path + ".features.csv"
 
-        if os.path.exists(csv_path):
-            features = numpy.recfromcsv(csv_path).tolist()
-        else:
-            (_, features) = borg.features.get_features_for(cnf_path)
+        #if os.path.exists(csv_path):
+            #features = numpy.recfromcsv(csv_path).tolist()
+        #else:
+            #(_, features) = borg.features.get_features_for(cnf_path)
 
-        prior_weights = numpy.array([m.predict_proba([features])[0, -1] for m in self._models])
-        prior_weights /= numpy.sum(prior_weights)
+        #prior_weights = numpy.array([m.predict_proba([features])[0, -1] for m in self._models])
+        #prior_weights /= numpy.sum(prior_weights)
 
         #features_cost = features[0]
 
         #print new_weights
 
-        #(runs,) = get_task_run_data([cnf_path]).values()
-        #(oracle_history, oracle_counts, _) = \
-            #action_rates_from_runs(
-                #self._solver_index,
-                #self._budget_index,
-                #runs.tolist(),
-                #)
-        #new_weights = scipy.stats.binom.pmf(oracle_history, oracle_counts, self._components)
-        #new_weights = numpy.prod(numpy.prod(new_weights, axis = 2), axis = 1)
-        #new_weights /= numpy.sum(new_weights)
+        (runs,) = get_task_run_data([cnf_path]).values()
+        (oracle_history, oracle_counts, _) = \
+            action_rates_from_runs(
+                self._solver_index,
+                self._budget_index,
+                runs.tolist(),
+                )
+        prior_weights = scipy.stats.binom.pmf(oracle_history, oracle_counts, self._components)
+        prior_weights = numpy.prod(numpy.prod(prior_weights, axis = 2), axis = 1)
+        prior_weights /= numpy.sum(prior_weights)
 
         #print new_weights
 
@@ -371,47 +451,35 @@ class MixturePortfolio(object):
         new_weights = prior_weights
 
         #logger.debug("solving %s", cnf_path)
+        answer = None
 
         while True:
-            # choose an action
-            answer = None
+            # compute marginal probabilities of success
             overhead = resource.getrusage(resource.RUSAGE_SELF).ru_utime - initial_utime
             total_cost = total_run_cost + overhead
-            probabilities = numpy.sum(self._components * new_weights[:, None, None], axis = 0)
-            best_score = -numpy.inf
+            rates = numpy.sum(self._components * new_weights[:, None, None], axis = 0)
 
-            for cost in sorted(self._budgets):
-                adjusted_cost = borg.defaults.machine_speed * cost
+            # generate a plan
+            plan = knapsack_plan(rates, self._solver_rindex, self._budgets, budget - total_cost)
 
-                if adjusted_cost <= budget - total_cost:
-                    #discount = (1.0 - 5e-4)**cost
-                    discount = 1.0
-                    budget_i = self._budget_index[cost]
-                    solver_i = numpy.argmax(probabilities[:, budget_i] * discount)
-                    score = probabilities[solver_i, budget_i] * discount
-
-                    if score >= best_score:
-                        best_score = score
-                        best_name = self._solver_rindex[solver_i]
-                        best = self._solvers[best_name]
-                        best_budget = adjusted_cost
-                        best_solver_i = solver_i
-                        best_budget_i = budget_i
-
-            if best_score < 0.0:
+            if not plan:
                 break
 
-            logger.info("action %s@%i was chosen with score %.2f", best_name, best_budget, best_score)
+            (name, max_cost) = plan[0]
 
             # run it
-            (run_cost, answer) = best(cnf_path, best_budget)
+            logger.info("taking %s@%i with %i remaining", name, max_cost, budget - total_cost)
+
+            # XXX adjust cost
+            solver = self._solvers[name]
+            (run_cost, answer) = solver(cnf_path, max_cost)
             total_run_cost += run_cost
 
             if answer is not None:
                 break
 
             # recalculate cluster probabilities
-            history[best_solver_i] += 1.0
+            history[self._solver_index[name]] += 1.0
             new_weights = scipy.stats.binom.pmf(numpy.zeros_like(history), history, self._components)
             new_weights = numpy.prod(numpy.prod(new_weights, axis = 2), axis = 1)
             new_weights *= prior_weights
@@ -419,7 +487,7 @@ class MixturePortfolio(object):
 
         total_cost = total_run_cost + overhead
 
-        logger.debug("answer %s with total cost %.2f", answer, total_cost)
+        logger.info("answer %s with total cost %.2f", answer, total_cost)
 
         return (total_cost, answer)
 
