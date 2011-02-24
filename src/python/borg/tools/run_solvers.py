@@ -19,7 +19,8 @@ logger = cargo.get_logger(__name__, default_level = "INFO")
 def run_solver_on(solver_name, cnf_path, budget):
     """Run a solver."""
 
-    solver = borg.solvers.named[solver_name]
+    #solver = borg.solvers.named[solver_name]
+    solver = borg.solvers.satzillas[solver_name]
     (cost, answer) = solver(cnf_path, budget)
     short_answer = None if answer is None else bool(answer)
 
@@ -47,7 +48,8 @@ def main(tasks_root, workers = 0):
         paths = list(cargo.files_under(tasks_root, ["*.cnf"]))
 
         for _ in xrange(4):
-            for solver_name in borg.solvers.named:
+            #for solver_name in borg.solvers.named:
+            for solver_name in borg.solvers.satzillas:
                 for path in paths:
                     yield (run_solver_on, [solver_name, path, 6000.0])
 

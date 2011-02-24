@@ -87,9 +87,10 @@ def run_validation(name, train_paths, test_paths, budget, split):
 @plac.annotations(
     out_path = ("path to results file", "positional", None, os.path.abspath),
     tasks_root = ("path to task files", "positional", None, os.path.abspath),
+    runs = ("number of runs", "option", "r", int),
     workers = ("submit jobs?", "option", "w", int),
     )
-def main(out_path, tasks_root, workers = 0):
+def main(out_path, tasks_root, runs = 16, workers = 0):
     """Collect validation results."""
 
     cargo.enable_default_logging()
@@ -100,7 +101,7 @@ def main(out_path, tasks_root, workers = 0):
         paths = list(cargo.files_under(tasks_root, ["*.cnf"]))
         examples = int(round(len(paths) * 0.50))
 
-        for _ in xrange(16):
+        for _ in xrange(runs):
             shuffled = sorted(paths, key = lambda _ : numpy.random.rand())
             train_paths = shuffled[:examples]
             test_paths = shuffled[examples:]

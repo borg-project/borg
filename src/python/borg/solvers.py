@@ -127,7 +127,7 @@ def solve_minion(cnf_path, budget):
 def basic_command(relative):
     """Prepare a basic competition solver command."""
 
-    return ["{{root}}/{0}".format(relative), "{cnf_path}", "{seed}"]
+    return ["{{root}}/{0}".format(relative), "{task}", "{seed}"]
 
 core_commands = {
     # complete
@@ -135,17 +135,19 @@ core_commands = {
     #"lingeling-276": ["{root}/lingeling-276-6264d55-100731/lingeling", "--seed={seed}", "{task}"],
     #"cryptominisat-2.9.0": ["{root}/cryptominisat-2.9.0Linux64", "--randomize={seed}", "{task}"],
     #"march_hi": basic_command("march_hi/march_hi"),
-    "glucosER": ["{root}/glucosER/glucoser_static", "{task}"],
-    "glucose": ["{root}/glucose/glucose_static", "{task}"],
-    "SApperloT": ["{root}/SApperloT/SApperloT-base", "-seed={seed}", "{task}"],
+    #"glucosER": ["{root}/glucosER/glucoser_static", "{task}"],
+    #"glucose": ["{root}/glucose/glucose_static", "{task}"],
+    #"SApperloT": ["{root}/SApperloT/SApperloT-base", "-seed={seed}", "{task}"],
     # incomplete
     #"TNM": basic_command("TNM/TNM"),
     #"gnovelty+2": basic_command("gnovelty+2/gnovelty+2"),
     #"hybridGM3": basic_command("hybridGM3/hybridGM3"),
     #"adaptg2wsat++": basic_command("adaptg2wsat2009++/adaptg2wsat2009++"),
+    "iPAWS": basic_command("iPAWS/iPAWS"),
     }
 satzilla_commands = {
-    "SATzilla2009_R": basic_command("SATzilla2009/SATzilla2009_R"),
+    #"SATzilla2009_R": basic_command("SATzilla2009/SATzilla2009_R"),
+    "SATzilla2009_I": basic_command("SATzilla2009/SATzilla2009_I"),
     }
 
 def basic_solver(name, command):

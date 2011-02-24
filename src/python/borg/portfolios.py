@@ -5,6 +5,7 @@
 import os.path
 import resource
 import itertools
+import contextlib
 import numpy
 import scipy.stats
 import scikits.learn.linear_model
@@ -12,6 +13,14 @@ import cargo
 import borg
 
 logger = cargo.get_logger(__name__, default_level = "INFO")
+
+@contextlib.contextmanager
+def fpe_handling(**kwargs):
+    previous = numpy.seterr(**kwargs)
+
+    yield
+
+    numpy.seterr(**previous)
 
 def get_task_run_data(task_paths):
     """Load running times associated with tasks."""
@@ -117,12 +126,15 @@ def knapsack_plan(rates, solver_rindex, budgets, remaining):
         return []
 
     # generate the values table and associated policy
-    (nsolvers, nbudgets) = rates.shape
-    values = numpy.ones(nbudgets + 1)
+    with fpe_handling(divide = "ignore"):
+        log_rates = numpy.log(1.0 - rates)
+
+    (nsolvers, nbudgets) = log_rates.shape
+    values = numpy.zeros(nbudgets + 1)
     policy = {}
 
     for b in xrange(1, nbudgets + 1):
-        region = (1.0 - rates[:, :b]) * values[None, b - 1::-1]
+        region = log_rates[:, :b] + values[None, b - 1::-1]
         i = numpy.argmin(region)
         (s, c) = numpy.unravel_index(i, region.shape)
 
@@ -249,86 +261,39 @@ class ClassifierPortfolio(object):
 
         return (features_cost + run_cost, run_answer)
 
-#def ln_factorial(n):
-    #"""Compute the log of the factorial function."""
-
-    #return scipy.special.gammaln(n + 1.0)
-
-#def ln_choose(n, m):
-    #"""Compute the log of the choose function."""
-
-    #if m == n or m == 0.0:
-        #return 0.0
-    #else:
-        #if m * 2.0 > n:
-            #k = n - m
-        #else:
-            #k = m
-
-        #return ln_factorial(n) - ln_factorial(k) - ln_factorial(n - k)
-
-#def binomial_log_pmf(k, n, p):
-    #"""Compute the binomial PMF."""
-
-    #if k > n:
-        #return -numpy.inf
-    #elif p == 0.0:
-        #if k == 0.0
-            #return 0.0:
-        #else:
-            #return -numpy.inf
-    #elif p == 1.0:
-        #if k == n:
-            #return 0.0
-        #else:
-            #return -numpy.inf
-    #else:
-        #return ln_choose(n, k) + k * numpy.log(p) + (n - k) * numpy.log1p(-p)
-
 def fit_mixture_model(observed, counts, K):
     """Use EM to fit a discrete mixture."""
 
-    concentration = 1e-6
+    concentration = 1e-8
     N = observed.shape[0]
     rates = (observed + concentration / 2.0) / (counts + concentration)
     components = rates[numpy.random.randint(N, size = K)]
     responsibilities = numpy.empty((K, N))
+    old_ll = -numpy.inf
 
-    for i in xrange(1):
+    for i in xrange(512):
         # compute new responsibilities
-        raw_mass = scipy.stats.binom.pmf(observed[None, ...], counts[None, ...], components[:, None, ...])
-        log_mass = numpy.sum(numpy.sum(numpy.log(raw_mass), axis = 3), axis = 2)
+        raw_mass = scipy.stats.binom.logpmf(observed[None, ...], counts[None, ...], components[:, None, ...])
+        log_mass = numpy.sum(numpy.sum(raw_mass, axis = 3), axis = 2)
         responsibilities = log_mass - numpy.logaddexp.reduce(log_mass, axis = 0)
-
-        print repr(log_mass[:, :4])
-        print repr(numpy.logaddexp.reduce(log_mass[:, :4], axis = 0))
-        #print numpy.logaddexp.reduce(log_mass, axis = 0)
-        #print responsibilities
-        #print numpy.exp(responsibilities)
-
-        raise SystemExit()
-
-        log_weights = numpy.exp(numpy.logaddexp.reduce(responsibilities, axis = 1))
-        log_weights -= numpy.logaddexp.reduce(log_weights)
-
-        ll = numpy.sum(numpy.sum(log_weights[:, None] + log_mass, axis = 0))
+        responsibilities = numpy.exp(responsibilities)
+        weights = numpy.sum(responsibilities, axis = 1)
+        weights /= numpy.sum(weights)
+        ll = numpy.sum(numpy.logaddexp.reduce(numpy.log(weights)[:, None] + log_mass, axis = 0))
 
         logger.info("l-l at iteration %i is %f", i, ll)
 
         # compute new components
-        old_components = components
-        map_observed = observed[None, ...] * numpy.exp(responsibilities[..., None, None])
-        map_counts = counts[None, ...] * numpy.exp(responsibilities[..., None, None])
+        map_observed = observed[None, ...] * responsibilities[..., None, None]
+        map_counts = counts[None, ...] * responsibilities[..., None, None]
         components = numpy.sum(map_observed, axis = 1) + concentration / 2.0
         components /= numpy.sum(map_counts, axis = 1) + concentration
 
         # check for termination
-        delta = numpy.mean(numpy.abs(components - old_components))
-
-        #logger.info("delta at iteration %i is %f", i, delta)
-
-        if delta == 0.0:
+        if numpy.abs(ll - old_ll) <= 1e-3:
             break
+
+        old_ll = ll
 
     assert numpy.all(components >= 0.0)
     assert numpy.all(components <= 1.0)
@@ -339,12 +304,11 @@ class MixturePortfolio(object):
     """Mixture-model portfolio."""
 
     def __init__(self, solvers, train_paths):
+        # build action set
         self._solvers = solvers
         self._budgets = budgets = [(b + 1) * 100.0 for b in xrange(50)]
-        #self._budgets = budgets = [5000]
 
-        # fit the mixture model
-        K = 4
+        # acquire running time data
         self._solver_rindex = dict(enumerate(solvers))
         self._solver_index = dict(map(reversed, self._solver_rindex.items()))
         budget_rindex = dict(enumerate(budgets))
@@ -364,26 +328,22 @@ class MixturePortfolio(object):
             observed[i] = runs_observed
             counts[i] = runs_counts
 
+        # fit the mixture model
         best = -numpy.inf
 
-        for i in xrange(2):
-            (components, weights, _, ll) = fit_mixture_model(observed, counts, K)
+        for K in [128]:
+            (components, weights, responsibilities, ll) = fit_mixture_model(observed, counts, K)
+
+            logger.info("model with K = %i has l-l = %f", K, ll)
 
             if ll > best:
                 self._components = components
                 self._weights = weights
                 best = ll
 
-        print self._components
         logger.info("fit the mixture model; best l-l = %f", best)
 
         # fit the cluster classifiers
-        targets = numpy.empty((K, observed.shape[0]))
-
-        for k in xrange(K):
-            mass = scipy.stats.binom.pmf(observed, counts, self._components[k])
-            targets[k] = numpy.prod(numpy.prod(mass, axis = 2), axis = 1)
-
         train_xs = map(lambda _: [], xrange(K))
         train_ys = map(lambda _: [], xrange(K))
 
@@ -392,7 +352,7 @@ class MixturePortfolio(object):
 
             for k in xrange(K):
                 rows = 100
-                positive = int(round(targets[k, i] * rows))
+                positive = int(round(responsibilities[k, i] * rows))
                 negative = rows - positive
 
                 train_xs[k].extend([features] * positive)
@@ -413,21 +373,21 @@ class MixturePortfolio(object):
         logger.info("trained the cluster classifiers")
 
     def __call__(self, cnf_path, budget):
-        ## obtain features
-        #csv_path = cnf_path + ".features.csv"
+        # obtain features
+        csv_path = cnf_path + ".features.csv"
 
-        #if os.path.exists(csv_path):
-            #features = numpy.recfromcsv(csv_path).tolist()
-        #else:
-            #(_, features) = borg.features.get_features_for(cnf_path)
+        if os.path.exists(csv_path):
+            features = numpy.recfromcsv(csv_path).tolist()
+        else:
+            (_, features) = borg.features.get_features_for(cnf_path)
 
+        features_cost = features[0]
+
+        # use classifiers to establish initial cluster probabilities
         #prior_weights = numpy.array([m.predict_proba([features])[0, -1] for m in self._models])
         #prior_weights /= numpy.sum(prior_weights)
 
-        #features_cost = features[0]
-
-        #print new_weights
-
+        # use oracle knowledge to establish initial cluster probabilities
         (runs,) = get_task_run_data([cnf_path]).values()
         (oracle_history, oracle_counts, _) = \
             action_rates_from_runs(
@@ -435,29 +395,29 @@ class MixturePortfolio(object):
                 self._budget_index,
                 runs.tolist(),
                 )
-        prior_weights = scipy.stats.binom.pmf(oracle_history, oracle_counts, self._components)
-        prior_weights = numpy.prod(numpy.prod(prior_weights, axis = 2), axis = 1)
-        prior_weights /= numpy.sum(prior_weights)
-
-        #print new_weights
+        true_rates = oracle_history / oracle_counts
+        raw_mass = scipy.stats.binom.logpmf(oracle_history, oracle_counts, self._components)
+        log_mass = numpy.sum(numpy.sum(raw_mass, axis = 2), axis = 1)
+        prior_weights = numpy.exp(log_mass - numpy.logaddexp.reduce(log_mass))
+        first_rates = numpy.sum(self._components * prior_weights[:, None, None], axis = 0)
 
         # select a solver
-        features_cost = 0.0
-        #prior_weights = self._weights
         initial_utime = resource.getrusage(resource.RUSAGE_SELF).ru_utime
-        total_cost = 0.0
         total_run_cost = features_cost
         history = numpy.zeros((len(self._solvers), len(self._budgets)))
         new_weights = prior_weights
-
-        #logger.debug("solving %s", cnf_path)
         answer = None
+
+        logger.info("solving %s", cnf_path)
 
         while True:
             # compute marginal probabilities of success
-            overhead = resource.getrusage(resource.RUSAGE_SELF).ru_utime - initial_utime
+            #overhead = resource.getrusage(resource.RUSAGE_SELF).ru_utime - initial_utime
+            overhead = 0.0 # XXX
             total_cost = total_run_cost + overhead
-            rates = numpy.sum(self._components * new_weights[:, None, None], axis = 0)
+
+            with fpe_handling(under = "ignore"):
+                rates = numpy.sum(self._components * new_weights[:, None, None], axis = 0)
 
             # generate a plan
             plan = knapsack_plan(rates, self._solver_rindex, self._budgets, budget - total_cost)
@@ -465,10 +425,24 @@ class MixturePortfolio(object):
             if not plan:
                 break
 
-            (name, max_cost) = plan[0]
+            # XXX if our belief is zero, bail or otherwise switch to plan B
+
+            (name, planned_cost) = plan[0]
+
+            if budget - total_cost - planned_cost < self._budgets[0]:
+                max_cost = budget - total_cost
+            else:
+                max_cost = planned_cost
 
             # run it
-            logger.info("taking %s@%i with %i remaining", name, max_cost, budget - total_cost)
+            logger.info(
+                "taking %s@%i with %i remaining (b = %.2f; p = %.2f)",
+                name,
+                max_cost,
+                budget - total_cost,
+                rates[self._solver_index[name], self._budget_index[planned_cost]],
+                true_rates[self._solver_index[name], self._budget_index[planned_cost]],
+                )
 
             # XXX adjust cost
             solver = self._solvers[name]
@@ -480,23 +454,37 @@ class MixturePortfolio(object):
 
             # recalculate cluster probabilities
             history[self._solver_index[name]] += 1.0
-            new_weights = scipy.stats.binom.pmf(numpy.zeros_like(history), history, self._components)
-            new_weights = numpy.prod(numpy.prod(new_weights, axis = 2), axis = 1)
-            new_weights *= prior_weights
-            new_weights /= numpy.sum(new_weights)
+            # XXX uncomment
+            #new_weights = scipy.stats.binom.pmf(numpy.zeros_like(history), history, self._components)
+            #new_weights = numpy.prod(numpy.prod(new_weights, axis = 2), axis = 1)
+            #new_weights *= prior_weights
+            #new_weights /= numpy.sum(new_weights)
+
+            raw_mass = scipy.stats.binom.logpmf(oracle_history, oracle_counts + history, self._components)
+            log_mass = numpy.sum(numpy.sum(raw_mass, axis = 2), axis = 1)
+            new_weights = numpy.exp(log_mass - numpy.logaddexp.reduce(log_mass))
 
         total_cost = total_run_cost + overhead
 
         logger.info("answer %s with total cost %.2f", answer, total_cost)
 
+        if answer is None:
+            print self._solver_rindex
+            print "truth:"
+            print "\n".join(" ".join(map("{0:02.0f}".format, row * 100)) for row in true_rates)
+            print "initial beliefs:"
+            print "\n".join(" ".join(map("{0:02.0f}".format, row * 100)) for row in first_rates)
+            print "final beliefs:"
+            print "\n".join(" ".join(map("{0:02.0f}".format, row * 100)) for row in rates)
+
         return (total_cost, answer)
 
 named = {
-    "random": RandomPortfolio,
-    "oracle": OraclePortfolio,
-    "uber-oracle": UberOraclePortfolio,
-    "baseline": BaselinePortfolio,
-    "classifier": ClassifierPortfolio,
+    #"random": RandomPortfolio,
+    #"oracle": OraclePortfolio,
+    #"uber-oracle": UberOraclePortfolio,
+    #"baseline": BaselinePortfolio,
+    #"classifier": ClassifierPortfolio,
     "mixture": MixturePortfolio,
     }
 
