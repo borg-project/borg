@@ -65,6 +65,8 @@ def solve_competition(command, cnf_path, budget, name = None):
                 answer = answer[:-1]
         elif answer_type == "UNSATISFIABLE":
             answer = False
+        else:
+            answer = None
     else:
         answer = None
 
@@ -104,6 +106,10 @@ def solve_minion(cnf_path, budget):
             ]
         (stdout, stderr, code) = cargo.call_capturing(command)
 
+        if code != 0:
+            print stdout
+            print stderr
+
         match = re.search(r"^\[run\] time:[ \t]*(\d+.\d+) seconds$", stderr, re.M)
         (cost,) = map(float, match.groups())
 
@@ -131,10 +137,10 @@ def basic_command(relative):
 
 core_commands = {
     # complete
+    #"march_hi": basic_command("march_hi/march_hi"),
     #"precosat-570": ["{root}/precosat-570-239dbbe-100801/precosat", "--seed={seed}", "{task}"],
     #"lingeling-276": ["{root}/lingeling-276-6264d55-100731/lingeling", "--seed={seed}", "{task}"],
-    #"cryptominisat-2.9.0": ["{root}/cryptominisat-2.9.0Linux64", "--randomize={seed}", "{task}"],
-    #"march_hi": basic_command("march_hi/march_hi"),
+    #"cryptominisat-2.9.0": ["{root}/cryptominisat-2.9.0/cryptominisat-2.9.0Linux64", "--randomize={seed}", "{task}"],
     #"glucosER": ["{root}/glucosER/glucoser_static", "{task}"],
     #"glucose": ["{root}/glucose/glucose_static", "{task}"],
     #"SApperloT": ["{root}/SApperloT/SApperloT-base", "-seed={seed}", "{task}"],
@@ -143,7 +149,7 @@ core_commands = {
     #"gnovelty+2": basic_command("gnovelty+2/gnovelty+2"),
     #"hybridGM3": basic_command("hybridGM3/hybridGM3"),
     #"adaptg2wsat++": basic_command("adaptg2wsat2009++/adaptg2wsat2009++"),
-    "iPAWS": basic_command("iPAWS/iPAWS"),
+    #"iPAWS": basic_command("iPAWS/iPAWS"),
     }
 satzilla_commands = {
     #"SATzilla2009_R": basic_command("SATzilla2009/SATzilla2009_R"),
@@ -158,5 +164,5 @@ def basic_solver(name, command):
 named = dict(zip(core_commands, itertools.starmap(basic_solver, core_commands.items())))
 satzillas = dict(zip(satzilla_commands, itertools.starmap(basic_solver, satzilla_commands.items())))
 
-#named["minion-0.11"] = solve_minion
+named["minion-0.11"] = solve_minion
 

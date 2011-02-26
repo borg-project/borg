@@ -11,7 +11,7 @@ def write_min_from_cnf(out_file, cnf):
     out_file.write("**CONSTRAINTS**\n")
 
     for clause in cnf.clauses:
-        clause_string = ",".join("{0}b{1}".format("!" if l < 0 else "", abs(l) - 1) for l in clause)
+        clause_string = ",".join("{0}b[{1}]".format("!" if l < 0 else "", abs(l) - 1) for l in clause)
 
         out_file.write("watchsumgeq([{0}],1)\n".format(clause_string))
 
