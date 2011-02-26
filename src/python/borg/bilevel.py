@@ -4,35 +4,76 @@
 
 import os.path
 import resource
-import itertools
-import contextlib
 import numpy
-import scipy.stats
-import scikits.learn.linear_model
 import cargo
 import borg
 
 logger = cargo.get_logger(__name__, default_level = "INFO")
 
-def format_probability(p):
-    return "C " if p >= 0.995 else "{0:02.0f}".format(p * 100.0)
+def knapsack_plan_multiverse(weights, rates, solver_rindex, budgets, remaining):
+    """
+    Generate an optimal plan for a static set of possible probability tables.
 
-def print_probability_row(row):
-    print " ".join(map(format_probability, row))
+    Budgets *must* be in ascending order and *must* be spaced by a fixed
+    interval from zero.
+    """
 
-def print_probability_matrix(matrix):
-    for row in matrix:
-        print_probability_row(row)
+    # examine feasible budgets only
+    for (b, budget) in enumerate(budgets):
+        if budget > remaining:
+            budgets = budgets[:b]
 
-@contextlib.contextmanager
-def numpy_printing(**kwargs):
-    old = numpy.get_printoptions()
+            break
 
-    numpy.set_printoptions(**kwargs)
+    if not budgets:
+        return []
 
-    yield
+    # generate the value table and associated policy
+    log_weights_W = numpy.log(weights)
 
-    numpy.set_printoptions(**old)
+    with borg.portfolios.fpe_handling(divide = "ignore"):
+        log_rates_WSB = numpy.log(1.0 - rates)
+
+    (W, S, B) = log_rates_WSB.shape
+    values_WB = numpy.zeros((W, B + 1))
+    policy = {}
+
+    for b in xrange(1, len(budgets) + 1):
+        region_WSb = log_rates_WSB[..., :b] + values_WB[:, None, b - 1::-1]
+        weighted_Sb = numpy.logaddexp.reduce(region_WSb + log_weights_W[:, None, None], axis = 0)
+        i = numpy.argmin(weighted_Sb)
+
+        #with cargo.numpy_printing(precision = 2, suppress = True, linewidth = 240):
+            #print "values_WB:"
+            #print values_WB
+            #print "region_WSb:"
+            #print region_WSb
+            #print "weighted_Sb:"
+            #print weighted_Sb
+
+        (s, c) = numpy.unravel_index(i, weighted_Sb.shape)
+
+        values_WB[:, b] = region_WSb[:, s, c]
+        policy[b] = (s, c)
+
+    # build a plan from the policy
+    plan = []
+    b = len(budgets)
+
+    while b > 0:
+        (_, c) = action = policy[b]
+        b -= c + 1
+
+        plan.append(action)
+
+        #print "optimal action is", solver_rindex[action[0]], budgets[c]
+
+    # heuristically reorder the plan
+    #reordered = sorted(plan, key = lambda (s, c): -rates[s, c] / budgets[c])
+    reordered = sorted(plan, key = lambda (s, c): c)
+
+    # translate and return it
+    return [(solver_rindex[s], budgets[c]) for (s, c) in reordered]
 
 class BilevelPortfolio(object):
     """Bilevel mixture-model portfolio."""
@@ -48,7 +89,10 @@ class BilevelPortfolio(object):
         self._budget_rindex = dict(enumerate(budgets))
         self._budget_index = dict(map(reversed, self._budget_rindex.items()))
 
-        (successes, attempts) = borg.models.counts_from_paths(train_paths)
+        (successes, attempts) = borg.models.counts_from_paths(self._solver_index, self._budget_index, train_paths)
+
+        # fit our model
+        self._model = borg.models.BilevelModel(successes, attempts)
 
     def __call__(self, cnf_path, budget):
         # gather oracle knowledge
@@ -61,69 +105,25 @@ class BilevelPortfolio(object):
                 )
         true_rates = oracle_history / oracle_counts
 
-        print "true probabilities"
-        print_probability_matrix(true_rates)
+        print "true probabilities:"
+        print cargo.pretty_probability_matrix(true_rates)
 
         # select a solver
         total_run_cost = 0.0
-        failures = numpy.zeros((len(self._solvers), len(self._budgets)))
+        failures = []
         answer = None
 
         logger.info("solving %s", os.path.basename(cnf_path))
 
         while True:
             # compute marginal probabilities of success
-            # XXX ignoring prior weights
-            raw_mass = scipy.stats.binom.logpmf(numpy.zeros_like(failures)[:, None, :], failures[:, None, :], self._inner_components)
-            log_mass = numpy.sum(raw_mass, axis = 2)
-            run_weights = numpy.exp(log_mass - numpy.logaddexp.reduce(log_mass, axis = 1)[:, None])
-            conditioning = run_weights * numpy.sum(failures, axis = 1)[:, None]
-
-            with numpy_printing(precision = 2, suppress = True):
-                print "run_weights:"
-                print run_weights
-
-            #for l in xrange(L):
-                #for k in xrange(K):
-
-                #type_weights[l] = XXX
-
-            type_pdfs = dcm_pdf(conditioning, self._outer_components)
-
-            type_weights = numpy.prod(type_pdfs, axis = -1)
-            type_weights /= numpy.sum(type_weights)
-
-            with numpy_printing(precision = 2, suppress = True):
-                print "conditioning:"
-                print conditioning
-                print "type_pdfs:"
-                print type_pdfs
-                print "type_weights:"
-                print type_weights
-
-            conditioned = self._outer_components + conditioning[None, ...]
-            normalized = conditioned / numpy.sum(conditioned, axis = -2)[:, None]
-            outer_weighted = numpy.sum(normalized * type_weights[:, None, None], axis = 0)
-            outer_weighted /= numpy.sum(outer_weighted, axis = -1)[:, None]
-            inner_weighted = outer_weighted[..., None] * self._inner_components
-            rates = numpy.sum(inner_weighted, axis = 1)
-
-            with numpy_printing(precision = 2, suppress = True):
-                print "outer_weighted:"
-                print outer_weighted
-
-            #print "reweighted:"
-            #for s in xrange(reweighted.shape[0]):
-                #print self._solver_rindex[s]
-                #print_probability_matrix(reweighted[s])
-
-            print "posterior probabilities:"
-            print_probability_matrix(rates)
+            (predicted, tclass_weights_L, tclass_rates_LSB) = self._model.predict(failures)
 
             # generate a plan
             total_cost = total_run_cost
 
-            plan = borg.portfolios.knapsack_plan(rates, self._solver_rindex, self._budgets, budget - total_cost)
+            # XXX
+            plan = knapsack_plan_multiverse(tclass_weights_L, tclass_rates_LSB, self._solver_rindex, self._budgets, budget - total_cost)
 
             if not plan:
                 break
@@ -141,7 +141,7 @@ class BilevelPortfolio(object):
                 name,
                 max_cost,
                 budget - total_cost,
-                rates[self._solver_index[name], self._budget_index[planned_cost]],
+                predicted[self._solver_index[name], self._budget_index[planned_cost]],
                 true_rates[self._solver_index[name], self._budget_index[planned_cost]],
                 )
 
@@ -152,19 +152,12 @@ class BilevelPortfolio(object):
             if answer is not None:
                 break
             else:
-                failures[self._solver_index[name], self._budget_index[planned_cost]] += 1.0
+                failures.append((self._solver_index[name], self._budget_index[planned_cost]))
 
         logger.info("answer %s with total cost %.2f", answer, total_cost)
 
         if answer is None:
             raise SystemExit()
-            #print self._solver_rindex
-            #print "truth:"
-            #print "\n".join(" ".join(map("{0:02.0f}".format, row * 100)) for row in true_rates)
-            #print "initial beliefs:"
-            #print "\n".join(" ".join(map("{0:02.0f}".format, row * 100)) for row in first_rates)
-            #print "final beliefs:"
-            #print "\n".join(" ".join(map("{0:02.0f}".format, row * 100)) for row in rates)
 
         return (total_cost, answer)
 
