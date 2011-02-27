@@ -9,5 +9,4 @@ from . import solvers
 from . import features
 from . import portfolios
 from . import dimacs
-from . import minion
 

@@ -24,9 +24,8 @@ install(
         solvers.py
         features.py
         portfolios.py
-        minion.py
         __init__.py
-	DESTINATION lib/borg
+    DESTINATION lib/borg
     )
 
 #

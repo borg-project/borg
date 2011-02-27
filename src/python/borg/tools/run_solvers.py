@@ -48,6 +48,9 @@ def main(tasks_root, runs = 4, workers = 0):
     def yield_runs():
         paths = list(cargo.files_under(tasks_root, ["*.cnf"]))
 
+        if not paths:
+            raise ValueError("no paths found under specified root")
+
         for _ in xrange(runs):
             for solver_name in borg.solvers.named:
             #for solver_name in borg.solvers.satzillas:

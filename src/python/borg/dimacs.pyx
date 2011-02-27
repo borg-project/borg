@@ -37,12 +37,9 @@ class DIMACS_GraphFile(object):
         self.N = N
 
     @staticmethod
-    def parse(file_):
-        """
-        Parse the specified CNF file.
-        """
+    def parse_header(file_):
+        """Parse the header of the specified CNF file."""
 
-        # parse the comments and file description
         comments = []
 
         for line in file_:
@@ -60,7 +57,14 @@ class DIMACS_GraphFile(object):
             else:
                 raise DIMACS_ParseError(line)
 
-        # parse the clause lines
+        return (comments, N, M)
+
+    @staticmethod
+    def parse(file_):
+        """Parse the specified CNF file."""
+
+        (comments, N, M) = DIMACS_GraphFile.parse_header(file_)
+
         clauses = []
         clause = []
 
@@ -83,4 +87,5 @@ class DIMACS_GraphFile(object):
         return DIMACS_GraphFile(comments, clauses, N)
 
 parse_cnf = DIMACS_GraphFile.parse
+parse_cnf_header = DIMACS_GraphFile.parse_header
 
