@@ -30,7 +30,13 @@ def fit_binomial_mixture(observed, counts, K):
         weights /= numpy.sum(weights)
         ll = numpy.sum(numpy.logaddexp.reduce(numpy.log(weights)[:, None] + log_mass, axis = 0))
 
+        # check for termination
         logger.debug("l-l at iteration %i is %f", i, ll)
+
+        if numpy.abs(ll - old_ll) <= 1e-3:
+            break
+
+        old_ll = ll
 
         # compute new components
         map_observed = observed[None, ...] * responsibilities[..., None]
@@ -38,11 +44,12 @@ def fit_binomial_mixture(observed, counts, K):
         components = numpy.sum(map_observed, axis = 1) + concentration / 2.0
         components /= numpy.sum(map_counts, axis = 1) + concentration
 
-        # check for termination
-        if numpy.abs(ll - old_ll) <= 1e-3:
-            break
-
-        old_ll = ll
+        # split duplicates
+        for j in xrange(K):
+            for k in xrange(K):
+                if j != k and numpy.sum(numpy.abs(components[j] - components[k])) < 1e-6:
+                    components[j] = rates[numpy.random.randint(N)]
+                    old_ll = -numpy.inf
 
     assert numpy.all(components >= 0.0)
     assert numpy.all(components <= 1.0)
@@ -66,14 +73,19 @@ def fit_dirichlet(vectors, weights):
     log_pbar_k = numpy.sum(weights[:, None, None] * numpy.log(vectors), axis = 0) / numpy.sum(weights)
     alpha = numpy.random.random(vectors.shape[1:])
     alpha /= numpy.sum(alpha, axis = 1)[:, None]
+    last_alpha = alpha
 
     for i in xrange(64):
         psi_total = scipy.special.digamma(numpy.sum(alpha, axis = 1))
         psi_alpha = psi_total[:, None] + log_pbar_k
+
         alpha = numpy.array([[inverse_digamma(x) for x in row.flatten()] for row in psi_alpha])
         alpha = alpha.reshape(psi_alpha.shape)
 
-        # XXX termination condition!
+        if numpy.sum(numpy.abs(alpha - last_alpha)) <= 1e-10:
+            break
+
+        last_alpha = alpha
 
     return alpha
 
@@ -135,7 +147,7 @@ def dcm_draw_pdf(k, alpha):
 
     return term_l * term_r
 
-def fit_dirichlet_mixture(vectors, K, variance):
+def fit_dirichlet_mixture(vectors, K):
     """Use EM to fit a Dirichlet mixture."""
 
     # hackishly regularize our input vectors
@@ -158,22 +170,27 @@ def fit_dirichlet_mixture(vectors, K, variance):
         weights /= numpy.sum(weights)
         ll = numpy.sum(numpy.logaddexp.reduce(numpy.log(weights)[:, None] + log_mass, axis = 0))
 
-        logger.info("l-l at iteration %i is %f", i, ll)
-
-        # compute new components
-        for k in xrange(K):
-            components[k] = fit_dirichlet_vfixed(vectors, responsibilities[k], variance)
-
-        #with numpy_printing(precision = 2, suppress = True, linewidth = 160):
-            #print components
+        logger.detail("l-l at EM iteration %i is %f", i, ll)
 
         # check for termination
         if numpy.abs(ll - old_ll) <= 1e-3:
             break
+        if ll < old_ll:
+            logger.warning("l-l decreased from %f to %f", old_ll, ll)
 
         old_ll = ll
 
-    return components
+        # compute new components
+        for k in xrange(K):
+            components[k] = fit_dirichlet(vectors, responsibilities[k])
+
+        for j in xrange(K):
+            for k in xrange(K):
+                if j != k and numpy.sum(numpy.abs(components[j] - components[k])) < 1e-6:
+                    components[j] = vectors[numpy.random.randint(N)]
+                    old_ll = -numpy.inf
+
+    return (components, weights)
 
 def counts_from_paths(solvers, budgets, paths):
     """Build success/attempt matrices from records."""
@@ -215,7 +232,9 @@ class BilevelModel(object):
         attempts_NSB = attempts
 
         # fit the per-solver mixture models
-        K = 6
+        logger.detail("fitting solver behavior classes")
+
+        K = 8
         task_mixes_NSK = numpy.empty((N, S, K))
         self._inner_SKB = numpy.empty((S, K, B))
 
@@ -229,71 +248,63 @@ class BilevelModel(object):
             task_mixes_NSK[:, s] = responsibilities_KN.T
 
             logger.detail(
-                "behavior class %i:\n%s",
+                "behavior classes for solver %i:\n%s",
                 s,
                 cargo.pretty_probability_matrix(self._inner_SKB[s]),
                 )
 
         # fit the outer dirichlet mixture
-        L = 8
-        self._outer_LSK = fit_dirichlet_mixture(task_mixes_NSK, L, 100)
+        logger.detail("fitting instance classes (Dirichlet mixture layer)")
+
+        L = 16
+        (self._outer_LSK, self._outer_weights_L) = fit_dirichlet_mixture(task_mixes_NSK, L)
 
         with cargo.numpy_printing(precision = 2, suppress = True, linewidth = 160):
             logger.detail("task classes:\n%s", str(self._outer_LSK))
+            logger.detail("task weights:\n%s", str(self._outer_weights_L))
 
     def predict(self, failures):
         """Return probabilistic predictions of success."""
-
-        print "failures:", failures
 
         # mise en place
         F = len(failures)
         (L, S, K) = self._outer_LSK.shape
 
         # compute task class likelihoods
-        tclass_weights_L = numpy.zeros(L)
+        tclass_weights_L = numpy.log(self._outer_weights_L)
 
         for l in xrange(L):
             tclass_weights_L[l] += self._lnp_failures_tclass(failures, l)
 
         tclass_weights_L = numpy.exp(tclass_weights_L - numpy.logaddexp.reduce(tclass_weights_L))
 
-        with cargo.numpy_printing(precision = 2, suppress = True, linewidth = 160):
-            logger.detail("tclass weights:\n%s", str(tclass_weights_L))
-
         assert_probabilities(tclass_weights_L)
         assert_weights(tclass_weights_L)
 
         # condition the task classes
-        preconditioning_FSK = numpy.ones((F, S, K))
+        conditioned_LSK = numpy.copy(self._outer_LSK)
 
-        for f in xrange(F):
-            (s, b) = failures[f]
+        for l in xrange(L):
+            #conditioning_SK = numpy.zeros((S, K))
 
-            for k in xrange(K):
-                preconditioning_FSK[f, s, k] = 1.0 - self._inner_SKB[s, k, b]
+            for f in xrange(F):
+                (s, b) = failures[f]
+                conditioning_K = numpy.zeros(K)
 
-        preconditioning_FSK /= numpy.sum(preconditioning_FSK, axis = -1)[..., None]
-        conditioning_SK = numpy.sum(preconditioning_FSK, axis = 0)
-        conditioned_LSK = self._outer_LSK + conditioning_SK[None, ...]
+                for k in xrange(K):
+                    p_f = 1.0 - self._inner_SKB[s, k, b]
+                    p_z = dcm_draw_pdf(k, self._outer_LSK[l, s])
 
-        with cargo.numpy_printing(precision = 2, linewidth = 160):
-            #logger.detail("preconditioning_FSK:\n%s", str(preconditioning_FSK))
-            logger.detail("conditioning_SK:\n%s", str(conditioning_SK))
+                    conditioning_K[k] += p_f * p_z
+
+                conditioning_K /= numpy.sum(conditioning_K)
+                conditioned_LSK[l, s] += conditioning_K
 
         # compute posterior probabilities
         tclass_means_LSK = conditioned_LSK / numpy.sum(conditioned_LSK, axis = -1)[..., None]
         tclass_rates_LSB = numpy.sum(tclass_means_LSK[..., None] * self._inner_SKB[None, ...], axis = -2)
         posterior_mean_SK = numpy.sum(tclass_weights_L[:, None, None] * tclass_means_LSK, axis = 0)
         posterior_rates_SB = numpy.sum(posterior_mean_SK[..., None] * self._inner_SKB, axis = 1)
-
-        with cargo.numpy_printing(precision = 2, suppress = True, linewidth = 240):
-            logger.detail("tclass_rates_LSB:\n%s", str(tclass_rates_LSB))
-
-        #logger.detail(
-            #"posterior probabilities:\n%s",
-            #cargo.pretty_probability_matrix(posterior_rates_SB),
-            #)
 
         return (posterior_rates_SB, tclass_weights_L, tclass_rates_LSB)
 

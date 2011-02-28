@@ -1,11 +1,9 @@
-"""
-@author: Bryan Silverthorn <bcs@cargo-cult.org>
-"""
+"""@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import plac
 
 if __name__ == "__main__":
-    from borg.tools.solve import main
+    from borg.tools.solve2 import main
 
     plac.call(main)
 

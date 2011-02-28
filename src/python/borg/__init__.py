@@ -12,4 +12,5 @@ from . import dimacs
 from . import minion
 from . import bilevel
 from . import models
+from . import parallel
 
