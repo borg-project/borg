@@ -65,16 +65,18 @@ def solve_competition(command, cnf_path, budget, name = None):
             if len(answer) == N + 1 and answer[-1] == 0:
                 answer = answer[:-1]
             elif len(answer) != N:
-                answer = None
+                logger.warning("subsolver cert has %i variables; CNF has %i", len(answer), N)
 
-            if answer is None:
-                logger.warning("missing or invalid certificate from subsolver")
+                answer = None
         elif answer_type == "UNSATISFIABLE":
             answer = False
         else:
             answer = None
     else:
         answer = None
+
+    if answer is None and budget - cost > 1.0:
+        logger.warning("early subsolver termination (%.2f seconds remaining)", budget - cost)
 
     return (cost, answer)
 
@@ -97,7 +99,7 @@ core_commands = {
     "TNM": basic_command("TNM/TNM"),
     "gnovelty+2": basic_command("gnovelty+2/gnovelty+2"),
     "hybridGM3": basic_command("hybridGM3/hybridGM3"),
-    "adaptg2wsat++": basic_command("adaptg2wsat2009++/adaptg2wsat2009++"),
+    "adaptg2wsat2009++": basic_command("adaptg2wsat2009++/adaptg2wsat2009++"),
     "iPAWS": basic_command("iPAWS/iPAWS"),
     "FH": basic_command("FH/FH"),
     "NCVWr": basic_command("NCVWr/NCVWr"),

@@ -1,22 +1,13 @@
-"""
-@author: Bryan Silverthorn <bcs@cargo-cult.org>
-"""
+"""@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import numpy
 
 cimport numpy
-cimport libc.stdlib
 
 class DIMACS_ParseError(RuntimeError):
-    """
-    File was not in the expected format.
-    """
+    """File was not in the expected format."""
 
     def __init__(self, line = None):
-        """
-        Initialize.
-        """
-
         if line is None:
             RuntimeError.__init__(self)
         else:
@@ -28,13 +19,38 @@ class DIMACS_GraphFile(object):
     """
 
     def __init__(self, comments, clauses, N):
-        """
-        Initialize.
-        """
-
         self.comments = comments
         self.clauses = clauses
         self.N = N
+
+    def satisfied(self, certificate):
+        """Verify that the certificate satisfies this expression."""
+
+        assignment = numpy.ones(self.N, bool)
+
+        for literal in certificate:
+            variable = abs(literal) - 1
+
+            if literal == 0:
+                break
+            elif variable >= assignment.size:
+                return None
+
+            assignment[variable] = literal > 0
+
+        for clause in self.clauses:
+            satisfied = False
+
+            for literal in clause:
+                if assignment[abs(literal)] == literal > 0:
+                    satisfied = True
+
+                    break
+
+            if not satisfied:
+                return None
+
+        return assignment
 
     @staticmethod
     def parse_header(file_):
