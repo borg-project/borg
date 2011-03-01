@@ -10,6 +10,88 @@ cimport numpy
 
 logger = cargo.get_logger(__name__, default_level = "DETAIL")
 
+def counts_from_paths(solvers, budgets, paths):
+    """Build success/attempt matrices from records."""
+
+    successes = numpy.empty((len(paths), len(solvers), len(budgets)))
+    attempts = numpy.empty((len(paths), len(solvers), len(budgets)))
+
+    for (i, path) in enumerate(paths):
+        (runs,) = borg.portfolios.get_task_run_data([path]).values()
+        (runs_successful, runs_attempted, _) = \
+            borg.portfolios.action_rates_from_runs(
+                solvers,
+                budgets,
+                runs.tolist(),
+                )
+
+        successes[i] = runs_successful
+        attempts[i] = runs_attempted
+
+    return (successes, attempts)
+
+def action_rates_from_runs(solver_index, budget_index, runs):
+    """Build a per-action success-rate matrix from running times."""
+
+    observed = numpy.zeros((len(solver_index), len(budget_index)))
+    counts = numpy.zeros((len(solver_index), len(budget_index)), int)
+
+    for (run_solver, _, run_budget, run_cost, run_answer) in runs:
+        if run_solver in solver_index:
+            solver_i = solver_index[run_solver]
+
+            for budget in budget_index:
+                budget_i = budget_index[budget]
+
+                if run_budget >= budget:
+                    counts[solver_i, budget_i] += 1
+
+                    if run_cost <= budget and run_answer is not None:
+                        observed[solver_i, budget_i] += 1.0
+
+    return (observed, counts, observed / counts)
+
+def outcome_matrices_from_paths(solver_index, budgets, paths):
+    """Build run-outcome matrices from records."""
+
+    S = len(solver_index)
+    B = len(budgets)
+    N = len(paths)
+    successes = numpy.zeros((N, S, B))
+    attempts = numpy.zeros((N, S))
+
+    for (n, path) in enumerate(paths):
+        (runs,) = borg.portfolios.get_task_run_data([path]).values()
+
+        for (run_solver, _, run_budget, run_cost, run_answer) in runs.tolist():
+            s = solver_index.get(run_solver)
+
+            if s is not None and run_budget >= budgets[-1]:
+                b = numpy.digitize([run_cost], budgets)
+
+                attempts[n, s] += 1.0
+
+                if b < B and run_answer is not None:
+                    successes[n, s, b] += 1.0
+
+    return (successes, attempts)
+
+def assert_probabilities(array):
+    """Assert that an array contains only valid probabilities."""
+
+    assert numpy.all(array >= 0.0)
+    assert numpy.all(array <= 1.0)
+
+def assert_log_probabilities(array):
+    """Assert that an array contains only valid probabilities."""
+
+    assert numpy.all(array <= 0.0)
+
+def assert_weights(array, axis = None):
+    """Assert than an array sums to one over a particular axis."""
+
+    assert numpy.all(numpy.abs(numpy.sum(array, axis = axis) - 1.0 ) < 1e-6)
+
 def fit_binomial_mixture(observed, counts, K):
     """Use EM to fit a discrete mixture."""
 
@@ -70,6 +152,8 @@ def inverse_digamma(x):
     return scipy.optimize.newton(f, y0, fprime = f_)
 
 def fit_dirichlet(vectors, weights):
+    """Compute the maximum-likelihood Dirichlet distribution."""
+
     log_pbar_k = numpy.sum(weights[:, None, None] * numpy.log(vectors), axis = 0) / numpy.sum(weights)
     alpha = numpy.random.random(vectors.shape[1:])
     alpha /= numpy.sum(alpha, axis = 1)[:, None]
@@ -90,6 +174,8 @@ def fit_dirichlet(vectors, weights):
     return alpha
 
 def fit_dirichlet_vfixed(vectors, weights, variance):
+    """Compute the maximum-likelihood Dirichlet distribution with fixed concentration."""
+
     log_pbar_k = numpy.sum(weights[:, None, None] * numpy.log(vectors), axis = 0) / numpy.sum(weights)
     alpha = numpy.random.random(vectors.shape[1:])
     alpha /= numpy.sum(alpha, axis = 1)[:, None]
@@ -192,33 +278,6 @@ def fit_dirichlet_mixture(vectors, K):
 
     return (components, weights)
 
-def counts_from_paths(solvers, budgets, paths):
-    """Build success/attempt matrices from records."""
-
-    successes = numpy.empty((len(paths), len(solvers), len(budgets)))
-    attempts = numpy.empty((len(paths), len(solvers), len(budgets)))
-
-    for (i, path) in enumerate(paths):
-        (runs,) = borg.portfolios.get_task_run_data([path]).values()
-        (runs_successful, runs_attempted, _) = \
-            borg.portfolios.action_rates_from_runs(
-                solvers,
-                budgets,
-                runs.tolist(),
-                )
-
-        successes[i] = runs_successful
-        attempts[i] = runs_attempted
-
-    return (successes, attempts)
-
-def assert_probabilities(array):
-    assert numpy.all(array >= 0.0)
-    assert numpy.all(array <= 1.0)
-
-def assert_weights(array, axis = None):
-    assert numpy.all(numpy.abs(numpy.sum(array, axis = axis) - 1.0 ) < 1e-6)
-
 class BilevelModel(object):
     """Two-level mixture model."""
 
@@ -285,8 +344,6 @@ class BilevelModel(object):
         conditioned_LSK = numpy.copy(self._outer_LSK)
 
         for l in xrange(L):
-            #conditioning_SK = numpy.zeros((S, K))
-
             for f in xrange(F):
                 (s, b) = failures[f]
                 conditioning_K = numpy.zeros(K)
@@ -326,4 +383,263 @@ class BilevelModel(object):
             sigma = numpy.logaddexp(sigma, lnp_l + lnp_r)
 
         return sigma
+
+def multinomial_log_mass(counts, total_counts, beta):
+    """Compute multinomial log probability."""
+
+    assert_probabilities(beta)
+    assert_weights(beta, axis = -1)
+
+    log_mass = numpy.sum(counts * numpy.log(beta), axis = -1)
+    log_mass += scipy.special.gammaln(total_counts + 1.0)
+    log_mass -= numpy.sum(scipy.special.gammaln(counts + 1.0), axis = -1)
+
+    assert_log_probabilities(log_mass)
+
+    return log_mass
+
+def multinomial_log_mass_implied(counts, total_counts, beta):
+    """Compute multinomial log probability; final parameter is implied."""
+
+    assert_probabilities(beta)
+
+    implied_p = 1.0 - numpy.sum(beta, axis = -1)
+    implied_counts = total_counts - numpy.sum(counts, axis = -1)
+
+    log_mass = numpy.sum(counts * numpy.log(beta), axis = -1)
+    log_mass += implied_counts * numpy.log(implied_p)
+    log_mass += scipy.special.gammaln(total_counts + 1.0)
+    log_mass -= numpy.sum(scipy.special.gammaln(counts + 1.0), axis = -1)
+    log_mass -= scipy.special.gammaln(implied_counts + 1.0)
+
+    assert_log_probabilities(log_mass)
+
+    return log_mass
+
+def fit_multinomial_mixture(successes, attempts, K):
+    """Fit a discrete mixture using EM."""
+
+    # mise en place
+    (N, B) = successes.shape
+
+    successes_NB = successes
+    attempts_N = attempts
+
+    # expectation maximization
+    previous_ll = -numpy.inf
+    prior_alpha = 1.0 + 1e-2 
+    prior_beta = 1.0 + 1e-1 
+    prior_upper = prior_alpha - 1.0
+    prior_lower = B * prior_alpha + prior_beta - B - 1.0
+    initial_n_K = numpy.random.randint(N, size = K)
+    components_KB = successes_NB[initial_n_K] + prior_upper
+    components_KB /= (attempts_N[initial_n_K] + prior_lower)[:, None]
+
+    for i in xrange(512):
+        # compute new responsibilities
+        log_mass_KN = multinomial_log_mass_implied(successes_NB[None, ...], attempts_N[None, ...], components_KB[:, None, ...])
+
+        log_responsibilities_KN = numpy.copy(log_mass_KN)
+        log_responsibilities_KN -= numpy.logaddexp.reduce(log_responsibilities_KN, axis = 0)
+
+        responsibilities_KN = numpy.exp(log_responsibilities_KN)
+
+        log_weights_K = numpy.logaddexp.reduce(log_responsibilities_KN, axis = 1)
+        log_weights_K -= numpy.log(N)
+
+        # compute ll and check for convergence
+        ll = numpy.logaddexp.reduce(log_weights_K[:, None] + log_mass_KN, axis = 0)
+        ll = numpy.sum(ll)
+
+        logger.debug("ll at EM iteration %i is %f", i, ll)
+
+        if numpy.abs(ll - previous_ll) <= 1e-4:
+            break
+
+        previous_ll = ll
+
+        # compute new components
+        weighted_successes_KNB = successes_NB[None, ...] * responsibilities_KN[..., None]
+        weighted_attempts_KN = attempts_N[None, ...] * responsibilities_KN
+
+        components_KB = numpy.sum(weighted_successes_KNB, axis = 1) + prior_upper
+        components_KB /= (numpy.sum(weighted_attempts_KN, axis = 1) + prior_lower)[:, None]
+
+        # split duplicates
+        for j in xrange(K):
+            for k in xrange(K):
+                if j != k and numpy.sum(numpy.abs(components_KB[j] - components_KB[k])) < 1e-6:
+                    previous_ll = -numpy.inf
+                    n = numpy.random.randint(N)
+                    components_KB[k] = successes_NB[n] + prior_upper
+                    components_KB[k] /= attempts_N[n] + prior_lower
+
+    assert_probabilities(components_KB)
+
+    return (components_KB, responsibilities_KN, log_mass_KN, ll)
+
+def fit_multinomial_outer_mixture(rclass_res, rclass_mass, L):
+    """Fit a discrete mixture using EM."""
+
+    # mise en place
+    (S, K, N) = rclass_res.shape
+
+    rclass_res_SKN = rclass_res
+    rclass_res_NSK = rclass_res_SKN.swapaxes(0, 2).swapaxes(1, 2)
+    rclass_log_mass_SKN = rclass_mass
+    rclass_log_mass_NSK = rclass_log_mass_SKN.swapaxes(0, 2).swapaxes(1, 2)
+
+    # expectation maximization
+    previous_ll = -numpy.inf
+    prior_alpha = 1.0 + 1e-2
+    initial_n_L = numpy.random.randint(N, size = L)
+    components_LSK = rclass_res_NSK[initial_n_L]
+
+    for i in xrange(1024):
+        # compute new responsibilities
+        log_components_LSK = numpy.log(components_LSK)
+
+        log_mass_LNS = numpy.logaddexp.reduce(rclass_log_mass_NSK[None, ...] + log_components_LSK[:, None, ...], axis = -1)
+        log_mass_LN = numpy.sum(log_mass_LNS, axis = -1)
+
+        log_responsibilities_LN = numpy.copy(log_mass_LN)
+        log_responsibilities_LN -= numpy.logaddexp.reduce(log_responsibilities_LN, axis = 0)
+
+        responsibilities_LN = numpy.exp(log_responsibilities_LN)
+
+        log_weights_L = numpy.logaddexp.reduce(log_responsibilities_LN, axis = 1)
+        log_weights_L -= numpy.log(N)
+
+        # compute ll and check for convergence
+        ll = numpy.sum(numpy.logaddexp.reduce(log_weights_L[:, None] + log_mass_LN, axis = 0))
+
+        logger.debug("ll at EM iteration %i is %f", i, ll)
+
+        if numpy.abs(ll - previous_ll) < 1e-6:
+            break
+
+        previous_ll = ll
+
+        # compute new components
+        weighted_rclass_res_LNSK = rclass_res_NSK[None, ...] * responsibilities_LN[..., None, None]
+
+        components_LSK = numpy.sum(weighted_rclass_res_LNSK, axis = 1) + prior_alpha - 1.0
+        components_LSK /= numpy.sum(components_LSK, axis = -1)[..., None]
+
+        # split duplicates
+        for l in xrange(L):
+            for m in xrange(L):
+                if l != m and numpy.sum(numpy.abs(components_LSK[l] - components_LSK[m])) < 1e-6:
+                    previous_ll = -numpy.inf
+                    n = numpy.random.randint(N)
+                    components_LSK[l] = rclass_res_NSK[n]
+
+    weights_L = numpy.exp(log_weights_L)
+
+    return (components_LSK, weights_L, responsibilities_LN, ll)
+
+class BilevelMultinomialModel(object):
+    """Two-level multinomial mixture model."""
+
+    def __init__(self, successes, attempts, features):
+        """Fit the model to data."""
+
+        # mise en place
+        (N, S, B) = successes.shape
+
+        successes_NSB = successes
+        attempts_NS = attempts
+
+        # fit the solver behavior classes
+        logger.detail("fitting run classes")
+
+        K = 8
+        self._rclass_SKB = numpy.empty((S, K, B))
+        rclass_res = numpy.empty((S, K, N))
+        rclass_mass = numpy.empty((S, K, N))
+
+        for s in xrange(S):
+            fit = lambda: fit_multinomial_mixture(successes_NSB[:, s], attempts_NS[:, s], K)
+            (self._rclass_SKB[s], rclass_res[s], rclass_mass[s], _) = \
+                max(
+                    [fit() for _ in xrange(4)],
+                    key = lambda x: x[-1],
+                    )
+
+            logger.detail(
+                "rclasses for solver %i:\n%s",
+                s,
+                cargo.pretty_probability_matrix(self._rclass_SKB[s]),
+                )
+
+        # fit the task mixture classes
+        logger.detail("fitting task classes")
+
+        L = 16
+        (self._tclass_LSK, self._tclass_weights_L, tclass_res_LN, _) = \
+            fit_multinomial_outer_mixture(
+                rclass_res,
+                rclass_mass,
+                L,
+                )
+
+        # fit the classifier
+        logger.info("training classifier")
+
+        train_x = []
+        train_y = []
+
+        for (n, task_features) in enumerate(features):
+            counts_L = numpy.round(tclass_res_LN[:, n] * 100.0).astype(int)
+
+            train_x.extend([task_features] * numpy.sum(counts_L))
+
+            for l in xrange(L):
+                train_y.extend([l] * counts_L[l])
+
+        self._classifier = scikits.learn.linear_model.LogisticRegression()
+
+        self._classifier.fit(train_x, train_y)
+
+    def predict(self, failures, features):
+        """Return probabilistic predictions of success."""
+
+        # mise en place
+        F = len(failures)
+        (L, S, K) = self._tclass_LSK.shape
+
+        # let the classifier seed our cluster probabilities
+        (tclass_lr_weights_L,) = self._classifier.predict_proba([features])
+
+        tclass_lr_weights_L += 1e-6
+        tclass_lr_weights_L /= numpy.sum(tclass_lr_weights_L)
+
+        # compute conditional tclass probabilities
+        rclass_fail_cmf_SKB = numpy.cumsum(1.0 - self._rclass_SKB, axis = -1)
+        tclass_post_weights_L = numpy.log(tclass_lr_weights_L)
+
+        for l in xrange(L):
+            for (s, b) in failures:
+                p = numpy.sum(rclass_fail_cmf_SKB[s, :, b] * self._tclass_LSK[l, s])
+
+                tclass_post_weights_L[l] += numpy.log(p)
+
+        tclass_post_weights_L -= numpy.logaddexp.reduce(tclass_post_weights_L)
+        tclass_post_weights_L = numpy.exp(tclass_post_weights_L)
+
+        # compute per-tclass conditional rclass probabilities
+        conditional_LSK = numpy.log(self._tclass_LSK)
+
+        for l in xrange(L):
+            for (s, b) in failures:
+                conditional_LSK[l, s, :] += rclass_fail_cmf_SKB[s, :, b]
+
+        conditional_LSK -= numpy.logaddexp.reduce(conditional_LSK, axis = -1)[..., None]
+        conditional_LSK = numpy.exp(conditional_LSK)
+
+        # compute posterior probabilities
+        tclass_post_rates_LSB = numpy.sum(conditional_LSK[..., None] * self._rclass_SKB[None, ...], axis = -2)
+        mean_post_rates_SB = numpy.sum(tclass_post_weights_L[:, None, None] * tclass_post_rates_LSB, axis = 0)
+
+        return (mean_post_rates_SB, tclass_post_weights_L, tclass_post_rates_LSB)
 
