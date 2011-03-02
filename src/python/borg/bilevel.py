@@ -1,6 +1,7 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import os.path
+import uuid
 import resource
 import itertools
 import numpy
@@ -19,12 +20,12 @@ def plan_knapsack_multiverse(tclass_weights_W, tclass_rates_WSB):
     # heuristically filter low-probability actions
     mean_rates_SB = numpy.sum(tclass_weights_W[:, None, None] * tclass_rates_WSB, axis = 0)
     mean_cmf_SB = numpy.cumsum(mean_rates_SB, axis = -1)
-    threshold = 0.10
+    #threshold = 0.10
 
-    if numpy.all(mean_cmf_SB <= threshold):
-        logger.warning("not filtering tclasses; no entries in mean exceed %.2f", threshold)
-    else:
-        tclass_rates_WSB[:, mean_cmf_SB[:, :1] <= threshold] = 1e-8
+    #if numpy.all(mean_cmf_SB <= threshold):
+        #logger.warning("not filtering tclasses; no entries in mean exceed %.2f", threshold)
+    #else:
+        #tclass_rates_WSB[:, mean_cmf_SB[:, :1] <= threshold] = 1e-8
         #tclass_rates_WSB[:, mean_cmf_SB <= threshold] = 1e-8
 
     # convert model predictions appropriately
@@ -87,7 +88,7 @@ class BilevelPortfolio(object):
         # fit our model
         self._model = borg.models.BilevelMultinomialModel(successes, attempts, features)
 
-    def __call__(self, cnf_path, budget):
+    def __call__(self, cnf_path, budget, cores):
         logger.info("solving %s", os.path.basename(cnf_path))
 
         # track CPU time expenditure
@@ -117,20 +118,23 @@ class BilevelPortfolio(object):
 
         # select a solver
         total_cost = features_cost
-        failed = []
+        queue = multiprocessing.Queue()
+        running = {}
         paused = []
-        states = []
+        failed = []
         answer = None
 
         while True:
             # obtain model predictions
+            # XXX build extended failed list
+            #(total_b,) = numpy.digitize([solver.total], self._budgets)
             (tclass_weights_L, tclass_rates_LSB) = self._model.predict(failed + paused, features)
             (L, S, B) = tclass_rates_LSB.shape
 
             # prepare augmented PMF matrix
             augmented_tclass_arrays = [tclass_rates_LSB]
 
-            for (s, c) in paused:
+            for (s, c) in paused: # XXX
                 paused_tclass_LB = numpy.zeros((L, B))
 
                 paused_tclass_LB[:, :B - c - 1] = tclass_rates_LSB[:, s, c + 1:]
@@ -168,7 +172,7 @@ class BilevelPortfolio(object):
             else:
                 s = a
                 name = self._solver_names[s]
-                solver = self._solvers[name]
+                solver = self._solvers[name](cnf_path, queue)
                 solver_total = 0.0
 
             if budget - total_cost - planned_cost < self._budgets[0]:
@@ -181,10 +185,6 @@ class BilevelPortfolio(object):
             augmented_mean_cmf_AB = numpy.sum(tclass_weights_L[:, None, None] * augmented_tclass_cmf_LAB, axis = 0)
             subjective_rate = augmented_mean_cmf_AB[a, c]
 
-            #for l in xrange(L):
-                #print "augmented conditional CMF for tclass {0} (weight {1:.2f}):".format(l, tclass_weights_L[l])
-                #print cargo.pretty_probability_matrix(augmented_tclass_cmf_LAB[l])
-
             logger.info(
                 "running %s@%i for %i with %i remaining (b = %.2f)",
                 name,
@@ -195,24 +195,29 @@ class BilevelPortfolio(object):
                 )
 
             # ... and follow through
-            (run_cost, answer, resume) = solver(cnf_path, max_cost)
-            total_cost += run_cost
+            solver.go(max_cost)
 
-            if answer is not None:
-                break
-            elif resume is None:
-                failed.append((self._solver_name_index[name], self._budget_index[planned_cost]))
-            else:
-                new_solver_total = solver_total + run_cost
-                (total_b,) = numpy.digitize([new_solver_total], self._budgets)
+            running[solver.id_] = solver
 
-                paused.append((self._solver_name_index[name], total_b - 1))
-                states.append((resume, new_solver_total))
+            # XXX wait for update
+            if len(running) == cores:
+                (solver_id, run_cost, answer, terminated) = queue.get()
+
+                total_cost += run_cost
+                solver.total += run_cost
+
+                solver = running.pop(solver_id)
+
+                if answer is not None:
+                    break
+                elif terminated:
+                    failed.append(solver)
+                else:
+                    paused.append(solver)
 
         logger.info("answer %s with total cost %.2f", answer, total_cost)
 
         return (total_cost, answer, None)
 
-borg.portfolios.named["borg-mix+class>>0.1"] = BilevelPortfolio
 #borg.portfolios.named["borg-mix+class"] = BilevelPortfolio
 

@@ -43,7 +43,7 @@ def timed_read(fd, timeout = -1):
 class SolverProcess(multiprocessing.Process):
     """Attempt to solve the task in a subprocess."""
 
-    def __init__(self, mts_queue, stm_queue, solver, limit, seed):
+    def __init__(self, command, stm_queue, mts_queue, limit, seed):
         self._mts_queue = mts_queue
         self._stm_queue = stm_queue
         self._solver = solver
@@ -74,10 +74,6 @@ class SolverProcess(multiprocessing.Process):
                 self._popened.wait()
 
     def handle_subsolver(self):
-        arguments = [
-            "/u/bsilvert/morgoth/sat-competition-2011/solvers/march_hi/march_hi",
-            "/u/bsilvert/morgoth/sat-competition-2011/tasks/example/manol-pipe-unsat-g6bi.cnf",
-            ]
         self._popened = popened = cargo.unix.sessions.spawn_pipe_session(arguments, {})
 
         print "spawned child with pid", popened.pid
@@ -111,6 +107,23 @@ class SolverProcess(multiprocessing.Process):
                 print "continued subproces"
 
             print "used", accountant.total, "cpu seconds"
+
+class MonitoredSolver(object):
+    def __init__(self, cnf_path, stm_queue, solver_id):
+        command = [
+            "/u/bsilvert/morgoth/sat-competition-2011/solvers/march_hi/march_hi",
+            "/u/bsilvert/morgoth/sat-competition-2011/tasks/example/manol-pipe-unsat-g6bi.cnf",
+            ]
+        self._mts_queue = multiprocessing.Queue()
+        self._process = SolverProcess(command, stm_queue, mts_queue, solver_id)
+
+    def go(self, budget):
+        self._process.start()
+        mts_queue.put(budget)
+
+    def die(self):
+        os.kill(process.pid, signal.SIGUSR1)
+        process.join()
 
 class ParallelPortfolio(object):
     def __init__(self, solvers, train_paths):

@@ -6,6 +6,7 @@ import os.path
 import resource
 import itertools
 import contextlib
+import multiprocessing
 import numpy
 import scipy.stats
 import scikits.learn.linear_model
@@ -60,8 +61,28 @@ class RandomPortfolio(object):
     def __init__(self, solvers, train_paths):
         self._solvers = solvers
     
-    def __call__(self, cnf_path, budget):
-        return cargo.grab(self._solvers.values())(cnf_path, budget)
+    def __call__(self, cnf_path, budget, cores):
+        queue = multiprocessing.Queue()
+        solvers = []
+
+        for _ in xrange(cores):
+            solver_id = uuid.uuid4()
+            solver = cargo.grab(self._solvers.values())(cnf_path, queue, solver_id)
+
+            solvers.append(solver)
+
+        try:
+            for solver in solvers:
+                solver.go(budget)
+
+            while True:
+                (solver_id, run_cost, answer) = queue.get()
+
+                if answer is not None:
+                    return (run_cost, answer)
+        finally:
+            for solver in solvers:
+                solver.die()
 
 class BaselinePortfolio(object):
     """Baseline portfolio."""
@@ -263,7 +284,7 @@ class ClassifierPortfolio(object):
         return (features_cost + run_cost, run_answer, None)
 
 named = {
-    #"random": RandomPortfolio,
+    "random": RandomPortfolio,
     #"baseline": BaselinePortfolio,
     #"oracle": OraclePortfolio,
     #"uber-oracle": UberOraclePortfolio,
