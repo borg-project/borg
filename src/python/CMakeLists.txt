@@ -21,6 +21,16 @@ find_package(Cython REQUIRED)
 include(UseCython)
 
 #
+# source
+#
+
+install(
+    FILES
+        cargo_site_defaults.py
+    DESTINATION lib
+    )
+
+#
 # descend
 #
 

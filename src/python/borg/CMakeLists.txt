@@ -26,7 +26,6 @@ install(
         solvers.py
         features.py
         portfolios.py
-        minion.py
         bilevel.py
         parallel.py
         __init__.py
