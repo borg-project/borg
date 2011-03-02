@@ -3,6 +3,7 @@
 #
 
 add_cython_module(borg_dimacs dimacs)
+add_cython_module(borg_models models)
 
 #
 # install
@@ -11,6 +12,7 @@ add_cython_module(borg_dimacs dimacs)
 install(
     TARGETS
         borg_dimacs
+        borg_models
     DESTINATION lib/borg
     )
 
@@ -24,6 +26,8 @@ install(
         solvers.py
         features.py
         portfolios.py
+        bilevel.py
+        parallel.py
         __init__.py
     DESTINATION lib/borg
     )
