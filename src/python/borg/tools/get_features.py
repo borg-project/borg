@@ -29,7 +29,7 @@ def main(tasks_root, workers = 0):
         paths = list(cargo.files_under(tasks_root, ["*.cnf"]))
 
         for path in paths:
-            yield (borg.get_features_for, [path])
+            yield (borg.features.get_features_for, [path])
 
     def collect_run((_, arguments), rows):
         (cnf_path,) = arguments

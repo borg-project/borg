@@ -122,11 +122,17 @@ def main(out_path, tasks_root, tests_root = None, runs = 16, workers = 0):
         paths = list(cargo.files_under(tasks_root, ["*.cnf"]))
         examples = int(round(len(paths) * 0.50))
 
+        if tests_root is not None:
+            tests_root_paths = list(cargo.files_under(tests_root, ["*.cnf"]))
+
         for _ in xrange(runs):
             shuffled = sorted(paths, key = lambda _ : numpy.random.rand())
             train_paths = shuffled[:examples]
 
-            test_paths = shuffled[examples:]
+            if tests_root is None:
+                test_paths = shuffled[examples:]
+            else:
+                test_paths = tests_root_paths
 
             split = uuid.uuid4()
 
@@ -134,9 +140,10 @@ def main(out_path, tasks_root, tests_root = None, runs = 16, workers = 0):
                 yield (run_validation, [name, train_paths, test_paths, 5000.0, split])
 
     with open(out_path, "w") as out_file:
+    #with open(out_path, "a") as out_file:
         writer = csv.writer(out_file)
 
-        writer.writerow(["name", "budget", "cost", "rate", "split"])
+        writer.writerow(["name", ">budget", "cost", "rate", "split"])
 
         cargo.distribute_or_labor(yield_runs(), workers, lambda _, r: writer.writerows(r))
 

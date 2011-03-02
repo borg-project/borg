@@ -19,11 +19,13 @@ def plan_knapsack_multiverse(tclass_weights_W, tclass_rates_WSB):
     # heuristically filter low-probability actions
     mean_rates_SB = numpy.sum(tclass_weights_W[:, None, None] * tclass_rates_WSB, axis = 0)
     mean_cmf_SB = numpy.cumsum(mean_rates_SB, axis = -1)
+    threshold = 0.10
 
-    if numpy.all(mean_cmf_SB <= 0.1):
-        logger.warning("not filtering tclasses; none exceed threshold in mean")
+    if numpy.all(mean_cmf_SB <= threshold):
+        logger.warning("not filtering tclasses; no entries in mean exceed %.2f", threshold)
     else:
-        tclass_rates_WSB[:, mean_cmf_SB <= 0.1] = 1e-8
+        tclass_rates_WSB[:, mean_cmf_SB[:, :1] <= threshold] = 1e-8
+        #tclass_rates_WSB[:, mean_cmf_SB <= threshold] = 1e-8
 
     # convert model predictions appropriately
     log_weights_W = numpy.log(tclass_weights_W)
@@ -209,12 +211,8 @@ class BilevelPortfolio(object):
 
         logger.info("answer %s with total cost %.2f", answer, total_cost)
 
-        #raise SystemExit()
-
-        #if answer is None:
-            #raise SystemExit()
-
         return (total_cost, answer, None)
 
-borg.portfolios.named["borg-mix+class"] = BilevelPortfolio
+borg.portfolios.named["borg-mix+class>>0.1"] = BilevelPortfolio
+#borg.portfolios.named["borg-mix+class"] = BilevelPortfolio
 

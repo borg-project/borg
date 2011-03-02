@@ -264,9 +264,9 @@ class ClassifierPortfolio(object):
 
 named = {
     #"random": RandomPortfolio,
-    "baseline": BaselinePortfolio,
+    #"baseline": BaselinePortfolio,
     #"oracle": OraclePortfolio,
-    "uber-oracle": UberOraclePortfolio,
-    "classifier": ClassifierPortfolio,
+    #"uber-oracle": UberOraclePortfolio,
+    #"classifier": ClassifierPortfolio,
     }
 
