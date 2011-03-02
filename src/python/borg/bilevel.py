@@ -16,21 +16,14 @@ def plan_knapsack_multiverse(tclass_weights_W, tclass_rates_WSB):
     Budgets *must* be in ascending order and linearly spaced from zero.
     """
 
-    # XXX
+    # heuristically filter low-probability actions
     mean_rates_SB = numpy.sum(tclass_weights_W[:, None, None] * tclass_rates_WSB, axis = 0)
     mean_cmf_SB = numpy.cumsum(mean_rates_SB, axis = -1)
 
-    #with cargo.numpy_printing(precision = 2, suppress = True, linewidth = 160):
-        #print tclass_rates_WSB
-        #print mean_cmf_SB
-        #print mean_cmf_SB <= 0.1
-
-    tclass_rates_WSB[:, mean_cmf_SB <= 0.1] = 1e-8
-
-    #with cargo.numpy_printing(precision = 2, suppress = True, linewidth = 160):
-        #print tclass_rates_WSB
-
-    #raise SystemExit()
+    if numpy.all(mean_cmf_SB <= 0.1):
+        logger.warning("not filtering tclasses; none exceed threshold in mean")
+    else:
+        tclass_rates_WSB[:, mean_cmf_SB <= 0.1] = 1e-8
 
     # convert model predictions appropriately
     log_weights_W = numpy.log(tclass_weights_W)
@@ -50,10 +43,6 @@ def plan_knapsack_multiverse(tclass_weights_W, tclass_rates_WSB):
         values_WB1[:, b] = region_WSb[:, s, c]
         policy[b] = (s, c)
 
-    # compute our expectation of plan failure
-    weighted_values_W = log_weights_W + values_WB1[:, B]
-    expectation = numpy.sum(numpy.exp(weighted_values_W))
-
     # build a plan from the policy
     plan = []
     b = B
@@ -65,28 +54,13 @@ def plan_knapsack_multiverse(tclass_weights_W, tclass_rates_WSB):
         plan.append(action)
 
     # heuristically reorder the plan
-    mean_rates_SB = numpy.sum(tclass_weights_W[:, None, None] * tclass_rates_WSB, axis = 0)
-    mean_cmf_SB = numpy.cumsum(mean_rates_SB, axis = -1)
-
     def heuristic((s, c)):
-        b = mean_cmf_SB[s, c]
-
-        #if b < 0.1:
-            #return -(0.1 - b)
-        #else:
-        return b / (c + 1)
+        return mean_cmf_SB[s, c] / (c + 1)
 
     plan = sorted(plan, key = heuristic, reverse = True)
 
-    if mean_cmf_SB[plan[0][0], plan[0][1]] < 0.1:
-        logger.warning("low-b run!")
-        logger.info("plan: %s", zip(plan, map(heuristic, plan)))
-
-        with cargo.numpy_printing(precision = 2, suppress = True, linewidth = 300):
-            print mean_cmf_SB
-
     # ...
-    return (plan, expectation)
+    return plan
 
 class BilevelPortfolio(object):
     """Bilevel mixture-model portfolio."""
@@ -175,7 +149,7 @@ class BilevelPortfolio(object):
             if feasible_b == 0:
                 break
 
-            (raw_plan, _) = \
+            raw_plan = \
                 plan_knapsack_multiverse(
                     tclass_weights_L,
                     augmented_tclass_rates_LAB[..., :feasible_b],
@@ -200,6 +174,7 @@ class BilevelPortfolio(object):
             else:
                 max_cost = planned_cost
 
+            # be informative
             augmented_tclass_cmf_LAB = numpy.cumsum(augmented_tclass_rates_LAB, axis = -1)
             augmented_mean_cmf_AB = numpy.sum(tclass_weights_L[:, None, None] * augmented_tclass_cmf_LAB, axis = 0)
             subjective_rate = augmented_mean_cmf_AB[a, c]
@@ -208,7 +183,6 @@ class BilevelPortfolio(object):
                 #print "augmented conditional CMF for tclass {0} (weight {1:.2f}):".format(l, tclass_weights_L[l])
                 #print cargo.pretty_probability_matrix(augmented_tclass_cmf_LAB[l])
 
-            # be informative
             logger.info(
                 "running %s@%i for %i with %i remaining (b = %.2f)",
                 name,
