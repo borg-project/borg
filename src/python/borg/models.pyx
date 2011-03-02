@@ -551,7 +551,7 @@ class BilevelMultinomialModel(object):
         attempts_NS = attempts
 
         # fit the solver behavior classes
-        logger.detail("fitting run classes")
+        logger.info("fitting run classes")
 
         K = 8
         self._rclass_SKB = numpy.empty((S, K, B))
@@ -573,7 +573,7 @@ class BilevelMultinomialModel(object):
                 )
 
         # fit the task mixture classes
-        logger.detail("fitting task classes")
+        logger.info("fitting task classes")
 
         L = 16
         (self._tclass_LSK, self._tclass_weights_L, tclass_res_LN, _) = \
@@ -584,7 +584,7 @@ class BilevelMultinomialModel(object):
                 )
 
         # fit the classifier
-        logger.info("training classifier")
+        logger.info("fitting logistic regression classifier")
 
         train_x = []
         train_y = []
@@ -641,5 +641,5 @@ class BilevelMultinomialModel(object):
         tclass_post_rates_LSB = numpy.sum(conditional_LSK[..., None] * self._rclass_SKB[None, ...], axis = -2)
         mean_post_rates_SB = numpy.sum(tclass_post_weights_L[:, None, None] * tclass_post_rates_LSB, axis = 0)
 
-        return (mean_post_rates_SB, tclass_post_weights_L, tclass_post_rates_LSB)
+        return (tclass_post_weights_L, tclass_post_rates_LSB)
 

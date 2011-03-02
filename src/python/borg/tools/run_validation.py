@@ -19,39 +19,59 @@ import borg
 
 logger = cargo.get_logger(__name__, default_level = "INFO")
 
+def fake_resume_solver(run_cost, run_answer, position):
+    """Return a resume call for a fake run."""
+
+    def resume(_, budget):
+        new_position = budget + position
+
+        if new_position >= run_cost:
+            return (run_cost - position, run_answer, None)
+        else:
+            return (budget, None, fake_resume_solver(run_cost, run_answer, new_position))
+
+    return resume
+
 def solve_fake(solver_name, cnf_path, budget):
     """Recycle a previous solver run."""
 
-    csv_path = cnf_path + ".rtd.csv"
-    answer_map = {"": None, "True": True, "False": False}
+    # gather candidate runs
     runs = []
+    answer_map = {"": None, "True": True, "False": False}
 
-    if os.path.exists(csv_path):
-        with open(csv_path) as csv_file:
-            reader = csv.reader(csv_file)
+    with open(cnf_path + ".rtd.csv") as csv_file:
+        reader = csv.reader(csv_file)
 
-            for (name, _, run_budget, cost, answer) in reader:
-                if name == solver_name and float(run_budget) >= budget:
-                    runs.append((cost, answer))
+        for (name, _, run_budget, run_cost, run_answer) in reader:
+            if name == solver_name:
+                run_cost = float(run_cost)
+                run_budget = float(run_budget)
 
-    if runs:
-        (cost, answer) = cargo.grab(runs)
-        cost = float(cost)
+                if run_budget >= 6000.0:
+                    runs.append((run_cost, answer_map[run_answer]))
 
-        if cost > budget:
-            cost = budget
-            answer = None
-        else:
-            answer = answer_map[answer]
+    # return one of them at random
+    (run_cost, run_answer) = cargo.grab(runs)
 
-        return (cost, answer)
+    if run_cost > budget:
+        return (budget, None, fake_resume_solver(run_cost, run_answer, budget))
     else:
-        raise RuntimeError("no applicable runs of {0} on {1}".format(solver_name, cnf_path))
+        return (run_cost, run_answer, None)
 
 def fake_solver(solver_name):
     return lambda *args: solve_fake(solver_name, *args)
 
-subsolvers = ["TNM", "march_hi", "gnovelty+2", "hybridGM3", "adaptg2wsat++"]
+subsolvers = [
+    "kcnfs-2006",
+    "hybridGM3",
+    "NCVWr",
+    "gnovelty+2",
+    "iPAWS",
+    "adaptg2wsat2009++",
+    "TNM",
+    "march_hi",
+    "FH",
+    ]
 
 core_solvers = dict(zip(subsolvers, map(fake_solver, subsolvers)))
 
@@ -66,7 +86,7 @@ def run_validation(name, train_paths, test_paths, budget, split):
     successes = []
 
     for test_path in test_paths:
-        (cost, answer) = solver(test_path, budget)
+        (cost, answer, _) = solver(test_path, budget)
 
         if answer is not None:
             successes.append(cost)
@@ -87,10 +107,11 @@ def run_validation(name, train_paths, test_paths, budget, split):
 @plac.annotations(
     out_path = ("path to results file", "positional", None, os.path.abspath),
     tasks_root = ("path to task files", "positional", None, os.path.abspath),
+    tests_root = ("optional separate test set", "positional", None, os.path.abspath),
     runs = ("number of runs", "option", "r", int),
     workers = ("submit jobs?", "option", "w", int),
     )
-def main(out_path, tasks_root, runs = 16, workers = 0):
+def main(out_path, tasks_root, tests_root = None, runs = 16, workers = 0):
     """Collect validation results."""
 
     cargo.enable_default_logging()
@@ -104,7 +125,9 @@ def main(out_path, tasks_root, runs = 16, workers = 0):
         for _ in xrange(runs):
             shuffled = sorted(paths, key = lambda _ : numpy.random.rand())
             train_paths = shuffled[:examples]
+
             test_paths = shuffled[examples:]
+
             split = uuid.uuid4()
 
             for name in portfolios:

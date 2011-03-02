@@ -9,56 +9,54 @@ import borg
 
 logger = cargo.get_logger(__name__, default_level = "INFO")
 
-def plan_knapsack_multiverse(model, failures, features, budgets, remaining):
+def plan_knapsack_multiverse(tclass_weights_W, tclass_rates_WSB):
     """
     Generate an optimal plan for a static set of possible probability tables.
 
-    Budgets *must* be in ascending order, spaced by a fixed interval from zero.
+    Budgets *must* be in ascending order and linearly spaced from zero.
     """
 
-    # examine feasible budgets only
-    feasible = budgets
-
-    for (b, budget) in enumerate(budgets):
-        if budget > remaining:
-            feasible = budgets[:b]
-
-            break
-
-    if not feasible:
-        return ([], 1.0)
-
-    # generate model predictions
-    (mean_rates_SB, tclass_weights_W, tclass_rates_WSB) = model.predict(failures, features)
+    # XXX
+    mean_rates_SB = numpy.sum(tclass_weights_W[:, None, None] * tclass_rates_WSB, axis = 0)
     mean_cmf_SB = numpy.cumsum(mean_rates_SB, axis = -1)
 
-    # convert them to log space
-    log_weights_W = numpy.log(tclass_weights_W)
+    #with cargo.numpy_printing(precision = 2, suppress = True, linewidth = 160):
+        #print tclass_rates_WSB
+        #print mean_cmf_SB
+        #print mean_cmf_SB <= 0.1
 
-    #with borg.portfolios.fpe_handling(divide = "ignore"):
+    tclass_rates_WSB[:, mean_cmf_SB <= 0.1] = 1e-8
+
+    #with cargo.numpy_printing(precision = 2, suppress = True, linewidth = 160):
+        #print tclass_rates_WSB
+
+    #raise SystemExit()
+
+    # convert model predictions appropriately
+    log_weights_W = numpy.log(tclass_weights_W)
     log_fail_cmf_WSB = numpy.log(1.0 - numpy.cumsum(tclass_rates_WSB, axis = -1))
 
     # generate the value table and associated policy
     (W, S, B) = log_fail_cmf_WSB.shape
-    values_WB = numpy.zeros((W, B + 1))
+    values_WB1 = numpy.zeros((W, B + 1))
     policy = {}
 
-    for b in xrange(1, len(feasible) + 1):
-        region_WSb = log_fail_cmf_WSB[..., :b] + values_WB[:, None, b - 1::-1]
+    for b in xrange(1, B + 1):
+        region_WSb = log_fail_cmf_WSB[..., :b] + values_WB1[:, None, b - 1::-1]
         weighted_Sb = numpy.logaddexp.reduce(region_WSb + log_weights_W[:, None, None], axis = 0)
         i = numpy.argmin(weighted_Sb)
         (s, c) = numpy.unravel_index(i, weighted_Sb.shape)
 
-        values_WB[:, b] = region_WSb[:, s, c]
+        values_WB1[:, b] = region_WSb[:, s, c]
         policy[b] = (s, c)
 
     # compute our expectation of plan failure
-    weighted_values_W = log_weights_W + values_WB[:, len(feasible)]
+    weighted_values_W = log_weights_W + values_WB1[:, B]
     expectation = numpy.sum(numpy.exp(weighted_values_W))
 
     # build a plan from the policy
     plan = []
-    b = len(feasible)
+    b = B
 
     while b > 0:
         (_, c) = action = policy[b]
@@ -67,49 +65,28 @@ def plan_knapsack_multiverse(model, failures, features, budgets, remaining):
         plan.append(action)
 
     # heuristically reorder the plan
-    plan = sorted(plan, key = lambda (s, c): -mean_cmf_SB[s, c] / budgets[c])
+    mean_rates_SB = numpy.sum(tclass_weights_W[:, None, None] * tclass_rates_WSB, axis = 0)
+    mean_cmf_SB = numpy.cumsum(mean_rates_SB, axis = -1)
+
+    def heuristic((s, c)):
+        b = mean_cmf_SB[s, c]
+
+        #if b < 0.1:
+            #return -(0.1 - b)
+        #else:
+        return b / (c + 1)
+
+    plan = sorted(plan, key = heuristic, reverse = True)
+
+    if mean_cmf_SB[plan[0][0], plan[0][1]] < 0.1:
+        logger.warning("low-b run!")
+        logger.info("plan: %s", zip(plan, map(heuristic, plan)))
+
+        with cargo.numpy_printing(precision = 2, suppress = True, linewidth = 300):
+            print mean_cmf_SB
 
     # ...
     return (plan, expectation)
-
-def plan_knapsack_multiverse_speculative(model, failures, budgets, remaining):
-    """Multiverse knapsack planner with speculative reordering."""
-
-    # evaluate actions via speculative replanning
-    (mean_rates_SB, _, _) = model.predict(failures)
-    mean_fail_cmf_SB = numpy.cumprod(1.0 - mean_rates_SB, axis = -1)
-    (S, B) = mean_rates_SB.shape
-    speculation = []
-
-    for (s, b) in itertools.product(xrange(S), xrange(B)):
-        if budgets[b] <= remaining:
-            p_f = mean_fail_cmf_SB[s, b]
-            (post_plan, post_p_f) = \
-                plan_knapsack_multiverse(
-                    model,
-                    failures + [(s, b)],
-                    budgets,
-                    remaining - budgets[b],
-                    )
-            expectation = p_f * post_p_f
-
-            logger.info(
-                "action %s p_f = %.2f; post-p_f = %.2f; expectation = %.4f",
-                (s, b),
-                p_f,
-                post_p_f,
-                expectation,
-                )
-
-            speculation.append(([(s, b)] + post_plan, expectation))
-
-    # move the most useful action first
-    if len(speculation) > 0:
-        (plan, expectation) = min(speculation, key = lambda (_, e): e)
-
-        return (plan, expectation)
-    else:
-        return ([], 1.0)
 
 class BilevelPortfolio(object):
     """Bilevel mixture-model portfolio."""
@@ -117,7 +94,7 @@ class BilevelPortfolio(object):
     def __init__(self, solvers, train_paths):
         # build action set
         self._solvers = solvers
-        self._budgets = budgets = [(b + 1) * 200.0 for b in xrange(25)]
+        self._budgets = budgets = [(b + 1) * 100.0 for b in xrange(50)]
 
         # acquire running time data
         self._solver_names = list(solvers)
@@ -137,7 +114,10 @@ class BilevelPortfolio(object):
     def __call__(self, cnf_path, budget):
         logger.info("solving %s", os.path.basename(cnf_path))
 
-        # gather oracle knowledge
+        # track CPU time expenditure
+        previous_utime = resource.getrusage(resource.RUSAGE_SELF).ru_utime
+
+        # gather oracle knowledge, if any
         (true_successes, true_attempts) = \
             borg.models.outcome_matrices_from_paths(
                 self._solver_name_index,
@@ -160,71 +140,107 @@ class BilevelPortfolio(object):
         features_cost = features[0]
 
         # select a solver
-        total_run_cost = features_cost
-        failures = []
+        total_cost = features_cost
+        failed = []
+        paused = []
+        states = []
         answer = None
 
         while True:
-            ## XXX for informational output only
-            (predicted_SB, tclass_weights_L, tclass_rates_LSB) = self._model.predict(failures, features)
-            predicted_cmf_SB = numpy.cumsum(predicted_SB, axis = -1)
-            tclass_cmf_LSB = numpy.cumsum(tclass_rates_LSB, axis = -1)
+            # obtain model predictions
+            (tclass_weights_L, tclass_rates_LSB) = self._model.predict(failed + paused, features)
+            (L, S, B) = tclass_rates_LSB.shape
 
-            #with cargo.numpy_printing(precision = 2, suppress = True, linewidth = 240):
-                #for l in xrange(tclass_weights_L.size):
-                    #print "conditional CMF for tclass {0} (weight {1:.2f}):".format(l, tclass_weights_L[l])
-                    #print cargo.pretty_probability_matrix(tclass_cmf_LSB[l])
+            # prepare augmented PMF matrix
+            augmented_tclass_arrays = [tclass_rates_LSB]
 
-            # generate a plan
-            total_cost = total_run_cost
-            (raw_plan, _) = \
-                plan_knapsack_multiverse(
-                    self._model,
-                    failures,
-                    features,
-                    self._budgets,
-                    budget - total_cost,
-                    )
-            plan = [(self._solver_names[s], self._budgets[c]) for (s, c) in raw_plan]
+            for (s, c) in paused:
+                paused_tclass_LB = numpy.zeros((L, B))
 
-            logger.detail("plan: %s", " -> ".join(map("{0[0]}@{0[1]:.0f}".format, plan)))
+                paused_tclass_LB[:, :B - c - 1] = tclass_rates_LSB[:, s, c + 1:]
+                paused_tclass_LB /= 1.0 - numpy.sum(tclass_rates_LSB[:, s, :c + 1], axis = -1)[..., None]
 
-            if not plan:
+                augmented_tclass_arrays.append(paused_tclass_LB[:, None, :])
+
+            augmented_tclass_rates_LAB = numpy.hstack(augmented_tclass_arrays)
+
+            # update cost tracking
+            utime = resource.getrusage(resource.RUSAGE_SELF).ru_utime
+            total_cost += utime - previous_utime
+            previous_utime = utime
+
+            # make a plan...
+            (feasible_b,) = numpy.digitize([budget - total_cost], self._budgets)
+
+            if feasible_b == 0:
                 break
 
-            # don't waste the final seconds before the buzzer
-            (name, planned_cost) = plan[0]
+            (raw_plan, _) = \
+                plan_knapsack_multiverse(
+                    tclass_weights_L,
+                    augmented_tclass_rates_LAB[..., :feasible_b],
+                    )
+
+            # interpret the plan's first action
+            (a, c) = raw_plan[0]
+            planned_cost = self._budgets[c]
+
+            if a >= S:
+                (solver, solver_total) = states.pop(a - S)
+                (s, _) = paused.pop(a - S)
+                name = self._solver_names[s]
+            else:
+                s = a
+                name = self._solver_names[s]
+                solver = self._solvers[name]
+                solver_total = 0.0
 
             if budget - total_cost - planned_cost < self._budgets[0]:
                 max_cost = budget - total_cost
             else:
                 max_cost = planned_cost
 
+            augmented_tclass_cmf_LAB = numpy.cumsum(augmented_tclass_rates_LAB, axis = -1)
+            augmented_mean_cmf_AB = numpy.sum(tclass_weights_L[:, None, None] * augmented_tclass_cmf_LAB, axis = 0)
+            subjective_rate = augmented_mean_cmf_AB[a, c]
+
+            #for l in xrange(L):
+                #print "augmented conditional CMF for tclass {0} (weight {1:.2f}):".format(l, tclass_weights_L[l])
+                #print cargo.pretty_probability_matrix(augmented_tclass_cmf_LAB[l])
+
+            # be informative
             logger.info(
-                "taking %s@%i with %i remaining (b = %.2f; p = %.2f)",
+                "running %s@%i for %i with %i remaining (b = %.2f)",
                 name,
+                solver_total,
                 max_cost,
                 budget - total_cost,
-                predicted_cmf_SB[self._solver_name_index[name], self._budget_index[planned_cost]],
-                true_cmf[self._solver_name_index[name], self._budget_index[planned_cost]],
+                subjective_rate,
                 )
 
-            # run the first step in the plan
-            solver = self._solvers[name]
-            (run_cost, answer) = solver(cnf_path, max_cost)
-            total_run_cost += run_cost
+            # ... and follow through
+            (run_cost, answer, resume) = solver(cnf_path, max_cost)
+            total_cost += run_cost
 
             if answer is not None:
                 break
+            elif resume is None:
+                failed.append((self._solver_name_index[name], self._budget_index[planned_cost]))
             else:
-                failures.append((self._solver_name_index[name], self._budget_index[planned_cost]))
+                new_solver_total = solver_total + run_cost
+                (total_b,) = numpy.digitize([new_solver_total], self._budgets)
+
+                paused.append((self._solver_name_index[name], total_b - 1))
+                states.append((resume, new_solver_total))
 
         logger.info("answer %s with total cost %.2f", answer, total_cost)
+
+        #raise SystemExit()
 
         #if answer is None:
             #raise SystemExit()
 
-        return (total_cost, answer)
+        return (total_cost, answer, None)
 
-borg.portfolios.named["bilevel"] = BilevelPortfolio
+borg.portfolios.named["borg-mix+class"] = BilevelPortfolio
 
