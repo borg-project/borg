@@ -3,6 +3,7 @@
 """
 
 import os.path
+import uuid
 import resource
 import itertools
 import contextlib

@@ -3,7 +3,7 @@
 import plac
 
 if __name__ == "__main__":
-    from borg.tools.solve2 import main
+    from borg.tools.solve import main
 
     plac.call(main)
 
@@ -57,9 +57,10 @@ def enable_output():
     input_path = ("path to instance"),
     seed = ("PRNG seed", "option", None, int),
     budget = ("CPU time limit", "option", None, float),
+    cores = ("units of execution", "option", None, int),
     quiet = ("be less noisy", "flag", "q"),
     )
-def main(solver_path, input_path, seed = 42, budget = 2e6, quiet = False):
+def main(solver_path, input_path, seed = 42, budget = 2e6, cores = 1, quiet = False):
     """Solve a problem instance."""
 
     # general setup
@@ -79,7 +80,7 @@ def main(solver_path, input_path, seed = 42, budget = 2e6, quiet = False):
 
     logger.info("solving %s", input_path)
 
-    (_, answer) = solver(input_path, budget)
+    (_, answer) = solver(input_path, budget, cores)
 
     # tell the world
     if answer is None:
