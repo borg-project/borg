@@ -9,7 +9,6 @@ from . import solvers
 from . import features
 from . import portfolios
 from . import dimacs
-from . import minion
 from . import bilevel
 from . import models
 from . import parallel

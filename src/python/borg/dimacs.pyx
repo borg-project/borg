@@ -1,22 +1,13 @@
-"""
-@author: Bryan Silverthorn <bcs@cargo-cult.org>
-"""
+"""@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import numpy
 
 cimport numpy
-cimport libc.stdlib
 
 class DIMACS_ParseError(RuntimeError):
-    """
-    File was not in the expected format.
-    """
+    """File was not in the expected format."""
 
     def __init__(self, line = None):
-        """
-        Initialize.
-        """
-
         if line is None:
             RuntimeError.__init__(self)
         else:
@@ -28,21 +19,43 @@ class DIMACS_GraphFile(object):
     """
 
     def __init__(self, comments, clauses, N):
-        """
-        Initialize.
-        """
-
         self.comments = comments
         self.clauses = clauses
         self.N = N
 
-    @staticmethod
-    def parse(file_):
-        """
-        Parse the specified CNF file.
-        """
+    def satisfied(self, certificate):
+        """Verify that the certificate satisfies this expression."""
 
-        # parse the comments and file description
+        assignment = numpy.ones(self.N, bool)
+
+        for literal in certificate:
+            variable = abs(literal) - 1
+
+            if literal == 0:
+                break
+            elif variable >= assignment.size:
+                return None
+
+            assignment[variable] = literal > 0
+
+        for clause in self.clauses:
+            satisfied = False
+
+            for literal in clause:
+                if assignment[abs(literal)] == literal > 0:
+                    satisfied = True
+
+                    break
+
+            if not satisfied:
+                return None
+
+        return assignment
+
+    @staticmethod
+    def parse_header(file_):
+        """Parse the header of the specified CNF file."""
+
         comments = []
 
         for line in file_:
@@ -60,7 +73,14 @@ class DIMACS_GraphFile(object):
             else:
                 raise DIMACS_ParseError(line)
 
-        # parse the clause lines
+        return (comments, N, M)
+
+    @staticmethod
+    def parse(file_):
+        """Parse the specified CNF file."""
+
+        (comments, N, M) = DIMACS_GraphFile.parse_header(file_)
+
         clauses = []
         clause = []
 
@@ -83,4 +103,5 @@ class DIMACS_GraphFile(object):
         return DIMACS_GraphFile(comments, clauses, N)
 
 parse_cnf = DIMACS_GraphFile.parse
+parse_cnf_header = DIMACS_GraphFile.parse_header
 
