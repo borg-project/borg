@@ -27,7 +27,6 @@ install(
         features.py
         portfolios.py
         bilevel.py
-        parallel.py
         __init__.py
     DESTINATION lib/borg
     )

@@ -63,37 +63,42 @@ def enable_output():
 def main(solver_path, input_path, seed = 42, budget = 2e6, cores = 1, quiet = False):
     """Solve a problem instance."""
 
-    # general setup
-    enable_output()
+    try:
+        # general setup
+        enable_output()
 
-    if not quiet:
-        cargo.get_logger("borg.solvers", level = "DETAIL")
+        if not quiet:
+            cargo.get_logger("borg.solvers", level = "DETAIL")
 
-    numpy.random.seed(seed)
-    random.seed(numpy.random.randint(2**31))
+        numpy.random.seed(seed)
+        random.seed(numpy.random.randint(2**31))
 
-    # run the solver
-    logger.info("loaded portfolio from %s", solver_path)
+        # run the solver
+        logger.info("loaded portfolio from %s", solver_path)
 
-    with open(solver_path) as file:
-        solver = pickle.load(file)
+        with open(solver_path) as file:
+            solver = pickle.load(file)
 
-    logger.info("solving %s", input_path)
+        logger.info("solving %s", input_path)
 
-    (_, answer) = solver(input_path, budget, cores)
+        (_, answer, _) = solver(input_path, budget, cores)
 
-    # tell the world
-    if answer is None:
-        print "s UNKNOWN"
+        # tell the world
+        if answer is None:
+            print "s UNKNOWN"
 
-        return 0
-    elif answer:
-        print "s SATISFIABLE"
-        print "v", " ".join(map(str, answer)), "0"
+            return 0
+        elif answer:
+            print "s SATISFIABLE"
+            print "v", " ".join(map(str, answer)), "0"
 
-        return 10
-    else:
-        print "s UNSATISFIABLE"
+            return 10
+        else:
+            print "s UNSATISFIABLE"
 
-        return 20
+            return 20
+    except KeyboardInterrupt:
+        print "\nc received SIGINT; terminating"
+
+        pass
 

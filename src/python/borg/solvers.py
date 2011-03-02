@@ -4,10 +4,17 @@
 
 import re
 import os.path
+import time
+import signal
+import select
+import random
+import datetime
 import itertools
 import multiprocessing
 import numpy
 import cargo
+import cargo.unix.sessions
+import cargo.unix.accounting
 import borg
 
 logger = cargo.get_logger(__name__)
@@ -56,12 +63,13 @@ def timed_read(fd, timeout = -1):
 class SolverProcess(multiprocessing.Process):
     """Attempt to solve the task in a subprocess."""
 
-    def __init__(self, command, stm_queue, mts_queue, limit, seed):
+    def __init__(self, cnf_path, command, stm_queue, mts_queue, solver_id):
+        self._cnf_path = cnf_path
         self._command = command
         self._stm_queue = stm_queue
         self._mts_queue = mts_queue
-        self._limit = limit
-        self._seed = seed
+        self._solver_id = solver_id
+        self._seed = random_seed()
         self._popened = None
 
         multiprocessing.Process.__init__(self)
@@ -71,11 +79,15 @@ class SolverProcess(multiprocessing.Process):
         random.seed(numpy.random.randint(2**31))
 
         try:
-            signal.signal(signal.SIGUSR1, handle_sigusr1)
+            try:
+                signal.signal(signal.SIGUSR1, handle_sigusr1)
 
-            self.handle_subsolver()
-        except DeathRequestedError:
-            pass
+                try:
+                    self.handle_subsolver()
+                finally:
+                    signal.signal(signal.SIGUSR1, signal.SIG_IGN)
+            except DeathRequestedError:
+                pass
         except KeyboardInterrupt:
             pass
         finally:
@@ -88,38 +100,49 @@ class SolverProcess(multiprocessing.Process):
 
     def handle_subsolver(self):
         # spawn solver
-        arguments = prepare(self._command, self._cnf_path)
-        self._popened = popened = cargo.unix.sessions.spawn_pipe_session(arguments, {})
-
-        accountant = cargo.unix.accounting.SessionTimeAccountant(popened.pid)
+        limit = 0.0
         stdout = ""
+        expenditure = datetime.timedelta(seconds = limit)
+        last_expenditure = expenditure
+        last_audit = time.time() - 1.0
 
         while True:
+            if expenditure >= datetime.timedelta(seconds = limit):
+                if self._popened is not None:
+                    os.kill(popened.pid, signal.SIGSTOP)
+
+                    run_cost = cargo.seconds(expenditure - last_expenditure)
+                    self._stm_queue.put((self._solver_id, run_cost, None, False))
+
+                additional = self._mts_queue.get()
+                limit += additional
+                last_expenditure = expenditure
+
+                if self._popened is None:
+                    arguments = prepare(self._command, self._cnf_path)
+                    self._popened = popened = cargo.unix.sessions.spawn_pipe_session(arguments, {})
+                    accountant = cargo.unix.accounting.SessionTimeAccountant(popened.pid)
+                else:
+                    os.kill(popened.pid, signal.SIGCONT)
+
+            # read until our budget is exceeded
             chunk = timed_read(popened.stdout.fileno(), 1)
 
             if chunk is not None:
                 stdout += chunk
 
-            accountant.audit()
+            if time.time() - last_audit > 5.0:
+                accountant.audit()
 
-            expenditure = accountant.total
+                expenditure = accountant.total
+                last_audit = time.time()
 
-            if popened.poll() is not None:
-                # XXX parse output
-                # XXX return answer
+            poll_result = popened.poll()
+
+            if poll_result is not None:
+                self._popened = None
+
                 break
-            elif expenditure >= datetime.timedelta(seconds = self._limit):
-                # pause the subsolver
-                os.kill(popened.pid, signal.SIGSTOP)
-
-                additional = self._queue.get()
-                self._limit += additional
-
-                os.kill(popened.pid, signal.SIGCONT)
-
-                print "continued subprocess"
-
-            print "used", accountant.total, "cpu seconds"
 
         # parse the solver's output
         match = re.search(r"^s +(.+)$", stdout, re.M)
@@ -133,15 +156,8 @@ class SolverProcess(multiprocessing.Process):
                 for line in re.findall(r"^v ([ \-0-9]*)$", stdout, re.M):
                     answer.extend(map(int, line.split()))
 
-                with open(cnf_path) as cnf_file:
-                    (_, N, _) = borg.dimacs.parse_cnf_header(cnf_file)
-
-                if len(answer) == N + 1 and answer[-1] == 0:
+                if answer[-1] == 0:
                     answer = answer[:-1]
-                elif len(answer) != N:
-                    #logger.warning("subsolver cert has %i variables; CNF has %i", len(answer), N)
-
-                    answer = None
             elif answer_type == "UNSATISFIABLE":
                 answer = False
             else:
@@ -149,21 +165,26 @@ class SolverProcess(multiprocessing.Process):
         else:
             answer = None
 
-        #if answer is None and budget - cost > 1.0:
-            #logger.warning("early subsolver termination (%.2f seconds remaining)", budget - cost)
+        run_cost = cargo.seconds(expenditure - last_expenditure)
+        self._stm_queue.put((self._solver_id, run_cost, answer, True))
 
 class MonitoredSolver(object):
     def __init__(self, command, cnf_path, stm_queue, solver_id):
         self._mts_queue = multiprocessing.Queue()
-        self._process = SolverProcess(command, stm_queue, self._mts_queue, solver_id)
+        self._process = SolverProcess(cnf_path, command, stm_queue, self._mts_queue, solver_id)
+        self._solver_id = solver_id
 
     def go(self, budget):
-        self._process.start()
+        if not self._process.is_alive():
+            self._process.start()
+
         self._mts_queue.put(budget)
 
     def die(self):
-        os.kill(process.pid, signal.SIGUSR1)
-        process.join()
+        if self._process.pid is not None:
+            os.kill(self._process.pid, signal.SIGUSR1)
+
+            self._process.join()
 
 def basic_command(relative):
     """Prepare a basic competition solver command."""

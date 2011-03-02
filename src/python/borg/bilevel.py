@@ -4,6 +4,7 @@ import os.path
 import uuid
 import resource
 import itertools
+import multiprocessing
 import numpy
 import cargo
 import borg
@@ -89,24 +90,26 @@ class BilevelPortfolio(object):
         self._model = borg.models.BilevelMultinomialModel(successes, attempts, features)
 
     def __call__(self, cnf_path, budget, cores):
-        logger.info("solving %s", os.path.basename(cnf_path))
+        #logger.info("solving %s", os.path.basename(cnf_path))
 
         # track CPU time expenditure
         previous_utime = resource.getrusage(resource.RUSAGE_SELF).ru_utime
 
-        # gather oracle knowledge, if any
-        (true_successes, true_attempts) = \
-            borg.models.outcome_matrices_from_paths(
-                self._solver_name_index,
-                self._budgets,
-                [cnf_path],
-                )
-        true_rates = true_successes[0] / true_attempts[0, ..., None]
-        true_cmf = 1.0 - numpy.cumprod(1.0 - true_rates, axis = -1)
+        ## gather oracle knowledge, if any
+        #(true_successes, true_attempts) = \
+            #borg.models.outcome_matrices_from_paths(
+                #self._solver_name_index,
+                #self._budgets,
+                #[cnf_path],
+                #)
+        #true_rates = true_successes[0] / true_attempts[0, ..., None]
+        #true_cmf = 1.0 - numpy.cumprod(1.0 - true_rates, axis = -1)
 
-        logger.info("true CMF:\n%s", cargo.pretty_probability_matrix(true_cmf))
+        #logger.info("true CMF:\n%s", cargo.pretty_probability_matrix(true_cmf))
 
         # obtain features
+        logger.info("computing task features")
+
         csv_path = cnf_path + ".features.csv"
 
         if os.path.exists(csv_path):
@@ -126,15 +129,27 @@ class BilevelPortfolio(object):
 
         while True:
             # obtain model predictions
-            # XXX build extended failed list
-            #(total_b,) = numpy.digitize([solver.total], self._budgets)
-            (tclass_weights_L, tclass_rates_LSB) = self._model.predict(failed + paused, features)
+            failed_indices = []
+
+            for solver in failed + paused + running.values():
+                (total_b,) = numpy.digitize([solver.total], self._budgets)
+                if total_b == 0: # hack
+                    total_b += 1
+
+                failed_indices.append((solver.s, total_b - 1))
+
+            (tclass_weights_L, tclass_rates_LSB) = self._model.predict(failed_indices, features)
             (L, S, B) = tclass_rates_LSB.shape
 
             # prepare augmented PMF matrix
             augmented_tclass_arrays = [tclass_rates_LSB]
 
-            for (s, c) in paused: # XXX
+            for solver in paused:
+                s = solver.s
+                (c,) = numpy.digitize([solver.total], self._budgets)
+                if c > 0: # hack
+                    c -= 1
+
                 paused_tclass_LB = numpy.zeros((L, B))
 
                 paused_tclass_LB[:, :B - c - 1] = tclass_rates_LSB[:, s, c + 1:]
@@ -166,14 +181,15 @@ class BilevelPortfolio(object):
             planned_cost = self._budgets[c]
 
             if a >= S:
-                (solver, solver_total) = states.pop(a - S)
-                (s, _) = paused.pop(a - S)
+                solver = paused.pop(a - S)
+                s = solver.s
                 name = self._solver_names[s]
             else:
                 s = a
                 name = self._solver_names[s]
-                solver = self._solvers[name](cnf_path, queue)
-                solver_total = 0.0
+                solver = self._solvers[name](cnf_path, queue, uuid.uuid4())
+                solver.s = s
+                solver.total = 0.0
 
             if budget - total_cost - planned_cost < self._budgets[0]:
                 max_cost = budget - total_cost
@@ -188,21 +204,21 @@ class BilevelPortfolio(object):
             logger.info(
                 "running %s@%i for %i with %i remaining (b = %.2f)",
                 name,
-                solver_total,
+                solver.total,
                 max_cost,
                 budget - total_cost,
                 subjective_rate,
                 )
 
             # ... and follow through
-            solver.go(max_cost)
+            solver.go(max_cost / 10) # XXX
 
-            running[solver.id_] = solver
+            running[solver._solver_id] = solver
 
-            # XXX wait for update
             if len(running) == cores:
                 (solver_id, run_cost, answer, terminated) = queue.get()
 
+                run_cost *= 10 # XXX
                 total_cost += run_cost
                 solver.total += run_cost
 
@@ -215,9 +231,12 @@ class BilevelPortfolio(object):
                 else:
                     paused.append(solver)
 
-        logger.info("answer %s with total cost %.2f", answer, total_cost)
+        #logger.info("answer %s with total cost %.2f", answer, total_cost)
+
+        for process in paused + running.values():
+            process.die()
 
         return (total_cost, answer, None)
 
-#borg.portfolios.named["borg-mix+class"] = BilevelPortfolio
+borg.portfolios.named["borg-mix+class"] = BilevelPortfolio
 
