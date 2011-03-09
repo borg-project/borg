@@ -56,7 +56,7 @@ def enable_output():
     solver_path  = ("path to solver pickle"),
     input_path = ("path to instance"),
     seed = ("PRNG seed", "option", None, int),
-    budget = ("CPU time limit", "option", None, float),
+    budget = ("time limit (CPU or wall)", "option", None, float),
     cores = ("units of execution", "option", None, int),
     quiet = ("be less noisy", "flag", "q"),
     )

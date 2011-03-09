@@ -193,12 +193,12 @@ def basic_command(relative):
 
 core_commands = {
     # complete
-    #"precosat-570": ["{root}/precosat-570-239dbbe-100801/precosat", "--seed={seed}", "{task}"],
-    #"lingeling-276": ["{root}/lingeling-276-6264d55-100731/lingeling", "--seed={seed}", "{task}"],
-    #"cryptominisat-2.9.0": ["{root}/cryptominisat-2.9.0/cryptominisat-2.9.0Linux64", "--randomize={seed}", "{task}"],
-    #"glucosER": ["{root}/glucosER/glucoser_static", "{task}"],
-    #"glucose": ["{root}/glucose/glucose_static", "{task}"],
-    #"SApperloT": ["{root}/SApperloT/SApperloT-base", "-seed={seed}", "{task}"],
+    "precosat-570": ["{root}/precosat-570-239dbbe-100801/precosat", "--seed={seed}", "{task}"],
+    "lingeling-276": ["{root}/lingeling-276-6264d55-100731/lingeling", "--seed={seed}", "{task}"],
+    "cryptominisat-2.9.0": ["{root}/cryptominisat-2.9.0/cryptominisat-2.9.0Linux64", "--randomize={seed}", "{task}"],
+    "glucosER": ["{root}/glucosER/glucoser_static", "{task}"],
+    "glucose": ["{root}/glucose/glucose_static", "{task}"],
+    "SApperloT": ["{root}/SApperloT/SApperloT-base", "-seed={seed}", "{task}"],
     "march_hi": basic_command("march_hi/march_hi"),
     "kcnfs-2006": ["{root}/kcnfs-2006/kcnfs-2006", "{task}"],
     # incomplete

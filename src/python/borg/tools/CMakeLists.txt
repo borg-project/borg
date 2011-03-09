@@ -10,6 +10,7 @@ install(
 		run_solvers.py
 		run_validation.py
 		get_features.py
+        calibrate.py
 	DESTINATION lib/borg/tools
 	)
 

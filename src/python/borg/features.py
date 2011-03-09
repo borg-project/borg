@@ -5,22 +5,27 @@
 import re
 import os.path
 import cargo
+import borg
 
 logger = cargo.get_logger(__name__)
 
 def get_features_for(cnf_path):
     """Obtain features of a CNF."""
 
-    home = "/scratch/cluster/bsilvert/sat-competition-2011/solvers/features1s"
     command = [
-        "/scratch/cluster/bsilvert/sat-competition-2011/solvers/run-1.4/run",
+        os.path.join(borg.defaults.solvers_root, "run-1.4/run"),
         "-k",
-        os.path.join(home, "features1s"),
+        os.path.join(borg.defaults.solvers_root, "features1s/features1s"),
         cnf_path,
         ]
 
     def set_library_path():
-        os.environ["LD_LIBRARY_PATH"] = "{0}:{1}".format(home, os.environ["LD_LIBRARY_PATH"])
+        ld_library_path = os.path.join(borg.defaults.solvers_root, "features1s")
+
+        if "LD_LIBRARY_PATH" in os.environ:
+            ld_library_path += ":{0}".format(os.environ["LD_LIBRARY_PATH"])
+
+        os.environ["LD_LIBRARY_PATH"] = ld_library_path
 
     (stdout, stderr, code) = cargo.call_capturing(command, preexec_fn = set_library_path)
 

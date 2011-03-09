@@ -20,7 +20,6 @@ def run_solver_on(solver_name, cnf_path, budget):
     """Run a solver."""
 
     solver = borg.solvers.named[solver_name]
-    #solver = borg.solvers.satzillas[solver_name]
     (cost, answer) = solver(cnf_path, budget)
     short_answer = None if answer is None else bool(answer)
 
@@ -53,7 +52,6 @@ def main(tasks_root, runs = 4, workers = 0):
 
         for _ in xrange(runs):
             for solver_name in borg.solvers.named:
-            #for solver_name in borg.solvers.satzillas:
                 for path in paths:
                     yield (run_solver_on, [solver_name, path, 6000.0])
 

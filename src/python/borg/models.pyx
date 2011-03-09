@@ -513,7 +513,7 @@ def fit_multinomial_outer_mixture(rclass_res, rclass_mass, L):
         # compute ll and check for convergence
         ll = numpy.sum(numpy.logaddexp.reduce(log_weights_L[:, None] + log_mass_LN, axis = 0))
 
-        logger.debug("ll at EM iteration %i is %f", i, ll)
+        logger.info("ll at EM iteration %i is %f", i, ll)
 
         if numpy.abs(ll - previous_ll) < 1e-6:
             break

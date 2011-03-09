@@ -18,15 +18,18 @@ logger = cargo.get_logger(__name__, default_level = "INFO")
 @plac.annotations(
     out_path = ("path to store solver"),
     name = ("name of the portfolio to train"),
-    tasks_root = ("path to training tasks"),
+    tasks_roots = ("paths to training task directories"),
     )
-def main(out_path, name, tasks_root):
+def main(out_path, name, *tasks_roots):
     """Train a solver."""
 
     cargo.enable_default_logging()
 
     # find the training tasks
-    train_paths = list(cargo.files_under(tasks_root, ["*.cnf"]))
+    train_paths = []
+    
+    for tasks_root in tasks_roots:
+        train_paths.extend(cargo.files_under(tasks_root, ["*.cnf"]))
 
     logger.info("using %i tasks for training", len(train_paths))
 
