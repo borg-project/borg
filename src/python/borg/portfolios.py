@@ -62,7 +62,7 @@ class RandomPortfolio(object):
     def __init__(self, solvers, train_paths):
         self._solvers = solvers
     
-    def __call__(self, cnf_path, budget, cores):
+    def __call__(self, cnf_path, budget, cores = 1):
         queue = multiprocessing.Queue()
         solvers = []
 
@@ -77,7 +77,7 @@ class RandomPortfolio(object):
                 solver.go(budget)
 
             while True:
-                (solver_id, run_cost, answer) = queue.get()
+                (solver_id, run_cost, answer, _) = queue.get()
 
                 if answer is not None:
                     return (run_cost, answer)
@@ -285,7 +285,7 @@ class ClassifierPortfolio(object):
         return (features_cost + run_cost, run_answer, None)
 
 named = {
-    "random": RandomPortfolio,
+    #"random": RandomPortfolio,
     #"baseline": BaselinePortfolio,
     #"oracle": OraclePortfolio,
     #"uber-oracle": UberOraclePortfolio,

@@ -73,7 +73,7 @@ class BilevelPortfolio(object):
     def __init__(self, solvers, train_paths):
         # build action set
         self._solvers = solvers
-        self._budgets = budgets = [(b + 1) * 100.0 for b in xrange(60)]
+        self._budgets = budgets = [(b + 1) * 50.0 for b in xrange(42)]
 
         # acquire running time data
         self._solver_names = list(solvers)
@@ -84,13 +84,14 @@ class BilevelPortfolio(object):
 
         logger.info("solvers: %s", dict(enumerate(self._solver_names)))
 
-        # acquire features
-        features = [numpy.recfromcsv(path + ".features.csv").tolist() for path in train_paths]
+        ## acquire features
+        #features = [numpy.recfromcsv(path + ".features.csv").tolist() for path in train_paths]
+        features = None
 
         # fit our model
         self._model = borg.models.BilevelMultinomialModel(successes, attempts, features)
 
-    def __call__(self, cnf_path, budget, cores):
+    def __call__(self, cnf_path, budget, cores = 1):
         # track computational cost
         budget /= borg.defaults.machine_speed
 
@@ -99,11 +100,25 @@ class BilevelPortfolio(object):
         else:
             start_wall = time.time()
 
-        # obtain features
-        logger.info("computing task features")
+        # print oracle knowledge, if any
+        (runs,) = borg.portfolios.get_task_run_data([cnf_path]).values()
+        (oracle_history, oracle_counts, _) = \
+            borg.portfolios.action_rates_from_runs(
+                self._solver_name_index,
+                self._budget_index,
+                runs.tolist(),
+                )
+        true_rates = oracle_history / oracle_counts
 
-        (_, features) = borg.features.get_features_for(cnf_path)
-        features_cost = features[0]
+        logger.info("true rates:\n%s", cargo.pretty_probability_matrix(true_rates))
+
+        ## obtain features
+        #logger.info("computing task features")
+
+        #(_, features) = borg.features.get_features_for(cnf_path)
+        #features_cost = features[0]
+        features = None
+        features_cost = 0.0
 
         # select a solver
         total_cost = features_cost / borg.defaults.machine_speed

@@ -1,6 +1,4 @@
-"""
-@author: Bryan Silverthorn <bcs@cargo-cult.org>
-"""
+"""@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import plac
 
@@ -13,71 +11,109 @@ import os.path
 import csv
 import uuid
 import itertools
+import multiprocessing
 import numpy
 import cargo
 import borg
 
 logger = cargo.get_logger(__name__, default_level = "INFO")
 
-def fake_resume_solver(run_cost, run_answer, position):
-    """Return a resume call for a fake run."""
+class FakeSolver(object):
+    """Provide a standard interface to a solver process."""
 
-    def resume(_, budget):
-        new_position = budget + position
-
-        if new_position >= run_cost:
-            return (run_cost - position, run_answer, None)
+    def __init__(self, name, task_path, stm_queue = None, solver_id = None):
+        # prepare communication channels
+        if stm_queue is None:
+            self._stm_queue = multiprocessing.Queue()
         else:
-            return (budget, None, fake_resume_solver(run_cost, run_answer, new_position))
+            self._stm_queue = stm_queue
 
-    return resume
+        if solver_id is None:
+            self._solver_id = uuid.uuid4()
+        else:
+            self._solver_id = solver_id
 
-def solve_fake(solver_name, cnf_path, budget):
-    """Recycle a previous solver run."""
+        # gather candidate runs, and select one
+        runs = []
+        answer_map = {"": None, "True": True, "False": False}
 
-    # gather candidate runs
-    runs = []
-    answer_map = {"": None, "True": True, "False": False}
+        with open(task_path + ".rtd.csv") as csv_file:
+            reader = csv.reader(csv_file)
 
-    with open(cnf_path + ".rtd.csv") as csv_file:
-        reader = csv.reader(csv_file)
+            for (solver_name, _, run_budget, run_cost, run_answer) in reader:
+                if solver_name == name:
+                    run_cost = float(run_cost)
+                    run_budget = float(run_budget)
 
-        for (name, _, run_budget, run_cost, run_answer) in reader:
-            if name == solver_name:
-                run_cost = float(run_cost)
-                run_budget = float(run_budget)
+                    if run_budget >= borg.defaults.minimum_fake_run_budget:
+                        runs.append((run_cost, answer_map[run_answer]))
 
-                if run_budget >= 6000.0:
-                    runs.append((run_cost, answer_map[run_answer]))
+        (self._run_cost, self._run_answer) = cargo.grab(runs)
+        self._run_position = 0.0
 
-    # return one of them at random
-    (run_cost, run_answer) = cargo.grab(runs)
+    def __call__(self, budget):
+        """Unpause the solver, block for some limit, and terminate it."""
 
-    if run_cost > budget:
-        return (budget, None, fake_resume_solver(run_cost, run_answer, budget))
-    else:
-        return (run_cost, run_answer, None)
+        self.go(budget)
+
+        (solver_id, run_cost, answer, terminated) = self._stm_queue.get()
+
+        assert solver_id == self._solver_id
+
+        self.die()
+
+        return (run_cost, answer)
+
+    def go(self, budget):
+        """Unpause the solver for the specified duration."""
+
+        assert self._run_position is not None
+
+        new_position = self._run_position + budget
+
+        if new_position >= self._run_cost:
+            self._stm_queue.put((self._solver_id, self._run_cost - self._run_position, self._run_answer, True))
+
+            self._run_position = None
+        else:
+            self._stm_queue.put((self._solver_id, budget, None, False))
+
+            self._run_position = new_position
+
+    def die(self):
+        """Terminate the solver."""
+
+        self._run_position = None
+
+#subsolvers = [
+    #"kcnfs-2006",
+    #"hybridGM3",
+    #"NCVWr",
+    #"gnovelty+2",
+    #"iPAWS",
+    #"adaptg2wsat2009++",
+    #"TNM",
+    #"march_hi",
+    #"FH",
+    #]
+subsolvers = [
+    "pbct-0.1.2-linear",
+    "bsolo_pb10-l1",
+    "bsolo_pb10-l2",
+    "bsolo_pb10-l3",
+    "wbo1.4a",
+    "wbo1.4b-fixed",
+    "clasp-1.3.7",
+    "sat4j-pb-v20101225",
+    "sat4j-pb-v20101225-cutting",
+    ]
 
 def fake_solver(solver_name):
-    return lambda *args: solve_fake(solver_name, *args)
-
-subsolvers = [
-    "kcnfs-2006",
-    "hybridGM3",
-    "NCVWr",
-    "gnovelty+2",
-    "iPAWS",
-    "adaptg2wsat2009++",
-    "TNM",
-    "march_hi",
-    "FH",
-    ]
+    return lambda *args: FakeSolver(solver_name, *args)
 
 core_solvers = dict(zip(subsolvers, map(fake_solver, subsolvers)))
 
 portfolios = borg.portfolios.named.copy()
-
-#portfolios["SATzilla2009_R"] = lambda *_: lambda *args: solve_fake("SATzilla2009_R", *args)
 
 def run_validation(name, train_paths, test_paths, budget, split):
     """Make a validation run."""
@@ -85,8 +121,12 @@ def run_validation(name, train_paths, test_paths, budget, split):
     solver = portfolios[name](core_solvers, train_paths)
     successes = []
 
+    logger.info("running portfolio %s with per-task budget %.2f", name, budget)
+
     for test_path in test_paths:
         (cost, answer, _) = solver(test_path, budget)
+
+        logger.info("answer to %s was %s", os.path.basename(test_path), answer)
 
         if answer is not None:
             successes.append(cost)
@@ -119,11 +159,15 @@ def main(out_path, tasks_root, tests_root = None, runs = 16, workers = 0):
     cargo.get_logger("borg.portfolios", level = "DETAIL")
 
     def yield_runs():
-        paths = list(cargo.files_under(tasks_root, ["*.cnf"]))
+        #paths = list(cargo.files_under(tasks_root, ["*.cnf"])) # XXX
+        paths = list(cargo.files_under(tasks_root, ["*.opb"]))
         examples = int(round(len(paths) * 0.50))
 
+        logger.info("found %i training tasks", len(paths))
+
         if tests_root is not None:
-            tests_root_paths = list(cargo.files_under(tests_root, ["*.cnf"]))
+            #tests_root_paths = list(cargo.files_under(tests_root, ["*.cnf"]))
+            tests_root_paths = list(cargo.files_under(tests_root, ["*.opb"])) # XXX
 
         for _ in xrange(runs):
             shuffled = sorted(paths, key = lambda _ : numpy.random.rand())
@@ -137,13 +181,12 @@ def main(out_path, tasks_root, tests_root = None, runs = 16, workers = 0):
             split = uuid.uuid4()
 
             for name in portfolios:
-                yield (run_validation, [name, train_paths, test_paths, 5000.0, split])
+                yield (run_validation, [name, train_paths, test_paths, 2600.0, split])
 
     with open(out_path, "w") as out_file:
-    #with open(out_path, "a") as out_file:
         writer = csv.writer(out_file)
 
-        writer.writerow(["name", ">budget", "cost", "rate", "split"])
+        writer.writerow(["name", "budget", "cost", "rate", "split"])
 
         cargo.distribute_or_labor(yield_runs(), workers, lambda _, r: writer.writerows(r))
 

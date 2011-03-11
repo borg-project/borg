@@ -19,8 +19,8 @@ logger = cargo.get_logger(__name__, default_level = "INFO")
 def run_solver_on(solver_name, cnf_path, budget):
     """Run a solver."""
 
-    solver = borg.solvers.named[solver_name]
-    (cost, answer) = solver(cnf_path, budget)
+    solver = borg.solvers.pb.named[solver_name](cnf_path) # XXX
+    (cost, answer) = solver(budget)
     short_answer = None if answer is None else bool(answer)
 
     logger.info(
@@ -37,23 +37,25 @@ def run_solver_on(solver_name, cnf_path, budget):
 @plac.annotations(
     tasks_root = ("path to task files", "positional", None, os.path.abspath),
     runs = ("number of runs", "option", "r", int),
+    budget = ("per-instance budget", "option", "b", float),
     workers = ("submit jobs?", "option", "w", int),
     )
-def main(tasks_root, runs = 4, workers = 0):
+def main(tasks_root, runs = 4, budget = 2600.0, workers = 0):
     """Collect solver running-time data."""
 
     cargo.enable_default_logging()
 
     def yield_runs():
-        paths = list(cargo.files_under(tasks_root, ["*.cnf"]))
+        #paths = list(cargo.files_under(tasks_root, ["*.cnf"]))
+        paths = list(cargo.files_under(tasks_root, ["*.opb"]))
 
         if not paths:
             raise ValueError("no paths found under specified root")
 
         for _ in xrange(runs):
-            for solver_name in borg.solvers.named:
+            for solver_name in borg.solvers.pb.named: # XXX
                 for path in paths:
-                    yield (run_solver_on, [solver_name, path, 6000.0])
+                    yield (run_solver_on, [solver_name, path, budget])
 
     def collect_run((_, arguments), row):
         (_, cnf_path, _) = arguments

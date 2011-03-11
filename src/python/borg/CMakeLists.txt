@@ -23,7 +23,6 @@ install(
 install(
     FILES
         defaults.py
-        solvers.py
         features.py
         portfolios.py
         bilevel.py
@@ -36,4 +35,5 @@ install(
 #
 
 add_subdirectory(tools)
+add_subdirectory(solvers)
 
