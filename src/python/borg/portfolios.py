@@ -76,11 +76,16 @@ class RandomPortfolio(object):
             for solver in solvers:
                 solver.go(budget)
 
-            while True:
+            remaining = len(solvers)
+
+            while remaining > 0:
                 (solver_id, run_cost, answer, _) = queue.get()
+                remaining -= 1
 
                 if answer is not None:
                     return (run_cost, answer)
+
+            return (budget, None)
         finally:
             for solver in solvers:
                 solver.die()
@@ -109,23 +114,11 @@ class BaselinePortfolio(object):
 
         self._best = solvers[solver_rindex[numpy.argmax(rates)]]
 
-    def __call__(self, cnf_path, budget):
-        return self._best(cnf_path, budget)
+    def __call__(self, cnf_path, budget, cores = 1):
+        if cores != 1:
+            raise ValueError("no support for parallelism")
 
-class OraclePortfolio(object):
-    """Oracle-approximate portfolio."""
-
-    def __init__(self, solvers, train_paths):
-        self._solvers = solvers
-
-    def __call__(self, cnf_path, budget):
-        solver_rindex = dict(enumerate(self._solvers))
-        solver_index = dict(map(reversed, solver_rindex.items()))
-        (runs,) = get_task_run_data([cnf_path]).values()
-        (_, _, rates) = action_rates_from_runs(solver_index, {budget: 0}, runs.tolist())
-        best = self._solvers[solver_rindex[numpy.argmax(rates)]]
-
-        return best(cnf_path, budget)
+        return self._best(cnf_path)(budget)
 
 def knapsack_plan(rates, solver_rindex, budgets, remaining):
     """
@@ -180,18 +173,21 @@ def knapsack_plan(rates, solver_rindex, budgets, remaining):
     return [(solver_rindex[s], budgets[c]) for (s, c) in reordered]
 
 class UberOraclePortfolio(object):
-    """Oracle-approximate planning portfolio."""
+    """Optimal discrete-budget portfolio."""
 
     def __init__(self, solvers, train_paths):
         self._solvers = solvers
-        self._budgets = [(b + 1) * 100.0 for b in xrange(50)]
+        self._budgets = [(b + 1) * 50.0 for b in xrange(42)]
         self._solver_rindex = dict(enumerate(self._solvers))
         self._solver_index = dict(map(reversed, self._solver_rindex.items()))
         self._budget_rindex = dict(enumerate(self._budgets))
         self._budget_index = dict(map(reversed, self._budget_rindex.items()))
 
-    def __call__(self, cnf_path, budget):
+    def __call__(self, cnf_path, budget, cores = 1):
         logger.debug("solving %s", cnf_path)
+
+        if cores != 1:
+            raise ValueError("no support for parallelism")
 
         # grab known run data
         (runs,) = get_task_run_data([cnf_path]).values()
@@ -205,8 +201,8 @@ class UberOraclePortfolio(object):
         answer = None
 
         for (name, cost) in plan:
-            solver = self._solvers[name]
-            (run_cost, answer, _) = solver(cnf_path, cost)
+            solver = self._solvers[name](cnf_path)
+            (run_cost, answer) = solver(cost)
 
             b = self._budget_index[cost]
             logger.debug(
@@ -223,7 +219,7 @@ class UberOraclePortfolio(object):
             if answer is not None:
                 break
 
-        return (total_cost, answer, None)
+        return (total_cost, answer)
 
 class ClassifierPortfolio(object):
     """Classifier-based portfolio."""
@@ -231,7 +227,7 @@ class ClassifierPortfolio(object):
     def __init__(self, solvers, train_paths):
         self._solvers = solvers
 
-        action_budget = 5000
+        action_budget = 2600 # XXX
         solver_rindex = dict(enumerate(solvers))
         solver_index = dict(map(reversed, solver_rindex.items()))
         budget_rindex = dict(enumerate([action_budget]))
@@ -261,7 +257,10 @@ class ClassifierPortfolio(object):
 
             model.fit(train_xs[solver], train_ys[solver])
 
-    def __call__(self, cnf_path, budget):
+    def __call__(self, cnf_path, budget, cores = 1):
+        if cores != 1:
+            raise ValueError("parallelism not supported")
+
         # obtain features
         csv_path = cnf_path + ".features.csv"
 
@@ -280,14 +279,13 @@ class ClassifierPortfolio(object):
         logger.debug("selected %s on %s", name, os.path.basename(cnf_path))
 
         # run the solver
-        (run_cost, run_answer, _) = selected(cnf_path, budget - features_cost)
+        (run_cost, run_answer) = selected(cnf_path)(budget - features_cost)
 
-        return (features_cost + run_cost, run_answer, None)
+        return (features_cost + run_cost, run_answer)
 
 named = {
     #"random": RandomPortfolio,
     #"baseline": BaselinePortfolio,
-    #"oracle": OraclePortfolio,
     #"uber-oracle": UberOraclePortfolio,
     #"classifier": ClassifierPortfolio,
     }

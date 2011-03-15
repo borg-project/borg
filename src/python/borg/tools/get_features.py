@@ -26,10 +26,12 @@ def main(tasks_root, workers = 0):
     cargo.enable_default_logging()
 
     def yield_runs():
-        paths = list(cargo.files_under(tasks_root, ["*.cnf"]))
+        #paths = list(cargo.files_under(tasks_root, ["*.cnf"]))
+        paths = list(cargo.files_under(tasks_root, ["*.opb"])) # XXX
 
         for path in paths:
-            yield (borg.features.get_features_for, [path])
+            #yield (borg.features.get_features_for, [path]) # XXX
+            yield (borg.features.get_features_for_opb, [path])
 
     def collect_run((_, arguments), rows):
         (cnf_path,) = arguments

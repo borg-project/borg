@@ -13,7 +13,7 @@ def basic_command(relative):
     return ["{{root}}/{0}".format(relative), "{task}", "{seed}"]
 
 commands = {
-    #"pbct-0.1.2-linear": ["{root}/pbct-0.1.2-linux32", "--model", "{task}"],
+    "pbct-0.1.2-linear": ["{root}/pbct-0.1.2-linux32", "--model", "{task}"],
     "bsolo_pb10-l1": ["{root}/bsolo_pb10", "-l1", "{task}"],
     "bsolo_pb10-l2": ["{root}/bsolo_pb10", "-l2", "{task}"],
     "bsolo_pb10-l3": ["{root}/bsolo_pb10", "-l3", "{task}"],
@@ -55,6 +55,8 @@ def parse_pb_output(stdout):
                 return answer
         elif answer_type == "UNSATISFIABLE":
             return False
+
+    #logger.warning("NO ANSWER FOUND IN:\n%s", stdout)
 
     return None
 

@@ -11,4 +11,8 @@ from . import portfolios
 from . import dimacs
 from . import bilevel
 from . import models
+from . import opb
+from . import expenses
+
+from borg.expenses import *
 
