@@ -54,15 +54,17 @@ class FakeSolver(object):
     def __call__(self, budget):
         """Unpause the solver, block for some limit, and terminate it."""
 
-        self.go(budget)
+        self.unpause_for(budget)
 
-        (solver_id, run_cost, answer, terminated) = self._stm_queue.get()
+        (solver_id, run_cpu_cost, answer, terminated) = self._stm_queue.get()
 
         assert solver_id == self._solver_id
 
-        self.die()
+        self.stop()
 
-        return (run_cost, answer)
+        borg.get_accountant().charge_cpu(run_cpu_cost)
+
+        return answer
 
     def unpause_for(self, budget):
         """Unpause the solver for the specified duration."""

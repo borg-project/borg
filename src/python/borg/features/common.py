@@ -1,9 +1,8 @@
-"""
-@author: Bryan Silverthorn <bcs@cargo-cult.org>
-"""
+"""@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import re
 import os.path
+import numpy
 import cargo
 import borg
 
@@ -39,23 +38,20 @@ def get_features_for_cnf(cnf_path):
 
     return (["cost"] + names, [cost] + values)
 
-def get_features_for_opb(opb_path):
-    """Obtain features of a PB instance."""
+def get_features_for(task_path):
+    """Read or compute features of a PB instance."""
 
-    # parse the instance and compute features
-    with accounting() as accountant:
-        with open(opb_path) as opb_file:
-            opb = borg.opb.parse_opb_file(opb_file)
+    csv_path = task_path + ".features.csv"
 
-        features = {
-            "optimization" : 0.0 if opb.objective is None else 1.0,
-            "constraints" : len(opb.constraints),
-            }
+    if os.path.exists(csv_path):
+        features_array = numpy.recfromcsv(csv_path)
+        features = features_array.tolist()
 
-    # account for and return them
-    cost = accountant.cpu_seconds
+        assert features_array.dtype.names[0] == "cpu_cost"
 
-    logger.info("computed features for %s in %.2f s", os.path.basename(opb_path), cost)
+        borg.get_accountant().charge_cpu(features[0])
+    else:
+        (_, features) = borg.features.pb.path_compute_all(task_path)
 
-    return (["cost"] + features.keys(), [cost] + features.values())
+    return features
 

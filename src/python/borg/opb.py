@@ -1,13 +1,15 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 class PseudoBooleanInstance(object):
-    def __init__(self, constraints, objective = None):
+    def __init__(self, N, constraints, objective = None):
+        self.N = N
         self.constraints = constraints
         self.objective = objective
 
 def parse_opb_file(opb_file):
     """Parse a pseudo-Boolean satisfaction problem."""
 
+    # prepare constraint parsing
     def parse_terms(parts):
         weight = None
         literals = []
@@ -34,6 +36,7 @@ def parse_opb_file(opb_file):
 
         return terms
 
+    # parse all lines
     constraints = []
     objective = None
 
@@ -56,5 +59,13 @@ def parse_opb_file(opb_file):
 
             constraints.append((terms, relation, value))
 
-    return PseudoBooleanInstance(constraints, objective)
+    # compute basic properties
+    N = 0
+
+    for (terms, _, _) in constraints:
+        for (_, literals) in terms:
+            N = max(N, max(abs(l) for l in literals))
+
+    # ...
+    return PseudoBooleanInstance(N, constraints, objective)
 

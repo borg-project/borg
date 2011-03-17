@@ -84,9 +84,8 @@ class BilevelPortfolio(object):
 
         logger.info("solvers: %s", dict(enumerate(self._solver_names)))
 
-        ## acquire features
-        #features = [numpy.recfromcsv(path + ".features.csv").tolist() for path in train_paths]
-        features = None
+        # acquire features
+        features = [numpy.recfromcsv(path + ".features.csv").tolist() for path in train_paths]
 
         # fit our model
         self._model = borg.models.BilevelMultinomialModel(successes, attempts, features)
@@ -96,10 +95,8 @@ class BilevelPortfolio(object):
             return self._solve(cnf_path, budget, cores)
 
     def _solve(self, cnf_path, budget, cores):
-        ## obtain features
-        #logger.info("computing task features")
-        #(_, features) = borg.features.get_features_for(cnf_path)
-        features = None
+        # obtain features
+        features = borg.features.get_features_for(cnf_path)
 
         # select a solver
         queue = multiprocessing.Queue()
@@ -142,14 +139,7 @@ class BilevelPortfolio(object):
 
             # make a plan...
             remaining = budget - borg.get_accountant().total
-
-            if remaining.cpu_seconds is not None:
-                normal_cpu_budget = borg.machine_to_normal(remaining.cpu_seconds)
-            elif remaining.wall_seconds is not None:
-                normal_cpu_budget = borg.machine_to_normal(remaining.wall_seconds)
-            else:
-                normal_cpu_budget = 1e6
-
+            normal_cpu_budget = borg.machine_to_normal(borg.unicore_cpu_budget(remaining))
             (feasible_b,) = numpy.digitize([normal_cpu_budget], self._budgets)
 
             if feasible_b == 0:
@@ -206,7 +196,7 @@ class BilevelPortfolio(object):
             if len(running) == cores:
                 (solver_id, run_cpu_seconds, answer, terminated) = queue.get()
 
-                borg.get_accountant().charge(borg.Cost(cpu_seconds = run_cpu_seconds))
+                borg.get_accountant().charge_cpu(run_cpu_seconds)
 
                 solver = running.pop(solver_id)
 
