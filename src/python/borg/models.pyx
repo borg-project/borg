@@ -10,48 +10,7 @@ cimport numpy
 
 logger = cargo.get_logger(__name__, default_level = "DETAIL")
 
-def counts_from_paths(solvers, budgets, paths):
-    """Build success/attempt matrices from records."""
-
-    successes = numpy.empty((len(paths), len(solvers), len(budgets)))
-    attempts = numpy.empty((len(paths), len(solvers), len(budgets)))
-
-    for (i, path) in enumerate(paths):
-        (runs,) = borg.portfolios.get_task_run_data([path]).values()
-        (runs_successful, runs_attempted, _) = \
-            borg.portfolios.action_rates_from_runs(
-                solvers,
-                budgets,
-                runs.tolist(),
-                )
-
-        successes[i] = runs_successful
-        attempts[i] = runs_attempted
-
-    return (successes, attempts)
-
-def action_rates_from_runs(solver_index, budget_index, runs):
-    """Build a per-action success-rate matrix from running times."""
-
-    observed = numpy.zeros((len(solver_index), len(budget_index)))
-    counts = numpy.zeros((len(solver_index), len(budget_index)), int)
-
-    for (run_solver, _, run_budget, run_cost, run_answer) in runs:
-        if run_solver in solver_index:
-            solver_i = solver_index[run_solver]
-
-            for budget in budget_index:
-                budget_i = budget_index[budget]
-
-                if run_budget >= budget:
-                    counts[solver_i, budget_i] += 1
-
-                    if run_cost <= budget and run_answer is not None:
-                        observed[solver_i, budget_i] += 1.0
-
-    return (observed, counts, observed / counts)
-
-def outcome_matrices_from_paths(solver_index, budgets, paths):
+def outcome_matrices_from_paths(domain, solver_index, budgets, paths):
     """Build run-outcome matrices from records."""
 
     S = len(solver_index)
@@ -71,7 +30,7 @@ def outcome_matrices_from_paths(solver_index, budgets, paths):
 
                 attempts[n, s] += 1.0
 
-                if b < B and run_answer is not None:
+                if b < B and domain.is_final(run_answer):
                     successes[n, s, b] += 1.0
 
     return (successes, attempts)

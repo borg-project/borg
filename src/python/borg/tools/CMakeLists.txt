@@ -1,7 +1,3 @@
-#
-# source
-#
-
 install(
 	FILES
         __init__.py

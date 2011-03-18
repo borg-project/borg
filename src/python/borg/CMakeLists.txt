@@ -31,7 +31,6 @@ install(
 #
 
 add_subdirectory(tools)
-add_subdirectory(solvers)
-add_subdirectory(features)
+add_subdirectory(domains)
 add_subdirectory(test)
 

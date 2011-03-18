@@ -87,40 +87,17 @@ class FakeSolver(object):
 
         self._run_position = None
 
-#subsolvers = [
-    #"kcnfs-2006",
-    #"hybridGM3",
-    #"NCVWr",
-    #"gnovelty+2",
-    #"iPAWS",
-    #"adaptg2wsat2009++",
-    #"TNM",
-    #"march_hi",
-    #"FH",
-    #]
-subsolvers = [
-    "pbct-0.1.2-linear",
-    "bsolo_pb10-l1",
-    "bsolo_pb10-l2",
-    "bsolo_pb10-l3",
-    "wbo1.4a",
-    "wbo1.4b-fixed",
-    "clasp-1.3.7",
-    "sat4j-pb-v20101225",
-    "sat4j-pb-v20101225-cutting",
-    ]
+class FakeDomain(object):
+    def __init__(self, real, solvers):
+        self.extensions = real.extensions
+        self.is_final = real.is_final
+        self.compute_features = real.compute_features
+        self.solvers = solvers
 
-def fake_solver(solver_name):
-    return lambda *args: FakeSolver(solver_name, *args)
-
-core_solvers = dict(zip(subsolvers, map(fake_solver, subsolvers)))
-
-portfolios = borg.portfolios.named.copy()
-
-def run_validation(name, train_paths, test_paths, budget, split):
+def run_validation(name, domain, train_paths, test_paths, budget, split):
     """Make a validation run."""
 
-    solver = portfolios[name](core_solvers, train_paths)
+    solver = borg.portfolios.named[name](domain, train_paths, 50.0, 42)
     successes = []
 
     logger.info("running portfolio %s with per-task budget %.2f", name, budget)
@@ -163,12 +140,14 @@ def run_validation(name, train_paths, test_paths, budget, split):
 
 @plac.annotations(
     out_path = ("path to results file", "positional", None, os.path.abspath),
+    domain_name = ("name of problem domain"),
+    budget = ("CPU seconds per instance", "positional", None, float),
     tasks_root = ("path to task files", "positional", None, os.path.abspath),
     tests_root = ("optional separate test set", "positional", None, os.path.abspath),
     runs = ("number of runs", "option", "r", int),
     workers = ("submit jobs?", "option", "w", int),
     )
-def main(out_path, tasks_root, tests_root = None, runs = 16, workers = 0):
+def main(out_path, domain_name, budget, tasks_root, tests_root = None, runs = 16, workers = 0):
     """Collect validation results."""
 
     cargo.enable_default_logging()
@@ -176,17 +155,27 @@ def main(out_path, tasks_root, tests_root = None, runs = 16, workers = 0):
     cargo.get_logger("borg.portfolios", level = "DETAIL")
 
     def yield_runs():
-        #paths = list(cargo.files_under(tasks_root, ["*.cnf"])) # XXX
-        paths = list(cargo.files_under(tasks_root, ["*.opb"]))
+        # build solver set
+        real_domain = borg.get_domain(domain_name)
+
+        def fake_solver(solver_name):
+            return cargo.curry(FakeSolver, solver_name)
+
+        fake_solvers = dict(zip(real_domain.solvers, map(fake_solver, real_domain.solvers)))
+        domain = FakeDomain(real_domain, fake_solvers)
+
+        # build train and test sets
+        paths = list(cargo.files_under(tasks_root, domain.extensions))
         examples = int(round(len(paths) * 0.50))
 
         logger.info("found %i training tasks", len(paths))
 
         if tests_root is not None:
-            #tests_root_paths = list(cargo.files_under(tests_root, ["*.cnf"]))
-            tests_root_paths = list(cargo.files_under(tests_root, ["*.opb"])) # XXX
+            tests_root_paths = list(cargo.files_under(tests_root, domain.extensions))
 
+        # build validation runs
         for _ in xrange(runs):
+            split = uuid.uuid4()
             shuffled = sorted(paths, key = lambda _ : numpy.random.rand())
             train_paths = shuffled[:examples]
 
@@ -195,10 +184,8 @@ def main(out_path, tasks_root, tests_root = None, runs = 16, workers = 0):
             else:
                 test_paths = tests_root_paths
 
-            split = uuid.uuid4()
-
-            for name in portfolios:
-                yield (run_validation, [name, train_paths, test_paths, 2600.0, split])
+            for name in borg.portfolios.named:
+                yield (run_validation, [name, domain, train_paths, test_paths, budget, split])
 
     with open(out_path, "w") as out_file:
         writer = csv.writer(out_file)

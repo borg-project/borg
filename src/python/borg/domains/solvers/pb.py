@@ -74,7 +74,7 @@ def parse_pb_output(stdout):
 def basic_solver(name, command):
     """Return a basic competition solver callable."""
 
-    from borg.solvers.common import MonitoredSolver
+    from borg.domains.solvers.common import MonitoredSolver
 
     # XXX does this really need to support pickling?
     return cargo.curry(MonitoredSolver, parse_pb_output, command)

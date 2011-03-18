@@ -70,17 +70,23 @@ def plan_knapsack_multiverse(tclass_weights_W, tclass_rates_WSB):
 class BilevelPortfolio(object):
     """Bilevel mixture-model portfolio."""
 
-    def __init__(self, solvers, train_paths):
+    def __init__(self, domain, train_paths, budget_interval, budget_count):
         # build action set
-        self._solvers = solvers
-        self._budgets = budgets = [(b + 1) * 50.0 for b in xrange(42)] # XXX
+        self._domain = domain
+        self._budgets = [b * budget_interval for b in xrange(1, budget_count + 1)]
 
         # acquire running time data
-        self._solver_names = list(solvers)
+        self._solver_names = list(self._domain.solvers)
         self._solver_name_index = dict(map(reversed, enumerate(self._solver_names)))
         self._budget_index = dict(map(reversed, enumerate(self._budgets)))
 
-        (successes, attempts) = borg.models.outcome_matrices_from_paths(self._solver_name_index, self._budgets, train_paths)
+        (successes, attempts) = \
+            borg.models.outcome_matrices_from_paths(
+                self._domain,
+                self._solver_name_index,
+                self._budgets,
+                train_paths,
+                )
 
         logger.info("solvers: %s", dict(enumerate(self._solver_names)))
 
@@ -96,7 +102,7 @@ class BilevelPortfolio(object):
 
     def _solve(self, cnf_path, budget, cores):
         # obtain features
-        features = borg.features.get_features_for(cnf_path)
+        features = borg.get_features_for(self._domain, cnf_path)
 
         # select a solver
         queue = multiprocessing.Queue()
@@ -162,7 +168,7 @@ class BilevelPortfolio(object):
             else:
                 s = a
                 name = self._solver_names[s]
-                solver = self._solvers[name](cnf_path, queue, uuid.uuid4())
+                solver = self._domain.solvers[name](cnf_path, queue, uuid.uuid4())
                 solver.s = s
                 solver.cpu_cost = 0.0
 
@@ -202,7 +208,7 @@ class BilevelPortfolio(object):
 
                 solver.cpu_cost += borg.machine_to_normal(run_cpu_seconds)
 
-                if answer is not None:
+                if self._domain.is_final(answer):
                     break
                 elif terminated:
                     failed.append(solver)

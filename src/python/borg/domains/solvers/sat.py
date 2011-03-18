@@ -55,7 +55,7 @@ def parse_sat_output(stdout):
 def basic_solver(name, command):
     """Return a basic competition solver callable."""
 
-    from borg.solvers.common import MonitoredSolver
+    from borg.domains.solvers.common import MonitoredSolver
 
     return cargo.curry(MonitoredSolver, parse_sat_output, command)
 

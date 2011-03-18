@@ -17,30 +17,30 @@ logger = cargo.get_logger(__name__, default_level = "INFO")
 
 @plac.annotations(
     out_path = ("path to store solver"),
-    name = ("name of the portfolio to train"),
+    portfolio_name = ("name of the portfolio to train"),
+    domain_name = ("name of the problem domain"),
     tasks_roots = ("paths to training task directories"),
     )
-def main(out_path, name, *tasks_roots):
+def main(out_path, portfolio_name, domain_name, *tasks_roots):
     """Train a solver."""
 
     cargo.enable_default_logging()
 
     # find the training tasks
+    domain = borg.domains.named[domain_name]
     train_paths = []
     
     for tasks_root in tasks_roots:
-        train_paths.extend(cargo.files_under(tasks_root, ["*.cnf"]))
+        train_paths.extend(cargo.files_under(tasks_root, domain.extensions))
 
     logger.info("using %i tasks for training", len(train_paths))
 
     # train the portfolio
-    solvers = borg.solvers.named
-    trainers = borg.portfolios.named
-    solver = trainers[name](solvers, train_paths)
+    solver = borg.portfolios.named[portfolio_name](domain, train_paths)
 
     logger.info("portfolio training complete")
 
-    # write the portfolio to disk
+    # write it to disk
     with open(out_path, "w") as out_file:
         pickle.dump(solver, out_file, protocol = -1)
 
