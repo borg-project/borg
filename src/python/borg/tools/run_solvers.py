@@ -16,10 +16,10 @@ import borg
 
 logger = cargo.get_logger(__name__, default_level = "INFO")
 
-def run_solver_on(solver_name, cnf_path, budget):
+def run_solver_on(domain, solver_name, cnf_path, budget):
     """Run a solver."""
 
-    (cost, answer) = borg.solvers.pb.named[solver_name](cnf_path)(budget)
+    (cost, answer) = domain.solvers[solver_name](cnf_path)(budget)
 
     if answer is None:
         short_answer = None
@@ -59,7 +59,7 @@ def main(domain_name, tasks_root, budget, runs = 4, workers = 0):
         for _ in xrange(runs):
             for solver_name in domain.solvers:
                 for path in paths:
-                    yield (run_solver_on, [solver_name, path, budget])
+                    yield (run_solver_on, [domain, solver_name, path, budget])
 
     def collect_run((_, arguments), row):
         (_, cnf_path, _) = arguments
