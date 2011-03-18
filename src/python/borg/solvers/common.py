@@ -22,22 +22,28 @@ def random_seed():
 
     return numpy.random.randint(0, 2**31)
 
+@cargo.composed(list)
 def timed_read(fds, timeout = -1):
-    """Read with an optional timeout."""
+    """Read from multiple descriptors with an optional timeout."""
 
+    # poll for I/O events
     polling = select.poll()
 
     for fd in fds:
         polling.register(fd, select.POLLIN)
 
-    changed = polling.poll(timeout * 1000)
-    chunks = {}
+    changed = dict(polling.poll(timeout * 1000))
 
-    for (fd, event) in changed:
-        if event & select.POLLIN:
-            chunks[fd] = os.read(fd, 65536)
+    # and interpret them
+    for fd in fds:
+        revents = changed.get(fd, 0)
 
-    return chunks
+        if revents & select.POLLIN:
+            yield os.read(fd, 65536)
+        elif revents & select.POLLHUP:
+            yield ""
+        else:
+            yield None
 
 class SolverProcess(multiprocessing.Process):
     """Attempt to solve the task in a subprocess."""
@@ -91,7 +97,7 @@ class SolverProcess(multiprocessing.Process):
         last_expenditure = expenditure
         last_audit = time.time() - 1.0
 
-        while True:
+        while limit == 0.0 or self._popened is not None:
             if expenditure >= datetime.timedelta(seconds = limit):
                 if self._popened is not None:
                     os.kill(popened.pid, signal.SIGSTOP)
@@ -104,18 +110,16 @@ class SolverProcess(multiprocessing.Process):
                 last_expenditure = expenditure
 
                 if self._popened is None:
-                    self._popened = popened = cargo.unix.sessions.spawn_pty_session(self._arguments, {})
-                    popened_fds = [popened.stdout.fileno(), popened.stderr.fileno()]
+                    popened = cargo.unix.sessions.spawn_pipe_session(self._arguments, {})
+                    self._popened = popened
+
+                    descriptors = [popened.stdout.fileno(), popened.stderr.fileno()]
                     accountant = cargo.unix.accounting.SessionTimeAccountant(popened.pid)
                 else:
                     os.kill(popened.pid, signal.SIGCONT)
 
             # spend some time waiting for output
-            chunks = timed_read(popened_fds, 1.0)
-            chunk = chunks.get(popened.stdout.fileno())
-
-            if chunk is not None:
-                stdout += chunk
+            (chunk, _) = timed_read(descriptors, 1.0)
 
             if time.time() - last_audit > borg.defaults.proc_poll_period:
                 accountant.audit()
@@ -124,10 +128,10 @@ class SolverProcess(multiprocessing.Process):
                 last_audit = time.time()
 
             # check for termination
-            if chunk is None and popened.poll() is not None:
+            if chunk == "":
                 self._popened = None
-
-                break
+            elif chunk is not None:
+                stdout += chunk
 
         # provide the outcome to the central planner
         answer = self._parse_output(stdout)

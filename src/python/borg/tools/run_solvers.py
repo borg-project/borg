@@ -19,9 +19,12 @@ logger = cargo.get_logger(__name__, default_level = "INFO")
 def run_solver_on(solver_name, cnf_path, budget):
     """Run a solver."""
 
-    solver = borg.solvers.pb.named[solver_name](cnf_path) # XXX
-    (cost, answer) = solver(budget)
-    short_answer = None if answer is None else bool(answer)
+    (cost, answer) = borg.solvers.pb.named[solver_name](cnf_path)(budget)
+
+    if answer is None:
+        short_answer = None
+    else:
+        (short_answer, _) = answer
 
     logger.info(
         "%s reported %s in %.2f (of %.2f) on %s",
@@ -36,11 +39,11 @@ def run_solver_on(solver_name, cnf_path, budget):
 
 @plac.annotations(
     tasks_root = ("path to task files", "positional", None, os.path.abspath),
+    budget = ("per-instance budget", "positional", None, float),
     runs = ("number of runs", "option", "r", int),
-    budget = ("per-instance budget", "option", "b", float),
     workers = ("submit jobs?", "option", "w", int),
     )
-def main(tasks_root, runs = 4, budget = 2600.0, workers = 0):
+def main(tasks_root, budget, runs = 4, workers = 0):
     """Collect solver running-time data."""
 
     cargo.enable_default_logging()
