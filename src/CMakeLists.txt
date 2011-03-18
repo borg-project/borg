@@ -17,5 +17,4 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_EXTRA}")
 #
 
 add_subdirectory(python)
-add_subdirectory(scripts)
 

@@ -15,17 +15,13 @@ install(
         borg_models
     DESTINATION lib/borg
     )
-
-#
-# source
-#
-
 install(
     FILES
         defaults.py
-        features.py
         portfolios.py
         bilevel.py
+        opb.py
+        expenses.py
         __init__.py
     DESTINATION lib/borg
     )
@@ -36,4 +32,6 @@ install(
 
 add_subdirectory(tools)
 add_subdirectory(solvers)
+add_subdirectory(features)
+add_subdirectory(test)
 

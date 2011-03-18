@@ -26,17 +26,20 @@ def main(tasks_root, workers = 0):
     cargo.enable_default_logging()
 
     def yield_runs():
-        paths = list(cargo.files_under(tasks_root, ["*.cnf"]))
+        #paths = list(cargo.files_under(tasks_root, ["*.cnf"]))
+        paths = list(cargo.files_under(tasks_root, ["*.opb"])) # XXX
 
         for path in paths:
-            yield (borg.features.get_features_for, [path])
+            #yield (borg.features.get_features_for, [path]) # XXX
+            yield (borg.features.pb.path_compute_all, [path])
 
-    def collect_run((_, arguments), rows):
+    def collect_run((_, arguments), (names, values)):
         (cnf_path,) = arguments
         csv_path = cnf_path + ".features.csv"
 
         with open(csv_path, "w") as csv_file:
-            csv.writer(csv_file).writerows(rows)
+            csv.writer(csv_file).writerow(names)
+            csv.writer(csv_file).writerow(values)
 
     cargo.distribute_or_labor(yield_runs(), workers, collect_run)
 

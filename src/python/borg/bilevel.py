@@ -73,7 +73,7 @@ class BilevelPortfolio(object):
     def __init__(self, solvers, train_paths):
         # build action set
         self._solvers = solvers
-        self._budgets = budgets = [(b + 1) * 50.0 for b in xrange(42)]
+        self._budgets = budgets = [(b + 1) * 50.0 for b in xrange(42)] # XXX
 
         # acquire running time data
         self._solver_names = list(solvers)
@@ -84,44 +84,21 @@ class BilevelPortfolio(object):
 
         logger.info("solvers: %s", dict(enumerate(self._solver_names)))
 
-        ## acquire features
-        #features = [numpy.recfromcsv(path + ".features.csv").tolist() for path in train_paths]
-        features = None
+        # acquire features
+        features = [numpy.recfromcsv(path + ".features.csv").tolist() for path in train_paths]
 
         # fit our model
         self._model = borg.models.BilevelMultinomialModel(successes, attempts, features)
 
     def __call__(self, cnf_path, budget, cores = 1):
-        # track computational cost
-        budget /= borg.defaults.machine_speed
+        with borg.accounting():
+            return self._solve(cnf_path, budget, cores)
 
-        if cores == 1:
-            previous_utime = resource.getrusage(resource.RUSAGE_SELF).ru_utime
-        else:
-            start_wall = time.time()
-
-        # print oracle knowledge, if any
-        (runs,) = borg.portfolios.get_task_run_data([cnf_path]).values()
-        (oracle_history, oracle_counts, _) = \
-            borg.portfolios.action_rates_from_runs(
-                self._solver_name_index,
-                self._budget_index,
-                runs.tolist(),
-                )
-        true_rates = oracle_history / oracle_counts
-
-        logger.info("true rates:\n%s", cargo.pretty_probability_matrix(true_rates))
-
-        ## obtain features
-        #logger.info("computing task features")
-
-        #(_, features) = borg.features.get_features_for(cnf_path)
-        #features_cost = features[0]
-        features = None
-        features_cost = 0.0
+    def _solve(self, cnf_path, budget, cores):
+        # obtain features
+        features = borg.features.get_features_for(cnf_path)
 
         # select a solver
-        total_cost = features_cost / borg.defaults.machine_speed
         queue = multiprocessing.Queue()
         running = {}
         paused = []
@@ -133,8 +110,8 @@ class BilevelPortfolio(object):
             failed_indices = []
 
             for solver in failed + paused + running.values():
-                (total_b,) = numpy.digitize([solver.budgeted], self._budgets)
-                if total_b == 0: # hack
+                (total_b,) = numpy.digitize([solver.cpu_budgeted], self._budgets)
+                if total_b == 0: # XXX hack
                     total_b += 1
 
                 failed_indices.append((solver.s, total_b - 1))
@@ -147,8 +124,8 @@ class BilevelPortfolio(object):
 
             for solver in paused:
                 s = solver.s
-                (c,) = numpy.digitize([solver.total], self._budgets)
-                if c > 0: # hack
+                (c,) = numpy.digitize([solver.cpu_cost], self._budgets)
+                if c > 0: # XXX hack
                     c -= 1
 
                 paused_tclass_LB = numpy.zeros((L, B))
@@ -160,16 +137,10 @@ class BilevelPortfolio(object):
 
             augmented_tclass_rates_LAB = numpy.hstack(augmented_tclass_arrays)
 
-            # update cost tracking
-            if cores == 1:
-                utime = resource.getrusage(resource.RUSAGE_SELF).ru_utime
-                total_cost += (utime - previous_utime) / borg.defaults.machine_speed
-                previous_utime = utime
-            else:
-                total_cost = (time.time() - start_wall) / borg.defaults.machine_speed
-
             # make a plan...
-            (feasible_b,) = numpy.digitize([budget - total_cost], self._budgets)
+            remaining = budget - borg.get_accountant().total
+            normal_cpu_budget = borg.machine_to_normal(borg.unicore_cpu_budget(remaining))
+            (feasible_b,) = numpy.digitize([normal_cpu_budget], self._budgets)
 
             if feasible_b == 0:
                 break
@@ -182,7 +153,7 @@ class BilevelPortfolio(object):
 
             # interpret the plan's first action
             (a, c) = raw_plan[0]
-            planned_cost = self._budgets[c]
+            planned_cpu_cost = self._budgets[c]
 
             if a >= S:
                 solver = paused.pop(a - S)
@@ -193,12 +164,13 @@ class BilevelPortfolio(object):
                 name = self._solver_names[s]
                 solver = self._solvers[name](cnf_path, queue, uuid.uuid4())
                 solver.s = s
-                solver.total = 0.0
+                solver.cpu_cost = 0.0
 
-            if budget - total_cost - planned_cost < self._budgets[0]:
-                max_cost = budget - total_cost
+            # don't waste our final seconds before the buzzer
+            if normal_cpu_budget - planned_cpu_cost < self._budgets[0]:
+                planned_cpu_cost = normal_cpu_budget
             else:
-                max_cost = planned_cost
+                planned_cpu_cost = planned_cpu_cost
 
             # be informative
             augmented_tclass_cmf_LAB = numpy.cumsum(augmented_tclass_rates_LAB, axis = -1)
@@ -208,28 +180,27 @@ class BilevelPortfolio(object):
             logger.info(
                 "running %s@%i for %i with %i remaining (b = %.2f)",
                 name,
-                solver.total * borg.defaults.machine_speed,
-                max_cost * borg.defaults.machine_speed,
-                (budget - total_cost) * borg.defaults.machine_speed,
+                borg.normal_to_machine(solver.cpu_cost),
+                borg.normal_to_machine(planned_cpu_cost),
+                remaining.cpu_seconds,
                 subjective_rate,
                 )
 
             # ... and follow through
-            solver.go(max_cost * borg.defaults.machine_speed)
+            solver.unpause_for(borg.normal_to_machine(planned_cpu_cost))
 
             running[solver._solver_id] = solver
-            solver.budgeted = solver.total + max_cost
+
+            solver.cpu_budgeted = solver.cpu_cost + planned_cpu_cost
 
             if len(running) == cores:
-                (solver_id, run_cost, answer, terminated) = queue.get()
+                (solver_id, run_cpu_seconds, answer, terminated) = queue.get()
 
-                run_cost /= borg.defaults.machine_speed
-                solver.total += run_cost
-
-                if cores == 1:
-                    total_cost += run_cost
+                borg.get_accountant().charge_cpu(run_cpu_seconds)
 
                 solver = running.pop(solver_id)
+
+                solver.cpu_cost += borg.machine_to_normal(run_cpu_seconds)
 
                 if answer is not None:
                     break
@@ -239,9 +210,9 @@ class BilevelPortfolio(object):
                     paused.append(solver)
 
         for process in paused + running.values():
-            process.die()
+            process.stop()
 
-        return (total_cost, answer, None)
+        return answer
 
 borg.portfolios.named["borg-mix+class"] = BilevelPortfolio
 

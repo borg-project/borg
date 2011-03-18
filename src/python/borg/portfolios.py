@@ -74,22 +74,30 @@ class RandomPortfolio(object):
 
         try:
             for solver in solvers:
-                solver.go(budget)
+                solver.unpause_for(borg.unicore_cpu_budget(budget))
 
-            while True:
-                (solver_id, run_cost, answer, _) = queue.get()
+            remaining = len(solvers)
+
+            while remaining > 0:
+                (solver_id, run_cpu_cost, answer, _) = queue.get()
+
+                remaining -= 1
+
+                borg.get_accountant().charge_cpu(run_cpu_cost)
 
                 if answer is not None:
-                    return (run_cost, answer)
+                    return answer
+
+            return None
         finally:
             for solver in solvers:
-                solver.die()
+                solver.stop()
 
 class BaselinePortfolio(object):
     """Baseline portfolio."""
 
     def __init__(self, solvers, train_paths):
-        budgets = [500]
+        budgets = [2600.0] # XXX
         solver_rindex = dict(enumerate(solvers))
         solver_index = dict(map(reversed, solver_rindex.items()))
         budget_rindex = dict(enumerate(budgets))
@@ -109,23 +117,10 @@ class BaselinePortfolio(object):
 
         self._best = solvers[solver_rindex[numpy.argmax(rates)]]
 
-    def __call__(self, cnf_path, budget):
-        return self._best(cnf_path, budget)
+    def __call__(self, cnf_path, budget, cores = 1):
+        assert cores == 1
 
-class OraclePortfolio(object):
-    """Oracle-approximate portfolio."""
-
-    def __init__(self, solvers, train_paths):
-        self._solvers = solvers
-
-    def __call__(self, cnf_path, budget):
-        solver_rindex = dict(enumerate(self._solvers))
-        solver_index = dict(map(reversed, solver_rindex.items()))
-        (runs,) = get_task_run_data([cnf_path]).values()
-        (_, _, rates) = action_rates_from_runs(solver_index, {budget: 0}, runs.tolist())
-        best = self._solvers[solver_rindex[numpy.argmax(rates)]]
-
-        return best(cnf_path, budget)
+        return self._best(cnf_path)(borg.unicore_cpu_budget(budget))
 
 def knapsack_plan(rates, solver_rindex, budgets, remaining):
     """
@@ -180,50 +175,39 @@ def knapsack_plan(rates, solver_rindex, budgets, remaining):
     return [(solver_rindex[s], budgets[c]) for (s, c) in reordered]
 
 class UberOraclePortfolio(object):
-    """Oracle-approximate planning portfolio."""
+    """Optimal discrete-budget portfolio."""
 
     def __init__(self, solvers, train_paths):
         self._solvers = solvers
-        self._budgets = [(b + 1) * 100.0 for b in xrange(50)]
+        self._budgets = [(b + 1) * 50.0 for b in xrange(42)]
         self._solver_rindex = dict(enumerate(self._solvers))
         self._solver_index = dict(map(reversed, self._solver_rindex.items()))
         self._budget_rindex = dict(enumerate(self._budgets))
         self._budget_index = dict(map(reversed, self._budget_rindex.items()))
 
-    def __call__(self, cnf_path, budget):
-        logger.debug("solving %s", cnf_path)
+    def __call__(self, cnf_path, budget, cores = 1):
+        assert cores == 1
 
         # grab known run data
         (runs,) = get_task_run_data([cnf_path]).values()
         (_, _, rates) = action_rates_from_runs(self._solver_index, self._budget_index, runs.tolist())
 
-        # make a plan
-        plan = knapsack_plan(rates, self._solver_rindex, self._budgets, budget)
-
-        # follow through
-        total_cost = 0.0
-        answer = None
-
-        for (name, cost) in plan:
-            solver = self._solvers[name]
-            (run_cost, answer, _) = solver(cnf_path, cost)
-
-            b = self._budget_index[cost]
-            logger.debug(
-                "ran %s@%i with %is; yielded %s (p = %f)",
-                name,
-                cost,
-                budget - total_cost,
-                answer,
-                rates[self._solver_index[name], b],
+        # make a plan, and follow through
+        plan = \
+            knapsack_plan(
+                rates,
+                self._solver_rindex,
+                self._budgets,
+                borg.unicore_cpu_budget(budget),
                 )
 
-            total_cost += run_cost
+        for (name, cost) in plan:
+            answer = self._solvers[name](cnf_path)(cost)
 
             if answer is not None:
-                break
+                return answer
 
-        return (total_cost, answer, None)
+        return None
 
 class ClassifierPortfolio(object):
     """Classifier-based portfolio."""
@@ -231,7 +215,7 @@ class ClassifierPortfolio(object):
     def __init__(self, solvers, train_paths):
         self._solvers = solvers
 
-        action_budget = 5000
+        action_budget = 2600 # XXX
         solver_rindex = dict(enumerate(solvers))
         solver_index = dict(map(reversed, solver_rindex.items()))
         budget_rindex = dict(enumerate([action_budget]))
@@ -261,34 +245,28 @@ class ClassifierPortfolio(object):
 
             model.fit(train_xs[solver], train_ys[solver])
 
-    def __call__(self, cnf_path, budget):
+    def __call__(self, task_path, budget, cores = 1):
+        assert cores == 1
+
         # obtain features
-        csv_path = cnf_path + ".features.csv"
-
-        if os.path.exists(csv_path):
-            features = numpy.recfromcsv(csv_path).tolist()
-        else:
-            (_, features) = borg.features.get_features_for(cnf_path)
-
-        features_cost = features[0]
+        with borg.accounting() as features_accountant:
+            features = borg.features.get_features_for(task_path)
 
         # select a solver
         scores = [(s, m.predict_proba([features])[0, -1]) for (s, m) in self._models.items()]
         (name, probability) = max(scores, key = lambda (_, p): p)
-        selected = self._solvers[name]
 
-        logger.debug("selected %s on %s", name, os.path.basename(cnf_path))
+        logger.debug("selected %s on %s", name, os.path.basename(task_path))
 
         # run the solver
-        (run_cost, run_answer, _) = selected(cnf_path, budget - features_cost)
+        run_cpu_budget = borg.unicore_cpu_budget(budget - features_accountant.total)
 
-        return (features_cost + run_cost, run_answer, None)
+        return self._solvers[name](task_path)(run_cpu_budget)
 
 named = {
     #"random": RandomPortfolio,
     #"baseline": BaselinePortfolio,
-    #"oracle": OraclePortfolio,
-    #"uber-oracle": UberOraclePortfolio,
-    #"classifier": ClassifierPortfolio,
+    "uber-oracle": UberOraclePortfolio,
+    "classifier": ClassifierPortfolio,
     }
 

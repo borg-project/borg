@@ -54,17 +54,19 @@ class FakeSolver(object):
     def __call__(self, budget):
         """Unpause the solver, block for some limit, and terminate it."""
 
-        self.go(budget)
+        self.unpause_for(budget)
 
-        (solver_id, run_cost, answer, terminated) = self._stm_queue.get()
+        (solver_id, run_cpu_cost, answer, terminated) = self._stm_queue.get()
 
         assert solver_id == self._solver_id
 
-        self.die()
+        self.stop()
 
-        return (run_cost, answer)
+        borg.get_accountant().charge_cpu(run_cpu_cost)
 
-    def go(self, budget):
+        return answer
+
+    def unpause_for(self, budget):
         """Unpause the solver for the specified duration."""
 
         assert self._run_position is not None
@@ -80,7 +82,7 @@ class FakeSolver(object):
 
             self._run_position = new_position
 
-    def die(self):
+    def stop(self):
         """Terminate the solver."""
 
         self._run_position = None
@@ -124,12 +126,27 @@ def run_validation(name, train_paths, test_paths, budget, split):
     logger.info("running portfolio %s with per-task budget %.2f", name, budget)
 
     for test_path in test_paths:
-        (cost, answer, _) = solver(test_path, budget)
+        ## print oracle knowledge, if any
+        #(runs,) = borg.portfolios.get_task_run_data([test_path]).values()
+        #(oracle_history, oracle_counts, _) = \
+            #borg.portfolios.action_rates_from_runs(
+                #self._solver_name_index,
+                #self._budget_index,
+                #runs.tolist(),
+                #)
+        #true_rates = oracle_history / oracle_counts
 
-        logger.info("answer to %s was %s", os.path.basename(test_path), answer)
+        #logger.debug("true rates:\n%s", cargo.pretty_probability_matrix(true_rates))
+
+        # run the portfolio
+        with borg.accounting() as accountant:
+            answer = solver(test_path, borg.Cost(cpu_seconds = budget))
+            cpu_seconds = accountant.total.cpu_seconds
+
+        logger.info("%s answered %s to %s", name, answer, os.path.basename(test_path))
 
         if answer is not None:
-            successes.append(cost)
+            successes.append(cpu_seconds)
 
     rate = float(len(successes)) / len(test_paths)
 
