@@ -166,22 +166,15 @@ def compute_vcg_vnode_degree_std(opb):
 def compute_vcg_cnode_degree_mean(opb):
     return numpy.mean(opb.vcg_degrees_C)
 
-def path_compute_all(opb_path):
+def compute_all(task):
     """Compute all features of a PB instance."""
 
-    # parse the instance and compute features
     with borg.accounting() as accountant:
-        with open(opb_path) as opb_file:
-            opb = borg.opb.parse_opb_file(opb_file)
+        computed = dict((k, v(task.opb)) for (k, v) in named.items())
 
-        logger.info("parsed %s in %.2f s", os.path.basename(opb_path), cpu_cost)
-
-        computed = dict((k, v(opb)) for (k, v) in named.items())
-
-    # account for and return them
     cpu_cost = accountant.total.cpu_seconds
 
-    logger.info("parsing + features took %.2f s", cpu_cost)
+    logger.info("feature computation took %.2f CPU seconds", cpu_cost)
 
     return (["cpu_cost"] + computed.keys(), [cpu_cost] + computed.values())
 

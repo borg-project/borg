@@ -12,6 +12,33 @@ import borg
 
 logger = cargo.get_logger(__name__, default_level = "INFO")
 
+def outcome_matrices_from_paths(solver_index, budgets, paths):
+    """Build run-outcome matrices from records."""
+
+    # XXX again, belongs in the generic "run storage" module
+
+    S = len(solver_index)
+    B = len(budgets)
+    N = len(paths)
+    successes = numpy.zeros((N, S, B))
+    attempts = numpy.zeros((N, S))
+
+    for (n, path) in enumerate(paths):
+        (runs,) = borg.portfolios.get_task_run_data([path]).values()
+
+        for (run_solver, _, run_budget, run_cost, run_answer) in runs.tolist():
+            s = solver_index.get(run_solver)
+
+            if s is not None and run_budget >= budgets[-1]:
+                b = numpy.digitize([run_cost], budgets)
+
+                attempts[n, s] += 1.0
+
+                if b < B and run_answer:
+                    successes[n, s, b] += 1.0
+
+    return (successes, attempts)
+
 def plan_knapsack_multiverse(tclass_weights_W, tclass_rates_WSB):
     """
     Generate an optimal plan for a static set of possible probability tables.
@@ -81,8 +108,7 @@ class BilevelPortfolio(object):
         self._budget_index = dict(map(reversed, enumerate(self._budgets)))
 
         (successes, attempts) = \
-            borg.models.outcome_matrices_from_paths(
-                self._domain,
+            outcome_matrices_from_paths(
                 self._solver_name_index,
                 self._budgets,
                 train_paths,
@@ -96,13 +122,13 @@ class BilevelPortfolio(object):
         # fit our model
         self._model = borg.models.BilevelMultinomialModel(successes, attempts, features)
 
-    def __call__(self, cnf_path, budget, cores = 1):
+    def __call__(self, task, budget, cores = 1):
         with borg.accounting():
-            return self._solve(cnf_path, budget, cores)
+            return self._solve(task, budget, cores)
 
-    def _solve(self, cnf_path, budget, cores):
+    def _solve(self, task, budget, cores):
         # obtain features
-        features = borg.get_features_for(self._domain, cnf_path)
+        (_, features) = self._domain.compute_features(task)
 
         # select a solver
         queue = multiprocessing.Queue()
@@ -168,7 +194,7 @@ class BilevelPortfolio(object):
             else:
                 s = a
                 name = self._solver_names[s]
-                solver = self._domain.solvers[name](cnf_path, queue, uuid.uuid4())
+                solver = self._domain.solvers[name](task, queue, uuid.uuid4())
                 solver.s = s
                 solver.cpu_cost = 0.0
 
@@ -208,7 +234,7 @@ class BilevelPortfolio(object):
 
                 solver.cpu_cost += borg.machine_to_normal(run_cpu_seconds)
 
-                if self._domain.is_final(answer):
+                if self._domain.is_final(task, answer):
                     break
                 elif terminated:
                     failed.append(solver)

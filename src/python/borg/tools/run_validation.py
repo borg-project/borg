@@ -11,6 +11,7 @@ import os.path
 import csv
 import uuid
 import itertools
+import contextlib
 import multiprocessing
 import numpy
 import cargo
@@ -35,7 +36,7 @@ class FakeSolver(object):
 
         # gather candidate runs, and select one
         runs = []
-        answer_map = {"": None, "True": True, "False": False}
+        answer_map = {"True": True, "False": False}
 
         with open(task_path + ".rtd.csv") as csv_file:
             reader = csv.reader(csv_file)
@@ -87,38 +88,48 @@ class FakeSolver(object):
 
         self._run_position = None
 
+class FakeSolverFactory(object):
+    def __init__(self, solver_name):
+        self._solver_name = solver_name
+
+    def __call__(self, task, stm_queue = None, solver_id = None):
+        return FakeSolver(self._solver_name, task, stm_queue = stm_queue, solver_id = solver_id)
+
 class FakeDomain(object):
+    name = "fake"
+
     def __init__(self, domain_name):
-        real = borg.get_domain(domain_name)
+        self._real = borg.get_domain(domain_name)
 
-        self.extensions = real.extensions
-        self.is_final = real.is_final
-        self.compute_features = real.compute_features
+        self.solvers = dict(zip(self._real.solvers, map(FakeSolverFactory, self._real.solvers)))
 
-        def fake_solver(solver_name):
-            return cargo.curry(FakeSolver, solver_name)
+    @property
+    def extensions(self):
+        return self._real.extensions
 
-        self.solvers = dict(zip(real.solvers, map(fake_solver, real.solvers)))
+    @contextlib.contextmanager
+    def task_from_path(self, task_path):
+        yield task_path
 
-    def path_to_task(self, task_path):
-        return task_path
+    def compute_features(self, task):
+        """Read or compute features of an instance."""
 
-    def get_features_for(domain, task_path): # XXX
-        """Read or compute features of a PB instance."""
+        csv_path = task + ".features.csv"
 
-        csv_path = task_path + ".features.csv"
+        assert os.path.exists(csv_path)
 
-        if os.path.exists(csv_path):
-            features_array = numpy.recfromcsv(csv_path)
-            features = features_array.tolist()
+        features_array = numpy.recfromcsv(csv_path)
+        features = features_array.tolist()
+        names = features_array.dtype.names
 
-            assert features_array.dtype.names[0] == "cpu_cost"
+        assert names[0] == "cpu_cost"
 
-            borg.get_accountant().charge_cpu(features[0])
-        else:
-            (_, features) = domain.compute_features(task_path)
+        borg.get_accountant().charge_cpu(features[0])
 
-        return features
+        return (names, features)
+
+    def is_final(self, task, answer):
+        return answer
 
 def run_validation(name, domain, train_paths, test_paths, budget, split):
     """Make a validation run."""
@@ -129,29 +140,25 @@ def run_validation(name, domain, train_paths, test_paths, budget, split):
     logger.info("running portfolio %s with per-task budget %.2f", name, budget)
 
     for test_path in test_paths:
-        ## print oracle knowledge, if any
-        #(runs,) = borg.portfolios.get_task_run_data([test_path]).values()
-        #(oracle_history, oracle_counts, _) = \
-            #borg.portfolios.action_rates_from_runs(
-                #self._solver_name_index,
-                #self._budget_index,
-                #runs.tolist(),
-                #)
-        #true_rates = oracle_history / oracle_counts
+        with domain.task_from_path(test_path) as test_task:
+            cost_budget = borg.Cost(cpu_seconds = budget)
 
-        #logger.debug("true rates:\n%s", cargo.pretty_probability_matrix(true_rates))
+            with borg.accounting() as accountant:
+                answer = solver(test_task, cost_budget)
 
-        # run the portfolio
-        test_task = domain.path_to_task(test_path)
-        cost_budget = borg.Cost(cpu_seconds = budget)
+            succeeded = domain.is_final(test_task, answer)
+            cpu_cost = accountant.total.cpu_seconds
 
-        with borg.accounting() as accountant:
-            answer = solver(test_task, cost_budget)
+            if succeeded:
+                successes.append(cpu_cost)
 
-        logger.info("%s answered %s to %s", name, answer, os.path.basename(test_path))
-
-        if domain.is_final(answer):
-            successes.append(accountant.total.cpu_seconds)
+            logger.info(
+                "%s %s on %s (%.2f CPU s)",
+                name,
+                "succeeded" if succeeded else "failed",
+                os.path.basename(test_path),
+                cpu_cost,
+                )
 
     rate = float(len(successes)) / len(test_paths)
 

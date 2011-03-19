@@ -12,14 +12,8 @@ def basic_command(relative):
 
     return ["{{root}}/{0}".format(relative), "{task}", "{seed}"]
 
-smallint_commands = {
+nlc_commands = {
     "pbct-0.1.2-linear": ["{root}/pbct-0.1.2-linux32", "--model", "{task}"],
-    "bsolo_pb10-l1": ["{root}/bsolo_pb10", "-t1000000", "-m2048", "-l1", "{task}"],
-    "bsolo_pb10-l2": ["{root}/bsolo_pb10", "-t1000000", "-m2048", "-l2", "{task}"],
-    "bsolo_pb10-l3": ["{root}/bsolo_pb10", "-t1000000", "-m2048", "-l3", "{task}"],
-    "wbo1.4a": ["{root}/wbo1.4a", "-time-limit=1000000", "-file-format=opb", "{task}"],
-    "wbo1.4b-fixed": ["{root}/wbo1.4b-fixed", "-time-limit=1000000", "-file-format=opb", "{task}"],
-    "clasp-1.3.7": ["{root}/clasp-1.3.7/clasp-1.3.7-x86-linux", "--seed={seed}", "{task}"],
     "sat4j-pb-v20101225": [
         "java",
         "-server",
@@ -36,12 +30,15 @@ smallint_commands = {
         "{task}",
         ],
     }
-#bigint_commands = {
-    #"pbct-0.1.2-linear": smallint_commands["pbct-0.1.2-linear"],
-    #"sat4j-pb-v20101225": smallint_commands["sat4j-pb-v20101225"],
-    #"sat4j-pb-v20101225-cutting": smallint_commands["sat4j-pb-v20101225-cutting"],
-    #}
-commands = smallint_commands
+lin_commands = {
+    "bsolo_pb10-l1": ["{root}/bsolo_pb10", "-t1000000", "-m2048", "-l1", "{task}"],
+    "bsolo_pb10-l2": ["{root}/bsolo_pb10", "-t1000000", "-m2048", "-l2", "{task}"],
+    "bsolo_pb10-l3": ["{root}/bsolo_pb10", "-t1000000", "-m2048", "-l3", "{task}"],
+    "wbo1.4a": ["{root}/wbo1.4a", "-time-limit=1000000", "-file-format=opb", "{task}"],
+    "wbo1.4b-fixed": ["{root}/wbo1.4b-fixed", "-time-limit=1000000", "-file-format=opb", "{task}"],
+    "clasp-1.3.7": ["{root}/clasp-1.3.7/clasp-1.3.7-x86-linux", "--seed={seed}", "{task}"],
+    }
+commands = dict(nlc_commands.items() + lin_commands.items())
 
 def parse_pb_output(stdout):
     """Parse a solver's standard competition-format output."""
@@ -67,17 +64,34 @@ def parse_pb_output(stdout):
 
         return (answer_type, certificate)
 
-    #logger.warning("NO ANSWER FOUND IN:\n%s", stdout)
-
     return None
 
-def basic_solver(name, command):
-    """Return a basic competition solver callable."""
+class PseudoBooleanSolverFactory(object):
+    def __init__(self, command):
+        self._command = command
 
-    from borg.domains.solvers.common import MonitoredSolver
+    def __call__(self, task, stm_queue = None, solver_id = None):
+        return \
+            borg.solver_io.RunningSolver(
+                parse_pb_output,
+                self._command,
+                task.path,
+                stm_queue = stm_queue,
+                solver_id = solver_id,
+                )
 
-    # XXX does this really need to support pickling?
-    return cargo.curry(MonitoredSolver, parse_pb_output, command)
+class LinearPseudoBooleanSolverFactory(PseudoBooleanSolverFactory):
+    def __call__(self, task, stm_queue = None, solver_id = None):
+        return \
+            borg.solver_io.RunningSolver(
+                parse_pb_output,
+                self._command,
+                task.get_linearized_path(),
+                stm_queue = stm_queue,
+                solver_id = solver_id,
+                )
 
-named = dict(zip(commands, itertools.starmap(basic_solver, commands.items())))
+nlc_named = dict(zip(nlc_commands, map(PseudoBooleanSolverFactory, nlc_commands.values())))
+lin_named = dict(zip(lin_commands, map(LinearPseudoBooleanSolverFactory, lin_commands.values())))
+named = dict(nlc_named.items() + lin_named.items())
 

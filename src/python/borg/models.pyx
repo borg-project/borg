@@ -10,31 +10,6 @@ cimport numpy
 
 logger = cargo.get_logger(__name__, default_level = "DETAIL")
 
-def outcome_matrices_from_paths(domain, solver_index, budgets, paths):
-    """Build run-outcome matrices from records."""
-
-    S = len(solver_index)
-    B = len(budgets)
-    N = len(paths)
-    successes = numpy.zeros((N, S, B))
-    attempts = numpy.zeros((N, S))
-
-    for (n, path) in enumerate(paths):
-        (runs,) = borg.portfolios.get_task_run_data([path]).values()
-
-        for (run_solver, _, run_budget, run_cost, run_answer) in runs.tolist():
-            s = solver_index.get(run_solver)
-
-            if s is not None and run_budget >= budgets[-1]:
-                b = numpy.digitize([run_cost], budgets)
-
-                attempts[n, s] += 1.0
-
-                if b < B and domain.is_final(run_answer):
-                    successes[n, s, b] += 1.0
-
-    return (successes, attempts)
-
 def assert_probabilities(array):
     """Assert that an array contains only valid probabilities."""
 

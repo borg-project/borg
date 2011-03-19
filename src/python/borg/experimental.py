@@ -4,6 +4,18 @@
 Unfinished and/or experimental code. Read at your own risk.
 """
 
+    ## print oracle knowledge, if any
+    #(runs,) = borg.portfolios.get_task_run_data([test_path]).values()
+    #(oracle_history, oracle_counts, _) = \
+        #borg.portfolios.action_rates_from_runs(
+            #self._solver_name_index,
+            #self._budget_index,
+            #runs.tolist(),
+            #)
+    #true_rates = oracle_history / oracle_counts
+
+    #logger.debug("true rates:\n%s", cargo.pretty_probability_matrix(true_rates))
+
 def plan_knapsack_multiverse_speculative(model, failures, budgets, remaining):
     """Multiverse knapsack planner with speculative reordering."""
 
