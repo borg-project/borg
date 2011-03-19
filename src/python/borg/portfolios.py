@@ -24,6 +24,8 @@ def fpe_handling(**kwargs):
 
     numpy.seterr(**previous)
 
+# XXX this code should be moved into a "run outcome storage" module
+
 def get_task_run_data(task_paths):
     """Load running times associated with tasks."""
 
@@ -35,7 +37,7 @@ def get_task_run_data(task_paths):
 
     return data
 
-def action_rates_from_runs(domain, solver_index, budget_index, runs):
+def action_rates_from_runs(solver_index, budget_index, runs):
     """Build a per-action success-rate matrix from running times."""
 
     observed = numpy.zeros((len(solver_index), len(budget_index)))
@@ -51,7 +53,7 @@ def action_rates_from_runs(domain, solver_index, budget_index, runs):
                 if run_budget >= budget:
                     counts[solver_i, budget_i] += 1
 
-                    if run_cost <= budget and domain.is_final(run_answer):
+                    if run_cost <= budget and run_answer:
                         observed[solver_i, budget_i] += 1.0
 
     return (observed, counts, observed / counts)
@@ -62,13 +64,13 @@ class RandomPortfolio(object):
     def __init__(self, domain, train_paths, budget_interval, budget_count):
         self._domain = domain
     
-    def __call__(self, cnf_path, budget, cores = 1):
+    def __call__(self, task, budget, cores = 1):
         queue = multiprocessing.Queue()
         solvers = []
 
         for _ in xrange(cores):
             solver_id = uuid.uuid4()
-            solver = cargo.grab(self._domain.solvers.values())(cnf_path, queue, solver_id)
+            solver = cargo.grab(self._domain.solvers.values())(task, queue, solver_id)
 
             solvers.append(solver)
 
@@ -85,7 +87,7 @@ class RandomPortfolio(object):
 
                 borg.get_accountant().charge_cpu(run_cpu_cost)
 
-                if self._domain.is_final(answer):
+                if self._domain.is_final(task, answer):
                     return answer
 
             return None
@@ -97,20 +99,16 @@ class BaselinePortfolio(object):
     """Baseline portfolio."""
 
     def __init__(self, domain, train_paths, budget_interval, budget_count):
-        budgets = [budget_interval * budget_count]
         solver_rindex = dict(enumerate(domain.solvers))
         solver_index = dict(map(reversed, solver_rindex.items()))
-        budget_rindex = dict(enumerate(budgets))
-        budget_index = dict(map(reversed, budget_rindex.items()))
         train = get_task_run_data(train_paths)
         rates = None
 
         for runs in train.values():
             (_, _, task_rates) = \
                 action_rates_from_runs(
-                    domain,
                     solver_index,
-                    budget_index,
+                    {budget_interval * budget_count: 0},
                     runs.tolist(),
                     )
 
@@ -123,10 +121,10 @@ class BaselinePortfolio(object):
 
         self._best = domain.solvers[solver_rindex[numpy.argmax(rates)]]
 
-    def __call__(self, cnf_path, budget, cores = 1):
+    def __call__(self, task, budget, cores = 1):
         assert cores == 1
 
-        return self._best(cnf_path)(borg.unicore_cpu_budget(budget))
+        return self._best(task)(borg.unicore_cpu_budget(budget))
 
 def knapsack_plan(rates, solver_rindex, budgets, remaining):
     """
@@ -184,6 +182,8 @@ class UberOraclePortfolio(object):
     """Optimal discrete-budget portfolio."""
 
     def __init__(self, domain, train_paths, budget_interval, budget_count):
+        assert domain.name == "fake"
+
         self._domain = domain
         self._budgets = [b * budget_interval for b in xrange(1, budget_count + 1)]
         self._solver_rindex = dict(enumerate(domain.solvers))
@@ -191,14 +191,13 @@ class UberOraclePortfolio(object):
         self._budget_rindex = dict(enumerate(self._budgets))
         self._budget_index = dict(map(reversed, self._budget_rindex.items()))
 
-    def __call__(self, cnf_path, budget, cores = 1):
+    def __call__(self, task, budget, cores = 1):
         assert cores == 1
 
         # grab known run data
-        (runs,) = get_task_run_data([cnf_path]).values()
+        (runs,) = get_task_run_data([task]).values()
         (_, _, rates) = \
             action_rates_from_runs(
-                self._domain,
                 self._solver_index,
                 self._budget_index,
                 runs.tolist(),
@@ -214,9 +213,9 @@ class UberOraclePortfolio(object):
                 )
 
         for (name, cost) in plan:
-            answer = self._domain.solvers[name](cnf_path)(cost)
+            answer = self._domain.solvers[name](task)(cost)
 
-            if self._domain.is_final(answer):
+            if self._domain.is_final(task, answer):
                 return answer
 
         return None
@@ -241,7 +240,6 @@ class ClassifierPortfolio(object):
             (runs,) = get_task_run_data([train_path]).values()
             (_, _, rates) = \
                 action_rates_from_runs(
-                    domain,
                     solver_index,
                     budget_index,
                     runs.tolist(),
@@ -262,23 +260,21 @@ class ClassifierPortfolio(object):
 
             model.fit(train_xs[solver], train_ys[solver])
 
-    def __call__(self, task_path, budget, cores = 1):
+    def __call__(self, task, budget, cores = 1):
         assert cores == 1
 
         # obtain features
         with borg.accounting() as features_accountant:
-            features = borg.get_features_for(self._domain, task_path)
+            (_, features) = self._domain.compute_features(task)
 
         # select a solver
         scores = [(s, m.predict_proba([features])[0, -1]) for (s, m) in self._models.items()]
         (name, probability) = max(scores, key = lambda (_, p): p)
 
-        logger.debug("selected %s on %s", name, os.path.basename(task_path))
-
         # run the solver
         run_cpu_budget = borg.unicore_cpu_budget(budget - features_accountant.total)
 
-        return self._domain.solvers[name](task_path)(run_cpu_budget)
+        return self._domain.solvers[name](task)(run_cpu_budget)
 
 named = {
     "random": RandomPortfolio,

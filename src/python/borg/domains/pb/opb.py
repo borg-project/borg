@@ -1,10 +1,15 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
+import cargo
+
+logger = cargo.get_logger(__name__)
+
 class PseudoBooleanInstance(object):
-    def __init__(self, N, constraints, objective = None):
+    def __init__(self, N, constraints, objective = None, nonlinear = False):
         self.N = N
         self.constraints = constraints
         self.objective = objective
+        self.nonlinear = nonlinear
 
 def parse_opb_file(opb_file):
     """Parse a pseudo-Boolean satisfaction problem."""
@@ -49,7 +54,7 @@ def parse_opb_file(opb_file):
             if objective is not None:
                 raise RuntimeError("multiple objectives in PB input")
 
-            objective = parse_terms(line[4:-1].split())
+            objective = parse_terms(line[4:-2].split())
         else:
             # constraint line
             parts = line[:-2].split()
@@ -61,11 +66,13 @@ def parse_opb_file(opb_file):
 
     # compute basic properties
     N = 0
+    nonlinear = False
 
     for (terms, _, _) in constraints:
         for (_, literals) in terms:
             N = max(N, max(abs(l) for l in literals))
+            nonlinear = nonlinear or len(literals) > 1
 
     # ...
-    return PseudoBooleanInstance(N, constraints, objective)
+    return PseudoBooleanInstance(N, constraints, objective, nonlinear)
 

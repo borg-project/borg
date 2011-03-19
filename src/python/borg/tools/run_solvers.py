@@ -16,26 +16,27 @@ import borg
 
 logger = cargo.get_logger(__name__, default_level = "INFO")
 
-def run_solver_on(domain, solver_name, cnf_path, budget):
+def run_solver_on(domain, solver_name, task_path, budget):
     """Run a solver."""
 
-    (cost, answer) = domain.solvers[solver_name](cnf_path)(budget)
+    with domain.task_from_path(task_path) as task:
+        with borg.accounting() as accountant:
+            answer = domain.solvers[solver_name](task)(budget)
 
-    if answer is None:
-        short_answer = None
-    else:
-        (short_answer, _) = answer
+        succeeded = domain.is_final(task, answer)
+
+    cost = accountant.total.cpu_seconds
 
     logger.info(
-        "%s reported %s in %.2f (of %.2f) on %s",
+        "%s %s in %.2f (of %.2f) on %s",
         solver_name,
-        short_answer,
+        "succeeded" if succeeded else "failed",
         cost,
         budget,
-        cnf_path,
+        os.path.basename(task_path),
         )
 
-    return (solver_name, None, budget, cost, short_answer)
+    return (solver_name, None, budget, cost, succeeded)
 
 @plac.annotations(
     domain_name = ("name of the problem domain",),

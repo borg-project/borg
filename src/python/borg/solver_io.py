@@ -150,10 +150,10 @@ def prepare(command, cnf_path):
 
     return [s.format(**keywords) for s in command]
 
-class MonitoredSolver(object):
-    """Provide a standard interface to a solver process."""
+class RunningSolver(object):
+    """In-progress solver process."""
 
-    def __init__(self, parse_output, command, task_path, stm_queue = None, solver_id = None):
+    def __init__(self, parse, command, task_path, stm_queue = None, solver_id = None):
         if stm_queue is None:
             self._stm_queue = multiprocessing.Queue()
         else:
@@ -165,9 +165,10 @@ class MonitoredSolver(object):
             self._solver_id = solver_id
 
         self._mts_queue = multiprocessing.Queue()
+
         self._process = \
             SolverProcess(
-                parse_output,
+                parse,
                 prepare(command, task_path),
                 self._stm_queue,
                 self._mts_queue,
@@ -177,17 +178,19 @@ class MonitoredSolver(object):
     def __call__(self, budget):
         """Unpause the solver, block for some limit, and terminate it."""
 
-        self.go(budget)
+        self.unpause_for(budget)
 
-        (solver_id, run_cost, answer, terminated) = self._stm_queue.get()
+        (solver_id, run_cpu_cost, answer, terminated) = self._stm_queue.get()
 
         assert solver_id == self._solver_id
 
-        self.die()
+        self.stop()
 
-        return (run_cost, answer)
+        borg.get_accountant().charge_cpu(run_cpu_cost)
 
-    def go(self, budget):
+        return answer
+
+    def unpause_for(self, budget):
         """Unpause the solver for the specified duration."""
 
         if not self._process.is_alive():
@@ -195,16 +198,11 @@ class MonitoredSolver(object):
 
         self._mts_queue.put(budget)
 
-    def die(self):
+    def stop(self):
         """Terminate the solver."""
 
         if self._process.pid is not None:
             os.kill(self._process.pid, signal.SIGUSR1)
 
             self._process.join()
-
-def basic_command(relative):
-    """Prepare a basic competition solver command."""
-
-    return ["{{root}}/{0}".format(relative), "{task}", "{seed}"]
 
