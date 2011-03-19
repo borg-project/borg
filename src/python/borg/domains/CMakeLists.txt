@@ -5,8 +5,6 @@
 install(
     FILES
         __init__.py
-        pb.py
-        sat.py
     DESTINATION lib/borg/domains
     )
 
@@ -14,6 +12,6 @@ install(
 # descend
 #
 
-add_subdirectory(features)
-add_subdirectory(solvers)
+add_subdirectory(pb)
+add_subdirectory(sat)
 

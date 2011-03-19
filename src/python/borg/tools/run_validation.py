@@ -88,11 +88,37 @@ class FakeSolver(object):
         self._run_position = None
 
 class FakeDomain(object):
-    def __init__(self, real, solvers):
+    def __init__(self, domain_name):
+        real = borg.get_domain(domain_name)
+
         self.extensions = real.extensions
         self.is_final = real.is_final
         self.compute_features = real.compute_features
-        self.solvers = solvers
+
+        def fake_solver(solver_name):
+            return cargo.curry(FakeSolver, solver_name)
+
+        self.solvers = dict(zip(real.solvers, map(fake_solver, real.solvers)))
+
+    def path_to_task(self, task_path):
+        return task_path
+
+    def get_features_for(domain, task_path): # XXX
+        """Read or compute features of a PB instance."""
+
+        csv_path = task_path + ".features.csv"
+
+        if os.path.exists(csv_path):
+            features_array = numpy.recfromcsv(csv_path)
+            features = features_array.tolist()
+
+            assert features_array.dtype.names[0] == "cpu_cost"
+
+            borg.get_accountant().charge_cpu(features[0])
+        else:
+            (_, features) = domain.compute_features(task_path)
+
+        return features
 
 def run_validation(name, domain, train_paths, test_paths, budget, split):
     """Make a validation run."""
@@ -116,14 +142,16 @@ def run_validation(name, domain, train_paths, test_paths, budget, split):
         #logger.debug("true rates:\n%s", cargo.pretty_probability_matrix(true_rates))
 
         # run the portfolio
+        test_task = domain.path_to_task(test_path)
+        cost_budget = borg.Cost(cpu_seconds = budget)
+
         with borg.accounting() as accountant:
-            answer = solver(test_path, borg.Cost(cpu_seconds = budget))
-            cpu_seconds = accountant.total.cpu_seconds
+            answer = solver(test_task, cost_budget)
 
         logger.info("%s answered %s to %s", name, answer, os.path.basename(test_path))
 
-        if answer is not None:
-            successes.append(cpu_seconds)
+        if domain.is_final(answer):
+            successes.append(accountant.total.cpu_seconds)
 
     rate = float(len(successes)) / len(test_paths)
 
@@ -155,16 +183,8 @@ def main(out_path, domain_name, budget, tasks_root, tests_root = None, runs = 16
     cargo.get_logger("borg.portfolios", level = "DETAIL")
 
     def yield_runs():
-        # build solver set
-        real_domain = borg.get_domain(domain_name)
-
-        def fake_solver(solver_name):
-            return cargo.curry(FakeSolver, solver_name)
-
-        fake_solvers = dict(zip(real_domain.solvers, map(fake_solver, real_domain.solvers)))
-        domain = FakeDomain(real_domain, fake_solvers)
-
-        # build train and test sets
+        # build solvers and train / test sets
+        domain = FakeDomain(domain_name)
         paths = list(cargo.files_under(tasks_root, domain.extensions))
         examples = int(round(len(paths) * 0.50))
 

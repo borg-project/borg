@@ -2,6 +2,9 @@
 
 import borg
 
+from . import solvers
+from . import features
+
 @borg.named_domain("pbs")
 class PseudoBooleanSatisfiability(object):
     extensions = ["*.opb"]
