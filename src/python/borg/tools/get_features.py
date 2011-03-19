@@ -16,25 +16,29 @@ import borg
 
 logger = cargo.get_logger(__name__, default_level = "INFO")
 
+def features_for_path(domain, task_path):
+    with domain.task_from_path(task_path) as task:
+        return domain.compute_features(task)
+
 @plac.annotations(
+    domain_name = ("name of the problem domain",),
     tasks_root = ("path to task files", "positional", None, os.path.abspath),
     workers = ("submit jobs?", "option", "w", int),
     )
-def main(tasks_root, workers = 0):
+def main(domain_name, tasks_root, workers = 0):
     """Collect task features."""
 
     cargo.enable_default_logging()
 
     def yield_runs():
-        #paths = list(cargo.files_under(tasks_root, ["*.cnf"]))
-        paths = list(cargo.files_under(tasks_root, ["*.opb"])) # XXX
+        domain = borg.get_domain(domain_name)
+        paths = list(cargo.files_under(tasks_root, domain.extensions))
 
         for path in paths:
-            #yield (borg.features.get_features_for, [path]) # XXX
-            yield (borg.features.pb.path_compute_all, [path])
+            yield (features_for_path, [domain, path])
 
     def collect_run((_, arguments), (names, values)):
-        (cnf_path,) = arguments
+        (_, cnf_path) = arguments
         csv_path = cnf_path + ".features.csv"
 
         with open(csv_path, "w") as csv_file:

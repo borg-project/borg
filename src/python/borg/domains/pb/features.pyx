@@ -166,11 +166,11 @@ def compute_vcg_vnode_degree_std(opb):
 def compute_vcg_cnode_degree_mean(opb):
     return numpy.mean(opb.vcg_degrees_C)
 
-def compute_all(task):
+def compute_all(instance):
     """Compute all features of a PB instance."""
 
     with borg.accounting() as accountant:
-        computed = dict((k, v(task.opb)) for (k, v) in named.items())
+        computed = dict((k, v(instance)) for (k, v) in named.items())
 
     cpu_cost = accountant.total.cpu_seconds
 

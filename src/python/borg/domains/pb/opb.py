@@ -22,13 +22,10 @@ def parse_opb_file(opb_file):
         terms = []
 
         for part in parts:
-            if part[0] == "~" or part[0] == "x":
-                literal = int(part[1:])
-
-                if part[0] == "~":
-                    literal *= -1
-
-                literals.append(literal)
+            if part[0] == "~":
+                literals.append(-int(part[2:]))
+            elif part[0] == "x":
+                literals.append(int(part[1:]))
             else:
                 if weight is not None:
                     terms.append((weight, literals))

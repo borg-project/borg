@@ -9,6 +9,7 @@ import borg
 from . import opb
 from . import solvers
 from . import features
+from . import test
 
 logger = cargo.get_logger(__name__)
 

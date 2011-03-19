@@ -21,3 +21,9 @@ install(
     DESTINATION lib/borg/domains/pb
     )
 
+#
+# descend
+#
+
+add_subdirectory(test)
+
