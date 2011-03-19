@@ -195,7 +195,7 @@ def main(out_path, domain_name, budget, tasks_root, tests_root = None, runs = 16
         paths = list(cargo.files_under(tasks_root, domain.extensions))
         examples = int(round(len(paths) * 0.50))
 
-        logger.info("found %i training tasks", len(paths))
+        logger.info("found %i tasks", len(paths))
 
         if tests_root is not None:
             tests_root_paths = list(cargo.files_under(tests_root, domain.extensions))

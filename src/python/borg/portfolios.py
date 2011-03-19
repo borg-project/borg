@@ -277,9 +277,9 @@ class ClassifierPortfolio(object):
         return self._domain.solvers[name](task)(run_cpu_budget)
 
 named = {
-    "random": RandomPortfolio,
-    "baseline": BaselinePortfolio,
-    "uber-oracle": UberOraclePortfolio,
-    "classifier": ClassifierPortfolio,
+    #"random": RandomPortfolio,
+    #"baseline": BaselinePortfolio,
+    #"uber-oracle": UberOraclePortfolio,
+    #"classifier": ClassifierPortfolio,
     }
 

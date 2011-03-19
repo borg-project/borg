@@ -127,6 +127,18 @@ class BilevelPortfolio(object):
             return self._solve(task, budget, cores)
 
     def _solve(self, task, budget, cores):
+        # print oracle knowledge, if any
+        (runs,) = borg.portfolios.get_task_run_data([task]).values()
+        (oracle_history, oracle_counts, _) = \
+            borg.portfolios.action_rates_from_runs(
+                self._solver_name_index,
+                self._budget_index,
+                runs.tolist(),
+                )
+        true_rates = oracle_history / oracle_counts
+
+        logger.info("true rates:\n%s", cargo.pretty_probability_matrix(true_rates))
+
         # obtain features
         (_, features) = self._domain.compute_features(task)
 
