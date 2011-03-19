@@ -62,7 +62,7 @@ def main(domain_name, tasks_root, budget, runs = 4, workers = 0):
                     yield (run_solver_on, [domain, solver_name, path, budget])
 
     def collect_run((_, arguments), row):
-        (_, cnf_path, _) = arguments
+        (_, _, cnf_path, _) = arguments
         csv_path = cnf_path + ".rtd.csv"
         existed = os.path.exists(csv_path)
 
