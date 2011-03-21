@@ -518,22 +518,22 @@ class BilevelMultinomialModel(object):
                 )
 
         # fit the classifier
-        #logger.info("fitting logistic regression classifier")
+        logger.info("fitting logistic regression classifier")
 
-        #train_x = []
-        #train_y = []
+        train_x = []
+        train_y = []
 
-        #for (n, task_features) in enumerate(features):
-            #counts_L = numpy.round(tclass_res_LN[:, n] * 100.0).astype(int)
+        for (n, task_features) in enumerate(features):
+            counts_L = numpy.round(tclass_res_LN[:, n] * 100.0).astype(int)
 
-            #train_x.extend([task_features] * numpy.sum(counts_L))
+            train_x.extend([task_features] * numpy.sum(counts_L))
 
-            #for l in xrange(L):
-                #train_y.extend([l] * counts_L[l])
+            for l in xrange(L):
+                train_y.extend([l] * counts_L[l])
 
-        #self._classifier = scikits.learn.linear_model.LogisticRegression()
+        self._classifier = scikits.learn.linear_model.LogisticRegression()
 
-        #self._classifier.fit(train_x, train_y)
+        self._classifier.fit(train_x, train_y)
 
     def predict(self, failures, features):
         """Return probabilistic predictions of success."""
@@ -543,11 +543,10 @@ class BilevelMultinomialModel(object):
         (L, S, K) = self._tclass_LSK.shape
 
         # let the classifier seed our cluster probabilities
-        #(tclass_lr_weights_L,) = self._classifier.predict_proba([features])
+        (tclass_lr_weights_L,) = self._classifier.predict_proba([features])
 
-        #tclass_lr_weights_L += 1e-6
-        #tclass_lr_weights_L /= numpy.sum(tclass_lr_weights_L)
-        tclass_lr_weights_L = self._tclass_weights_L
+        tclass_lr_weights_L += 1e-6
+        tclass_lr_weights_L /= numpy.sum(tclass_lr_weights_L)
 
         # compute conditional tclass probabilities
         rclass_fail_cmf_SKB = numpy.cumsum(1.0 - self._rclass_SKB, axis = -1)
