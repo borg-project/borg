@@ -136,8 +136,10 @@ class BilevelPortfolio(object):
                 runs.tolist(),
                 )
         true_rates = oracle_history / oracle_counts
+        hopeless = numpy.sum(true_rates) < 1e-2
+        messages = []
 
-        logger.info("true rates:\n%s", cargo.pretty_probability_matrix(true_rates))
+        messages.append("true rates:\n%s" % cargo.pretty_probability_matrix(true_rates))
 
         # obtain features
         (_, features) = self._domain.compute_features(task)
@@ -221,13 +223,18 @@ class BilevelPortfolio(object):
             augmented_mean_cmf_AB = numpy.sum(tclass_weights_L[:, None, None] * augmented_tclass_cmf_LAB, axis = 0)
             subjective_rate = augmented_mean_cmf_AB[a, c]
 
-            logger.info(
-                "running %s@%i for %i with %i remaining (b = %.2f)",
-                name,
-                borg.normal_to_machine(solver.cpu_cost),
-                borg.normal_to_machine(planned_cpu_cost),
-                remaining.cpu_seconds,
-                subjective_rate,
+            #logger.info(
+            #tclass_cmf_LSB = numpy.cumsum(tclass_rates_LSB, axis = -1)
+            #mean_cmf_SB = numpy.sum(tclass_weights_L[:, None, None] * tclass_cmf_LSB, axis = 0)
+            #messages.append("mean augmented subjective CMF:\n%s" % cargo.pretty_probability_matrix(mean_cmf_SB))
+            messages.append(
+                "running %s@%i for %i with %i remaining (b = %.2f)" % (
+                    name,
+                    borg.normal_to_machine(solver.cpu_cost),
+                    borg.normal_to_machine(planned_cpu_cost),
+                    remaining.cpu_seconds,
+                    subjective_rate,
+                    ),
                 )
 
             # ... and follow through
@@ -255,6 +262,11 @@ class BilevelPortfolio(object):
 
         for process in paused + running.values():
             process.stop()
+
+        # XXX
+        if not self._domain.is_final(task, answer) and not hopeless:
+            for message in messages:
+                logger.info("%s", message)
 
         return answer
 
