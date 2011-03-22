@@ -17,6 +17,8 @@ import borg
 logger = cargo.get_logger(__name__, default_level = "INFO")
 
 def features_for_path(domain, task_path, cpu_seconds):
+    logger.info("getting features of %s", os.path.basename(task_path))
+
     with domain.task_from_path(task_path) as task:
         return domain.compute_features(task, cpu_seconds)
 

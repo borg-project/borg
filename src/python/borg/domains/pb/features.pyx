@@ -35,16 +35,15 @@ def build_balance_ratios(opb):
         constraint_negatives = numpy.zeros(len(opb.constraints))
 
         for (c, (terms, _, _)) in enumerate(opb.constraints):
-            for (_, literals) in terms:
-                for literal in literals:
-                    v = abs(literal) - 1
+            for (_, literal) in terms:
+                v = abs(literal) - 1
 
-                    if literal > 0:
-                        variable_positives[v] += 1
-                        constraint_positives[c] += 1
-                    else:
-                        variable_negatives[v] += 1
-                        constraint_negatives[c] += 1
+                if literal > 0:
+                    variable_positives[v] += 1
+                    constraint_positives[c] += 1
+                else:
+                    variable_negatives[v] += 1
+                    constraint_negatives[c] += 1
 
         opb.variable_balance_ratios = variable_positives / (variable_positives + variable_negatives)
         opb.constraint_balance_ratios = constraint_positives / (constraint_positives + constraint_negatives)
@@ -84,10 +83,9 @@ def build_node_degrees(opb):
         adjacency_c = []
 
         for (c, (terms, _, _)) in enumerate(opb.constraints):
-            for (_, literals) in terms:
-                for literal in literals:
-                    adjacency_v.append(abs(literal) - 1)
-                    adjacency_c.append(c)
+            for (_, literal) in terms:
+                adjacency_v.append(abs(literal) - 1)
+                adjacency_c.append(c)
 
         adjacency_csr_VC = \
             scipy.sparse.csr_matrix(
