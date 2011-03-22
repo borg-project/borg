@@ -6,14 +6,46 @@ import resource
 import contextlib
 import borg
 
+class Cost(object):
+    """Resources."""
+
+    def __init__(self, cpu_seconds = None, wall_seconds = None):
+        self.cpu_seconds = cpu_seconds
+        self.wall_seconds = wall_seconds
+
+    def __str__(self):
+        return "(CPU seconds: {0}; wall seconds: {1})".format(self.cpu_seconds, self.wall_seconds)
+
+    def __add__(self, other):
+        none_add = lambda x, y: none_op(operator.add, x, y)
+
+        return \
+            Cost(
+                cpu_seconds = none_add(self.cpu_seconds, other.cpu_seconds),
+                wall_seconds = none_add(self.wall_seconds, other.wall_seconds),
+                )
+
+    def __sub__(self, other):
+        none_sub = lambda x, y: none_op(operator.sub, x, y)
+
+        return \
+            Cost(
+                cpu_seconds = none_sub(self.cpu_seconds, other.cpu_seconds),
+                wall_seconds = none_sub(self.wall_seconds, other.wall_seconds),
+                )
+
 class Accountant(object):
     """Track resources used."""
 
-    def __init__(self, parent = None):
+    def __init__(self, parent = None, eve = False):
         """Start tracking."""
 
         self._parent = parent
-        self._past = Cost(cpu_seconds = 0.0, wall_seconds = 0.0)
+
+        if eve:
+            self._past = Cost(cpu_seconds = resource.getrusage(resource.RUSAGE_SELF).ru_utime, wall_seconds = 0.0)
+        else:
+            self._past = Cost(cpu_seconds = 0.0, wall_seconds = 0.0)
 
         self.start()
 
@@ -60,7 +92,7 @@ class Accountant(object):
 
         return self._past + recent
 
-accountant_stack = []
+accountant_stack = [Accountant(eve = True)]
 
 def get_accountant():
     if accountant_stack:
@@ -93,34 +125,6 @@ def none_op(op, x, y):
             return x
         else:
             return op(x, y)
-
-class Cost(object):
-    """Resources."""
-
-    def __init__(self, cpu_seconds = None, wall_seconds = None):
-        self.cpu_seconds = cpu_seconds
-        self.wall_seconds = wall_seconds
-
-    def __str__(self):
-        return "(CPU seconds: {0}; wall seconds: {1})".format(self.cpu_seconds, self.wall_seconds)
-
-    def __add__(self, other):
-        none_add = lambda x, y: none_op(operator.add, x, y)
-
-        return \
-            Cost(
-                cpu_seconds = none_add(self.cpu_seconds, other.cpu_seconds),
-                wall_seconds = none_add(self.wall_seconds, other.wall_seconds),
-                )
-
-    def __sub__(self, other):
-        none_sub = lambda x, y: none_op(operator.sub, x, y)
-
-        return \
-            Cost(
-                cpu_seconds = none_sub(self.cpu_seconds, other.cpu_seconds),
-                wall_seconds = none_sub(self.wall_seconds, other.wall_seconds),
-                )
 
 def unicore_cpu_budget(budget):
     """The maximum single-core CPU budget."""

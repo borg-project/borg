@@ -3,6 +3,7 @@
 #
 
 add_cython_module(borg_domains_pb_features features)
+add_cython_module(borg_domains_pb_instance instance)
 
 #
 # install
@@ -11,13 +12,13 @@ add_cython_module(borg_domains_pb_features features)
 install(
     TARGETS
         borg_domains_pb_features
+        borg_domains_pb_instance
     DESTINATION lib/borg/domains/pb
     )
 install(
     FILES
         __init__.py
         solvers.py
-        opb.py
     DESTINATION lib/borg/domains/pb
     )
 

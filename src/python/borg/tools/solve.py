@@ -77,28 +77,15 @@ def main(solver_path, input_path, seed = 42, budget = 2e6, cores = 1, quiet = Fa
         logger.info("loaded portfolio from %s", solver_path)
 
         with open(solver_path) as file:
-            solver = pickle.load(file)
+            (domain, solver) = pickle.load(file)
 
         logger.info("solving %s", input_path)
 
-        (_, answer, _) = solver(input_path, budget, cores)
+        with domain.task_from_path() as task:
+            remaining = budget - borg.get_accountant().total.cpu_seconds
+            answer = solver(input_path, remaining, cores)
 
-        # tell the world
-        if answer is None:
-            print "s UNKNOWN"
-
-            return 0
-        elif answer:
-            print "s SATISFIABLE"
-            print "v", " ".join(map(str, answer)), "0"
-
-            return 10
-        else:
-            print "s UNSATISFIABLE"
-
-            return 20
+            return domain.show_answer(task, answer)
     except KeyboardInterrupt:
-        print "\nc received SIGINT; terminating"
-
-        pass
+        print "\nc terminating on SIGINT"
 

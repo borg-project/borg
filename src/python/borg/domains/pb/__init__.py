@@ -1,17 +1,18 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import os
+import os.path
 import tempfile
 import contextlib
 import cargo
 import borg
 
-from . import opb
+from . import instance
 from . import solvers
 from . import features
 from . import test
 
-logger = cargo.get_logger(__name__)
+logger = cargo.get_logger(__name__, default_level = "INFO")
 
 class PseudoBooleanTask(object):
     def __init__(self, path):
@@ -19,9 +20,9 @@ class PseudoBooleanTask(object):
 
         with borg.accounting() as accountant:
             with open(path) as opb_file:
-                self.opb = opb.parse_opb_file(opb_file)
+                self.opb = instance.parse_opb_file(opb_file)
 
-        logger.info("parsed %s in %.2f s", os.path.basename(path), accountant.total.cpu_seconds)
+        logger.info("parsing took %.2f s", accountant.total.cpu_seconds)
 
         self.linearized_path = None
 
@@ -64,8 +65,8 @@ class PseudoBooleanSatisfiability(object):
 
         task.clean()
 
-    def compute_features(self, task):
-        return features.compute_all(task.opb)
+    def compute_features(self, task, cpu_seconds = None):
+        return features.compute_all(task.opb, cpu_seconds)
 
     def is_final(self, task, answer):
         """Is the answer definitive for the task?"""
@@ -79,4 +80,15 @@ class PseudoBooleanSatisfiability(object):
                 return description in ("SATISFIABLE", "UNSATISFIABLE")
             else:
                 return description in ("OPTIMUM FOUND", "UNSATISFIABLE")
+
+    def show_answer(self, task, answer):
+        if answer is None:
+            print "s UNKNOWN"
+        else:
+            (description, certificate) = answer
+
+            print "s {0}".format(description)
+
+            if certificate is not None:
+                print "v", " ".join(answer)
 

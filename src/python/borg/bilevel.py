@@ -142,7 +142,7 @@ class BilevelPortfolio(object):
         messages.append("true rates:\n%s" % cargo.pretty_probability_matrix(true_rates))
 
         # obtain features
-        (_, features) = self._domain.compute_features(task)
+        (_, features) = self._domain.compute_features(task, budget.cpu_seconds / 10.0)
 
         # select a solver
         queue = multiprocessing.Queue()

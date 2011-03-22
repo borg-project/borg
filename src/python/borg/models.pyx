@@ -543,10 +543,13 @@ class BilevelMultinomialModel(object):
         (L, S, K) = self._tclass_LSK.shape
 
         # let the classifier seed our cluster probabilities
-        (tclass_lr_weights_L,) = self._classifier.predict_proba([features])
+        if len(features) > 1:
+            (tclass_lr_weights_L,) = self._classifier.predict_proba([features])
 
-        tclass_lr_weights_L += 1e-6
-        tclass_lr_weights_L /= numpy.sum(tclass_lr_weights_L)
+            tclass_lr_weights_L += 1e-6
+            tclass_lr_weights_L /= numpy.sum(tclass_lr_weights_L)
+        else:
+            tclass_lr_weights_L = self._tclass_weights_L
 
         # compute conditional tclass probabilities
         rclass_fail_cmf_SKB = numpy.cumsum(1.0 - self._rclass_SKB, axis = -1)

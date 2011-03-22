@@ -8,40 +8,35 @@ import borg
 
 logger = cargo.get_logger(__name__)
 
-def basic_command(relative):
-    """Prepare a basic competition solver command."""
-
-    return ["{{root}}/{0}".format(relative), "{task}", "{seed}"]
-
 nlc_commands = {
-    #"pbct-0.1.2-linear": ["{root}/pbct-0.1.2-linux32", "--model", "{task}"],
-    #"sat4j-pb-v20101225": [
-        #"java",
-        #"-server",
-        #"-jar",
-        #"{root}/sat4j-pb-v20101225/sat4j-pb.jar",
-        #"{task}",
-        #],
-    #"sat4j-pb-v20101225-cutting": [
-        #"java",
-        #"-server",
-        #"-jar",
-        #"{root}/sat4j-pb-v20101225/sat4j-pb.jar",
-        #"CuttingPlanes",
-        #"{task}",
-        #],
+    "pbct-0.1.2-linear": ["{root}/pbct-0.1.2-linux32", "--model", "{task}"],
+    "sat4j-pb-v20101225": [
+        "java",
+        "-server",
+        "-jar",
+        "{root}/sat4j-pb-v20101225/sat4j-pb.jar",
+        "{task}",
+        ],
+    "sat4j-pb-v20101225-cutting": [
+        "java",
+        "-server",
+        "-jar",
+        "{root}/sat4j-pb-v20101225/sat4j-pb.jar",
+        "CuttingPlanes",
+        "{task}",
+        ],
     }
 lin_commands = {
-    #"bsolo_pb10-l1": ["{root}/bsolo_pb10", "-t1000000", "-m2048", "-l1", "{task}"],
-    #"bsolo_pb10-l2": ["{root}/bsolo_pb10", "-t1000000", "-m2048", "-l2", "{task}"],
-    #"bsolo_pb10-l3": ["{root}/bsolo_pb10", "-t1000000", "-m2048", "-l3", "{task}"],
-    #"wbo1.4a": ["{root}/wbo1.4a", "-time-limit=1000000", "-file-format=opb", "{task}"],
-    #"wbo1.4b-fixed": ["{root}/wbo1.4b-fixed", "-time-limit=1000000", "-file-format=opb", "{task}"],
-    #"clasp-1.3.7": ["{root}/clasp-1.3.7/clasp-1.3.7-x86-linux", "--seed={seed}", "{task}"],
+    "bsolo_pb10-l1": ["{root}/bsolo_pb10", "-t1000000", "-m2048", "-l1", "{task}"],
+    "bsolo_pb10-l2": ["{root}/bsolo_pb10", "-t1000000", "-m2048", "-l2", "{task}"],
+    "bsolo_pb10-l3": ["{root}/bsolo_pb10", "-t1000000", "-m2048", "-l3", "{task}"],
+    "wbo1.4a": ["{root}/wbo1.4a", "-time-limit=1000000", "-file-format=opb", "{task}"],
+    "wbo1.4b-fixed": ["{root}/wbo1.4b-fixed", "-time-limit=1000000", "-file-format=opb", "{task}"],
+    "clasp-1.3.7": ["{root}/clasp-1.3.7/clasp-1.3.7-x86-linux", "--seed={seed}", "{task}"],
     }
 scip_commands = {
-    "scip-2.0.1-clp": ["{root}/scip-2.0.1.linux.x86_64.gnu.opt.clp", "-f", "{task}"],
-    "scip-2.0.1-spx": ["{root}/scip-2.0.1.linux.x86_64.gnu.opt.spx", "-f", "{task}"],
+    #"scip-2.0.1-clp": ["{root}/scip-2.0.1.linux.x86_64.gnu.opt.clp", "-f", "{task}"],
+    #"scip-2.0.1-spx": ["{root}/scip-2.0.1.linux.x86_64.gnu.opt.spx", "-f", "{task}"],
     }
 
 def parse_competition(stdout):

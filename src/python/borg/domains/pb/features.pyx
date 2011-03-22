@@ -1,6 +1,7 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import os.path
+import signal
 import numpy
 import scipy.sparse
 import cargo
@@ -9,6 +10,7 @@ import borg
 logger = cargo.get_logger(__name__, default_level = "INFO")
 
 named = {
+    "nonlinear" : lambda opb: 1.0 if opb.nonlinear is None else 0.0,
     "optimization" : lambda opb: 0.0 if opb.objective is None else 1.0,
     "variables": lambda opb: opb.N,
     "constraints": lambda opb: len(opb.constraints),
@@ -166,15 +168,33 @@ def compute_vcg_vnode_degree_std(opb):
 def compute_vcg_cnode_degree_mean(opb):
     return numpy.mean(opb.vcg_degrees_C)
 
-def compute_all(instance):
+class FeaturesTimedOut(Exception):
+    pass
+
+def handle_timeout_signal(number, frame):
+    raise FeaturesTimedOut()
+
+def compute_all(instance, cpu_seconds = None):
     """Compute all features of a PB instance."""
 
     with borg.accounting() as accountant:
-        computed = dict((k, v(instance)) for (k, v) in named.items())
+        try:
+            if cpu_seconds is not None:
+                signal.setitimer(signal.ITIMER_VIRTUAL, cpu_seconds)
+                signal.signal(signal.SIGVTALRM, handle_timeout_signal)
+
+            computed = dict((k, v(instance)) for (k, v) in named.items())
+
+            signal.setitimer(signal.ITIMER_VIRTUAL, 0.0)
+        except FeaturesTimedOut:
+            computed = {}
 
     cpu_cost = accountant.total.cpu_seconds
 
-    logger.info("feature computation took %.2f CPU seconds", cpu_cost)
+    if len(computed) > 0:
+        logger.info("features took %.2f CPU seconds", cpu_cost)
+    else:
+        logger.info("features timed out after %.2f CPU seconds", cpu_cost)
 
     return (["cpu_cost"] + computed.keys(), [cpu_cost] + computed.values())
 

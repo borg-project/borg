@@ -111,9 +111,10 @@ class FakeDomain(object):
     def task_from_path(self, task_path):
         yield task_path
 
-    def compute_features(self, task):
+    def compute_features(self, task, cpu_seconds = None):
         """Read or compute features of an instance."""
 
+        # grab precomputed feature data
         csv_path = task + ".features.csv"
 
         assert os.path.exists(csv_path)
@@ -122,9 +123,19 @@ class FakeDomain(object):
         features = features_array.tolist()
         names = features_array.dtype.names
 
+        # accumulate their cost
         assert names[0] == "cpu_cost"
 
-        borg.get_accountant().charge_cpu(features[0])
+        cpu_cost = features[0]
+
+        borg.get_accountant().charge_cpu(cpu_cost)
+
+        # handle timeout logic, and we're done
+        if cpu_seconds is not None:
+            if cpu_cost >= cpu_seconds:
+                return (["cpu_cost"], [cpu_seconds])
+            else:
+                assert len(names) > 1
 
         return (names, features)
 

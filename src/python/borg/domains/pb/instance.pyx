@@ -1,5 +1,6 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
+import re
 import cargo
 
 logger = cargo.get_logger(__name__)
@@ -12,7 +13,7 @@ class PseudoBooleanInstance(object):
         self.nonlinear = nonlinear
 
 def parse_opb_file(opb_file):
-    """Parse a pseudo-Boolean satisfaction problem."""
+    """Parse a pseudo-Boolean satisfiability instance."""
 
     # prepare constraint parsing
     def parse_terms(parts):
@@ -39,13 +40,16 @@ def parse_opb_file(opb_file):
         return terms
 
     # parse all lines
+    N = None
     constraints = []
     objective = None
 
     for line in opb_file:
         if line.startswith("*"):
             # comment line
-            continue
+            if N is None:
+                (N,) = map(int, re.findall("#variable= *([0-9]+)", line))
+                nonlinear = re.search("#product=", line) is not None
         elif line.startswith("min:"):
             # objective line
             if objective is not None:
@@ -61,14 +65,7 @@ def parse_opb_file(opb_file):
 
             constraints.append((terms, relation, value))
 
-    # compute basic properties
-    N = 0
-    nonlinear = False
-
-    for (terms, _, _) in constraints:
-        for (_, literals) in terms:
-            N = max(N, max(abs(l) for l in literals))
-            nonlinear = nonlinear or len(literals) > 1
+    assert N is not None
 
     # ...
     return PseudoBooleanInstance(N, constraints, objective, nonlinear)
