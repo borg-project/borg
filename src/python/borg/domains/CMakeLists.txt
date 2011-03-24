@@ -14,4 +14,5 @@ install(
 
 add_subdirectory(pb)
 add_subdirectory(sat)
+add_subdirectory(max_sat)
 
