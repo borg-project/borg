@@ -78,7 +78,7 @@ class MAX_SAT_WBO_SolverFactory(object):
 
     def __call__(self, task, stm_queue = None, solver_id = None):
         (_, extension) = os.path.splitext(task.path)
-        command = self._prefix + ["-file-format={0}".format(extension), "{task}"]
+        command = self._prefix + ["-file-format={0}".format(extension[1:]), "{task}"]
 
         return \
             borg.solver_io.RunningSolver(
