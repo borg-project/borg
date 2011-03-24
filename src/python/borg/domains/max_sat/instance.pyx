@@ -68,16 +68,23 @@ cdef class DIMACS_Parser(object):
         if kind == "cnf":
             while self.parse_constraint():
                 pass
-        #else:
+        elif kind == "wcnf":
             #while self.parse_weighted_constraint():
                 #pass
+            pass
+        else:
+            raise RuntimeError("unknown instance type")
 
-        constraints = \
-            scipy.sparse.csr_matrix(
-                (self._csr_data, self._csr_indices, self._csr_indptrs),
-                shape = (M, N),
-                dtype = numpy.int8,
-                )
+        if len(self._csr_data) > 0:
+            constraints = \
+                scipy.sparse.csr_matrix(
+                    (self._csr_data, self._csr_indices, self._csr_indptrs),
+                    shape = (M, N),
+                    dtype = numpy.int8,
+                    )
+        else:
+            # XXX
+            pass
 
         return constraints
 

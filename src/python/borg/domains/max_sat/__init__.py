@@ -24,8 +24,7 @@ class MAX_SAT_Task(object):
 @borg.named_domain
 class MAX_SAT_Domain(object):
     name = "max-sat"
-    #extensions = ["*.cnf", "*.wcnf"]
-    extensions = ["*.cnf"]
+    extensions = ["*.cnf", "*.wcnf"]
 
     @property
     def solvers(self):
