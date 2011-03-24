@@ -68,8 +68,8 @@ class MAX_SAT_BasicSolverFactory(object):
 
 basic_named = dict(zip(basic_commands, map(MAX_SAT_BasicSolverFactory, basic_commands.values())))
 wbo_prefixes = {
-    "wbo1.4a": ["{root}/wbo1.4a"],
-    "wbo1.4b-fixed": ["{root}/wbo1.4b-fixed"],
+    "wbo1.4a": ["{root}/wbo1.4a", "-time-limit=1000000"],
+    "wbo1.4b-fixed": ["{root}/wbo1.4b-fixed", "-time-limit=1000000"],
     }
 
 class MAX_SAT_WBO_SolverFactory(object):
