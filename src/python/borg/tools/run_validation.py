@@ -98,18 +98,15 @@ class FakeSolverFactory(object):
 class FakeDomain(object):
     name = "fake"
 
-    def __init__(self, domain_name):
-        self._real = borg.get_domain(domain_name)
+    def __init__(self, domain):
+        self._real = domain
 
+        self.extensions = [x + ".rtd.csv" for x in domain.extensions]
         self.solvers = dict(zip(self._real.solvers, map(FakeSolverFactory, self._real.solvers)))
-
-    @property
-    def extensions(self):
-        return self._real.extensions
 
     @contextlib.contextmanager
     def task_from_path(self, task_path):
-        yield task_path
+        yield task_path[:-8]
 
     def compute_features(self, task, cpu_seconds = None):
         """Read or compute features of an instance."""
@@ -192,10 +189,11 @@ def run_validation(name, domain, train_paths, test_paths, budget, split):
     budget = ("CPU seconds per instance", "positional", None, float),
     tasks_root = ("path to task files", "positional", None, os.path.abspath),
     tests_root = ("optional separate test set", "positional", None, os.path.abspath),
+    live = ("don't simulate the domain", "flag", "l"),
     runs = ("number of runs", "option", "r", int),
     workers = ("submit jobs?", "option", "w", int),
     )
-def main(out_path, domain_name, budget, tasks_root, tests_root = None, runs = 16, workers = 0):
+def main(out_path, domain_name, budget, tasks_root, tests_root = None, live = False, runs = 16, workers = 0):
     """Collect validation results."""
 
     cargo.enable_default_logging()
@@ -204,7 +202,11 @@ def main(out_path, domain_name, budget, tasks_root, tests_root = None, runs = 16
 
     def yield_runs():
         # build solvers and train / test sets
-        domain = FakeDomain(domain_name)
+        if live:
+            domain = borg.get_domain(domain_name)
+        else:
+            domain = FakeDomain(borg.get_domain(domain_name))
+
         paths = list(cargo.files_under(tasks_root, domain.extensions))
         examples = int(round(len(paths) * 0.50))
 
