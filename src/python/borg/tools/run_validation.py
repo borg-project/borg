@@ -145,12 +145,14 @@ class FakeDomain(object):
 def run_validation(name, domain, train_paths, test_paths, budget, split):
     """Make a validation run."""
 
-    solver = borg.portfolios.named[name](domain, train_paths, 50.0, 42)
+    #solver = borg.portfolios.named[name](domain, train_paths, 50.0, 42)
+    solver = borg.portfolios.named[name](domain, train_paths, 50.0, 36) # XXX
     successes = []
 
     logger.info("running portfolio %s with per-task budget %.2f", name, budget)
 
     for test_path in test_paths:
+        print test_path
         with domain.task_from_path(test_path) as test_task:
             cost_budget = borg.Cost(cpu_seconds = budget)
 

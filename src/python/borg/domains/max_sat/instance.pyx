@@ -8,6 +8,11 @@ cimport numpy
 class MAX_SAT_Instance(object):
     """Read a [weighted] MAX-SAT instance in [extended] DIMACS format."""
 
+    def __init__(self, weights, constraints):
+        self.weights = numpy.asarray(weights)
+        self.constraints = constraints
+        (self.M, self.N) = constraints.shape
+
 cdef class DIMACS_Lexer(object):
     cdef bytes _text
     cdef char* _p
@@ -40,15 +45,14 @@ cdef class DIMACS_Lexer(object):
 
 cdef class DIMACS_Parser(object):
     cdef DIMACS_Lexer _lexer
+    cdef list _weights
     cdef list _csr_data
     cdef list _csr_indices
     cdef list _csr_indptrs
 
-    def __init__(self):
-        pass
-
     def parse(self, text):
         self._lexer = DIMACS_Lexer(text)
+        self._weights = []
         self._csr_data = []
         self._csr_indices = []
         self._csr_indptrs = [0]
@@ -67,26 +71,21 @@ cdef class DIMACS_Parser(object):
 
         if kind == "cnf":
             while self.parse_constraint():
-                pass
+                self._weights.append(1)
         elif kind == "wcnf":
-            #while self.parse_weighted_constraint():
-                #pass
-            pass
+            while self.parse_weighted_constraint():
+                pass
         else:
             raise RuntimeError("unknown instance type")
 
-        if len(self._csr_data) > 0:
-            constraints = \
-                scipy.sparse.csr_matrix(
-                    (self._csr_data, self._csr_indices, self._csr_indptrs),
-                    shape = (M, N),
-                    dtype = numpy.int8,
-                    )
-        else:
-            # XXX
-            pass
+        constraints = \
+            scipy.sparse.csr_matrix(
+                (self._csr_data, self._csr_indices, self._csr_indptrs),
+                shape = (M, N),
+                dtype = numpy.int8,
+                )
 
-        return constraints
+        return MAX_SAT_Instance(self._weights, constraints)
 
     cdef parse_comment(self):
         while True:
@@ -105,6 +104,23 @@ cdef class DIMACS_Parser(object):
         #top = int(self.lex()) # XXX
 
         return (kind, N, M)
+
+    cdef int parse_weighted_constraint(self):
+        while True:
+            str_token = self._lexer.lex()
+
+            if str_token is None:
+                return False
+            elif str_token[0] != b"\n":
+                self._weights.append(int(str_token))
+
+                break
+
+        success = self.parse_constraint()
+
+        assert success
+
+        return True
 
     cdef int parse_constraint(self):
         cdef char* token

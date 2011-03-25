@@ -10,12 +10,12 @@ import borg
 logger = cargo.get_logger(__name__, default_level = "INFO")
 
 named = {
-    "nonlinear" : lambda opb: 1.0 if opb.nonlinear is None else 0.0,
-    "optimization" : lambda opb: 0.0 if opb.objective is None else 1.0,
-    "variables": lambda opb: opb.N,
-    "constraints": lambda opb: len(opb.constraints),
-    "ratio": lambda opb: len(opb.constraints) / float(opb.N),
-    "ratio_reciprocal": lambda opb: float(opb.N) / len(opb.constraints),
+    #"weighted" : lambda opb: 1.0 if opb.nonlinear is None else 0.0,
+    #"optimization" : lambda opb: 0.0 if opb.objective is None else 1.0,
+    "variables": lambda t: t.N,
+    "constraints": lambda t: t.M,
+    "ratio": lambda t: t.M / float(t.N),
+    "ratio_reciprocal": lambda t: float(t.N) / t.M,
     }
 
 def feature(method):
@@ -25,80 +25,91 @@ def feature(method):
 
     return method
 
-def build_balance_ratios(opb):
+@feature
+def compute_weights_min(instance):
+    return numpy.min(instance.weights)
+
+@feature
+def compute_weights_max(instance):
+    return numpy.min(instance.weights)
+
+@feature
+def compute_weights_mean(instance):
+    return numpy.mean(instance.weights)
+
+@feature
+def compute_weights_std(instance):
+    return numpy.std(instance.weights)
+
+def build_balance_ratios(instance):
     """Gather the positive/negative balance counts."""
 
-    if not hasattr(opb, "variable_balance_ratios"):
-        variable_positives = numpy.zeros(opb.N)
-        variable_negatives = numpy.zeros(opb.N)
-        constraint_positives = numpy.zeros(len(opb.constraints))
-        constraint_negatives = numpy.zeros(len(opb.constraints))
+    if not hasattr(instance, "variable_balance_ratios"):
+        constraints_CV = instance.constraints
+        (C, V) = constraints_CV.shape
 
-        for (c, (terms, _, _)) in enumerate(opb.constraints):
-            for (_, literal) in terms:
-                v = abs(literal) - 1
+        positives_CV = \
+            scipy.sparse.csr_matrix(
+                ((constraints_CV.data + 1) / 2, constraints_CV.indices, constraints_CV.indptr),
+                shape = (C, V),
+                dtype = int,
+                )
+        negatives_CV = \
+            scipy.sparse.csr_matrix(
+                ((constraints_CV.data - 1) / -2, constraints_CV.indices, constraints_CV.indptr),
+                shape = (C, V),
+                dtype = int,
+                )
 
-                if literal > 0:
-                    variable_positives[v] += 1
-                    constraint_positives[c] += 1
-                else:
-                    variable_negatives[v] += 1
-                    constraint_negatives[c] += 1
+        appearances_V = numpy.asarray(positives_CV.sum(axis = 0) + negatives_CV.sum(axis = 0))
+        appearances_V[appearances_V == 0] = 1
 
-        opb.variable_balance_ratios = variable_positives / (variable_positives + variable_negatives)
-        opb.constraint_balance_ratios = constraint_positives / (constraint_positives + constraint_negatives)
-
-@feature
-def compute_constraint_balance_ratio_mean(opb):
-    build_balance_ratios(opb)
-
-    return numpy.mean(opb.constraint_balance_ratios)
+        instance.variable_balance_ratios = positives_CV.sum(axis = 0) / appearances_V
+        instance.constraint_balance_ratios = negatives_CV.sum(axis = 1) / (positives_CV.sum(axis = 1) + negatives_CV.sum(axis = 1))
 
 @feature
-def compute_constraint_balance_ratio_std(opb):
-    build_balance_ratios(opb)
+def compute_constraint_balance_ratio_mean(instance):
+    build_balance_ratios(instance)
 
-    return numpy.std(opb.constraint_balance_ratios)
-
-@feature
-def compute_variable_balance_ratio_mean(opb):
-    build_balance_ratios(opb)
-
-    return numpy.mean(opb.variable_balance_ratios)
+    return numpy.mean(instance.constraint_balance_ratios)
 
 @feature
-def compute_variable_balance_ratio_std(opb):
-    build_balance_ratios(opb)
+def compute_constraint_balance_ratio_std(instance):
+    build_balance_ratios(instance)
 
-    return numpy.std(opb.variable_balance_ratios)
+    return numpy.std(instance.constraint_balance_ratios)
 
-def build_node_degrees(opb):
+@feature
+def compute_variable_balance_ratio_mean(instance):
+    build_balance_ratios(instance)
+
+    return numpy.mean(instance.variable_balance_ratios)
+
+@feature
+def compute_variable_balance_ratio_std(instance):
+    build_balance_ratios(instance)
+
+    return numpy.std(instance.variable_balance_ratios)
+
+def build_node_degrees(instance):
     """Gather the CG, VG, and VCG node degrees."""
 
-    if not hasattr(opb, "vcg_degrees_V"):
-        V = opb.N
-        C = len(opb.constraints)
+    if not hasattr(instance, "vcg_degrees_V"):
+        V = instance.N
+        C = instance.M
 
-        adjacency_v = []
-        adjacency_c = []
-
-        for (c, (terms, _, _)) in enumerate(opb.constraints):
-            for (_, literal) in terms:
-                adjacency_v.append(abs(literal) - 1)
-                adjacency_c.append(c)
-
-        adjacency_csr_VC = \
+        adjacency_csr_CV = \
             scipy.sparse.csr_matrix(
-                (numpy.ones(len(adjacency_v), int), (adjacency_v, adjacency_c)),
-                (V, C),
+                (numpy.ones(len(instance.constraints.data), int), instance.constraints.indices, instance.constraints.indptr),
+                shape = (C, V),
                 )
-        adjacency_csr_CV = adjacency_csr_VC.T.tocsr()
+        adjacency_csr_VC = adjacency_csr_CV.T.tocsr()
 
-        opb.vcg_degrees_V = numpy.asarray(adjacency_csr_VC.sum(axis = 1))[:, 0]
-        opb.vcg_degrees_C = numpy.asarray(adjacency_csr_VC.sum(axis = 0))[0, :]
+        instance.vcg_degrees_V = numpy.asarray(adjacency_csr_VC.sum(axis = 1))[:, 0]
+        instance.vcg_degrees_C = numpy.asarray(adjacency_csr_VC.sum(axis = 0))[0, :]
 
-        opb.vg_degrees_V = numpy.zeros(V, int)
-        opb.cg_degrees_C = numpy.zeros(C, int)
+        instance.vg_degrees_V = numpy.zeros(V, int)
+        instance.cg_degrees_C = numpy.zeros(C, int)
 
         for v in xrange(V):
             i = adjacency_csr_VC.indptr[v]
@@ -107,9 +118,9 @@ def build_node_degrees(opb):
             for k in xrange(i, j):
                 c = adjacency_csr_VC.indices[k]
 
-                opb.vg_degrees_V[v] += opb.vcg_degrees_C[c]
+                instance.vg_degrees_V[v] += instance.vcg_degrees_C[c]
 
-            opb.vg_degrees_V[v] -= j - i
+            instance.vg_degrees_V[v] -= j - i
 
         for c in xrange(C):
             i = adjacency_csr_CV.indptr[c]
@@ -118,15 +129,15 @@ def build_node_degrees(opb):
             for k in xrange(i, j):
                 v = adjacency_csr_CV.indices[k]
 
-                opb.cg_degrees_C[c] += opb.vcg_degrees_V[v]
+                instance.cg_degrees_C[c] += instance.vcg_degrees_V[v]
 
-            opb.cg_degrees_C[c] -= j - i
+            instance.cg_degrees_C[c] -= j - i
 
 def graph_feature(method):
-    def wrapper(opb):
-        build_node_degrees(opb)
+    def wrapper(instance):
+        build_node_degrees(instance)
 
-        return method(opb)
+        return method(instance)
 
     assert method.__name__.startswith("compute_")
 
@@ -135,36 +146,36 @@ def graph_feature(method):
     return wrapper
 
 @graph_feature
-def compute_cg_cnode_degree_mean(opb):
-    return numpy.mean(opb.cg_degrees_C)
+def compute_cg_cnode_degree_mean(instance):
+    return numpy.mean(instance.cg_degrees_C)
 
 @graph_feature
-def compute_cg_cnode_degree_std(opb):
-    return numpy.std(opb.cg_degrees_C)
+def compute_cg_cnode_degree_std(instance):
+    return numpy.std(instance.cg_degrees_C)
 
 @graph_feature
-def compute_vcg_cnode_degree_std(opb):
-    return numpy.std(opb.vcg_degrees_C)
+def compute_vcg_cnode_degree_std(instance):
+    return numpy.std(instance.vcg_degrees_C)
 
 @graph_feature
-def compute_vg_node_degree_mean(opb):
-    return numpy.mean(opb.vg_degrees_V)
+def compute_vg_node_degree_mean(instance):
+    return numpy.mean(instance.vg_degrees_V)
 
 @graph_feature
-def compute_vg_node_degree_std(opb):
-    return numpy.std(opb.vg_degrees_V)
+def compute_vg_node_degree_std(instance):
+    return numpy.std(instance.vg_degrees_V)
 
 @graph_feature
-def compute_vcg_vnode_degree_mean(opb):
-    return numpy.mean(opb.vcg_degrees_V)
+def compute_vcg_vnode_degree_mean(instance):
+    return numpy.mean(instance.vcg_degrees_V)
 
 @graph_feature
-def compute_vcg_vnode_degree_std(opb):
-    return numpy.std(opb.vcg_degrees_V)
+def compute_vcg_vnode_degree_std(instance):
+    return numpy.std(instance.vcg_degrees_V)
 
 @graph_feature
-def compute_vcg_cnode_degree_mean(opb):
-    return numpy.mean(opb.vcg_degrees_C)
+def compute_vcg_cnode_degree_mean(instance):
+    return numpy.mean(instance.vcg_degrees_C)
 
 class FeaturesTimedOut(Exception):
     pass

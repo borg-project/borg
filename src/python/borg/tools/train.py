@@ -27,7 +27,7 @@ def main(out_path, portfolio_name, domain_name, *tasks_roots):
     cargo.enable_default_logging()
 
     # find the training tasks
-    domain = borg.domains.named[domain_name]
+    domain = borg.get_domain(domain_name)
     train_paths = []
     
     for tasks_root in tasks_roots:
@@ -36,13 +36,13 @@ def main(out_path, portfolio_name, domain_name, *tasks_roots):
     logger.info("using %i tasks for training", len(train_paths))
 
     # train the portfolio
-    solver = borg.portfolios.named[portfolio_name](domain, train_paths)
+    solver = borg.portfolios.named[portfolio_name](domain, train_paths, 50.0, 36)
 
     logger.info("portfolio training complete")
 
     # write it to disk
     with open(out_path, "w") as out_file:
-        pickle.dump(solver, out_file, protocol = -1)
+        pickle.dump((domain, solver), out_file, protocol = -1)
 
     logger.info("portfolio written to %s", out_path)
 

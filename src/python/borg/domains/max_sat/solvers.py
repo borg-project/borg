@@ -10,10 +10,17 @@ logger = cargo.get_logger(__name__)
 def parse_max_sat_competition(stdout):
     """Parse output from a standard competition solver."""
 
-    match = re.search(r"^s +([a-zA-Z ]+) *\r?$", stdout, re.M)
+    optima = map(int, re.findall(r"^o +([0-9]+) *\r?$", stdout, re.M))
 
-    if match:
-        (answer_type_raw,) = match.groups()
+    if len(optima) > 0:
+        optimum = optima[-1]
+    else:
+        optimum = None
+
+    answer_match = re.search(r"^s +([a-zA-Z ]+) *\r?$", stdout, re.M)
+
+    if answer_match:
+        (answer_type_raw,) = answer_match.groups()
         answer_type = answer_type_raw.strip().upper()
 
         if answer_type == "OPTIMUM FOUND":
@@ -29,7 +36,7 @@ def parse_max_sat_competition(stdout):
         else:
             return None
 
-        return (answer_type, certificate)
+        return (answer_type, certificate, optimum)
 
     return None
 
@@ -68,7 +75,7 @@ class MAX_SAT_BasicSolverFactory(object):
 
 basic_named = dict(zip(basic_commands, map(MAX_SAT_BasicSolverFactory, basic_commands.values())))
 wbo_prefixes = {
-    "wbo1.4a": ["{root}/wbo1.4a", "-time-limit=1000000"],
+    #"wbo1.4a": ["{root}/wbo1.4a", "-time-limit=1000000"],
     "wbo1.4b-fixed": ["{root}/wbo1.4b-fixed", "-time-limit=1000000"],
     }
 
@@ -89,6 +96,24 @@ class MAX_SAT_WBO_SolverFactory(object):
                 solver_id = solver_id,
                 )
 
+def build_inc_solver(task, stm_queue = None, solver_id = None):
+    (_, extension) = os.path.splitext(task.path)
+
+    if extension[1:] == "cnf":
+        command = ["{root}/inc-maxsatz", "{task}"]
+    else:
+        command = ["{root}/IncWMaxSatz", "{task}"]
+
+    return \
+        borg.solver_io.RunningSolver(
+            parse_max_sat_competition,
+            command,
+            task.path,
+            stm_queue = stm_queue,
+            solver_id = solver_id,
+            )
+
+inc_named = {"inc[w]maxsatz": build_inc_solver}
 wbo_named = dict(zip(wbo_prefixes, map(MAX_SAT_WBO_SolverFactory, wbo_prefixes.values())))
-named = dict(basic_named.items() + wbo_named.items())
+named = dict(basic_named.items() + wbo_named.items() + inc_named.items())
 

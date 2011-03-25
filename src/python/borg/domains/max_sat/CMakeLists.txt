@@ -2,7 +2,7 @@
 # build
 #
 
-#add_cython_module(borg_domains_max_sat_features features)
+add_cython_module(borg_domains_max_sat_features features)
 add_cython_module(borg_domains_max_sat_instance instance)
 
 #
@@ -11,7 +11,7 @@ add_cython_module(borg_domains_max_sat_instance instance)
 
 install(
     TARGETS
-        #borg_domains_max_sat_features
+        borg_domains_max_sat_features
         borg_domains_max_sat_instance
     DESTINATION lib/borg/domains/max_sat
     )

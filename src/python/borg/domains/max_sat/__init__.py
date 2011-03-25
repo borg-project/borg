@@ -6,7 +6,7 @@ import borg
 
 from . import instance
 from . import solvers
-#from . import features
+from . import features
 from . import test
 
 logger = cargo.get_logger(__name__, default_level = "INFO")
@@ -34,8 +34,8 @@ class MAX_SAT_Domain(object):
     def task_from_path(self, task_path):
         yield MAX_SAT_Task(task_path)
 
-    def compute_features(self, task):
-        return features.compute_all(task.instance)
+    def compute_features(self, task, cpu_seconds = None):
+        return features.compute_all(task.instance, cpu_seconds)
 
     def is_final(self, task, answer):
         """Is the answer definitive for the task?"""
@@ -51,10 +51,13 @@ class MAX_SAT_Domain(object):
         if answer is None:
             print "s UNKNOWN"
         else:
-            (description, certificate) = answer
+            (description, certificate, optimum) = answer
+
+            if optimum is not None:
+                print "o {0}".format(optimum)
 
             print "s {0}".format(description)
 
             if certificate is not None:
-                print "v", " ".join(answer)
+                print "v", " ".join(certificate)
 
