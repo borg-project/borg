@@ -40,12 +40,7 @@ class MAX_SAT_Domain(object):
     def is_final(self, task, answer):
         """Is the answer definitive for the task?"""
 
-        if answer is None:
-            return False
-        else:
-            (description, _) = answer
-
-            return description in ("OPTIMUM FOUND", "UNSATISFIABLE")
+        return answer is not None
 
     def show_answer(self, task, answer):
         if answer is None:

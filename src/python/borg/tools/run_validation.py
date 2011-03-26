@@ -101,12 +101,14 @@ class FakeDomain(object):
     def __init__(self, domain):
         self._real = domain
 
-        self.extensions = [x + ".rtd.csv" for x in domain.extensions]
+        #self.extensions = [x + ".rtd.csv" for x in domain.extensions]
+        self.extensions = [x for x in domain.extensions]
         self.solvers = dict(zip(self._real.solvers, map(FakeSolverFactory, self._real.solvers)))
 
     @contextlib.contextmanager
     def task_from_path(self, task_path):
-        yield task_path[:-8]
+        #yield task_path[:-8]
+        yield task_path
 
     def compute_features(self, task, cpu_seconds = None):
         """Read or compute features of an instance."""
