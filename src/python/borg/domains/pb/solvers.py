@@ -72,15 +72,16 @@ def parse_scip(variables, optimization, stdout):
 
     if answer_match:
         (status,) = answer_match.groups()
-        solution = numpy.zeros(variables, bool)
 
         if status in ("optimal solution found"):
             answer_type = "OPTIMUM FOUND" if optimization else "SATISFIABLE"
             trues = map(int, re.findall(r"^x([0-9]+) *1[ \t]*\(obj:.+\) *\r?$", stdout, re.M))
+            solution = numpy.zeros(variables, bool)
 
-            solution[trues] = True
+            for v in trues:
+                solution[v - 1] = True
 
-            certificate = [("" if t else "-") + ("x%i" % v) for (v, t) in enumerate(solution)]
+            certificate = [("" if t else "-") + ("x%i" % (v + 1)) for (v, t) in enumerate(solution)]
         elif status == "infeasible":
             answer_type = "UNSATISFIABLE"
             certificate = None
@@ -88,6 +89,28 @@ def parse_scip(variables, optimization, stdout):
             return None
 
         return (answer_type, certificate)
+
+    return None
+
+def parse_opbdp(variables, optimization, stdout):
+    """Parse output from the SCIP solver(s)."""
+
+    if re.search(r"^Constraint Set is unsatisfiable\r?$", stdout, re.M):
+        return ("UNSATISFIABLE", None)
+    elif re.search(r"^Global Minimum: ****** -?[0-9]+ ******\r?$", stdout, re.M):
+        solution_match = re.search(r"^0-1 Variables fixed to 1 :([x0-9 ]*)\r?$", stdout, re.M)
+
+        if solution_match:
+            solution = numpy.zeros(variables, bool)
+            (solution_chunk,) = answer_match.groups()
+
+            for part in solution_chunk.split():
+                solution[int(part[1:]) - 1] = True
+
+            return (
+                "OPTIMUM FOUND" if optimization else "SATISFIABLE",
+                [("" if t else "-") + ("x%i" % (v + 1)) for (v, t) in enumerate(solution)],
+                )
 
     return None
 
@@ -132,8 +155,23 @@ class SCIP_SolverFactory(object):
                 solver_id = solver_id,
                 )
 
+class OPBDP_SolverFactory(object):
+    def __call__(self, task, stm_queue = None, solver_id = None):
+        parse = cargo.curry(parse_opbdp, task.opb.N, task.opb.objective is not None)
+        nl_flag = ["-n"] if task.nonlinear else []
+
+        return \
+            borg.solver_io.RunningSolver(
+                parse,
+                ["{root}/opbdp-1.1.3/opbdp", "-s", "-v1"] + nl_flag + ["{task}"],
+                task.path,
+                stm_queue = stm_queue,
+                solver_id = solver_id,
+                )
+
 nlc_named = dict(zip(nlc_commands, map(PseudoBooleanSolverFactory, nlc_commands.values())))
 lin_named = dict(zip(lin_commands, map(LinearPseudoBooleanSolverFactory, lin_commands.values())))
 scip_named = dict(zip(scip_commands, map(SCIP_SolverFactory, scip_commands.values())))
+#opbdp_named = 
 named = dict(nlc_named.items() + lin_named.items() + scip_named.items())
 
