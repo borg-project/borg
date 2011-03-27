@@ -13,6 +13,7 @@ import logging
 import cPickle as pickle
 import numpy
 import cargo
+import borg
 
 logger = cargo.get_logger(__name__, default_level = "INFO")
 
@@ -81,9 +82,9 @@ def main(solver_path, input_path, seed = 42, budget = 2e6, cores = 1, quiet = Fa
 
         logger.info("solving %s", input_path)
 
-        with domain.task_from_path() as task:
+        with domain.task_from_path(input_path) as task:
             remaining = budget - borg.get_accountant().total.cpu_seconds
-            answer = solver(input_path, remaining, cores)
+            answer = solver(task, borg.Cost(cpu_seconds = remaining), cores)
 
             return domain.show_answer(task, answer)
     except KeyboardInterrupt:

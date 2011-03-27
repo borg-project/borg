@@ -1,6 +1,4 @@
-"""
-@author: Bryan Silverthorn <bcs@cargo-cult.org>
-"""
+"""@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import plac
 
@@ -23,9 +21,8 @@ def collect_calibration_datum():
     command = [
         "/usr/bin/time",
         "-f", "%U",
-        os.path.join(borg.defaults.solvers_root, "gnovelty+2/gnovelty+2"),
-        os.path.join(borg.defaults.solvers_root, "calibration/unif-k7-r89-v75-c6675-S342542912-045.cnf"),
-        "42",
+        os.path.join(borg.defaults.solvers_root, "akmaxsat"),
+        os.path.join(borg.defaults.solvers_root, "calibration/s2v120c1200-2.cnf"),
         ]
 
     logger.detail("running %s", command)

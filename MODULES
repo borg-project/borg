@@ -1,8 +1,0 @@
-Cython>=0.12.1
-SQLAlchemy>=0.6.0
-argparse>=1.1
-nose>=0.11.4
-numpy>=1.5.0b2
-plac>=0.7.1
-psycopg2>=2.2.2
-scipy>=0.8.0

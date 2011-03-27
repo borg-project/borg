@@ -17,12 +17,6 @@ reasoning to the algorithm portfolio setting.
 REQUIREMENTS
 ------------
 
-The project assumes a reasonably-standard Linux environment, available C
-compiler, CMake, and at least Python 2.6, along with a variety of supporting
-modules. Using virtualenv is strongly recommended. The core dependencies are
-listed in the `MODULES` file, which can be passed as a requirements file to the
-pip package management tool with `pip install -r MODULES`.
-
 The project also depends on cargo, a general-purpose Python support library:
 
 http://github.com/borg-project/cargo
@@ -53,8 +47,6 @@ cmake, define `CMAKE_PREFIX_PATH`; eg, if required libraries are installed under
 `/opt/foo/include` and `/opt/foo/lib`:
 
 `cmake -DCMAKE_PREFIX_PATH=/opt/foo <other_options>`
-
-Note that CMake has known issues with paths that include colons.
 
 LICENSE
 -------

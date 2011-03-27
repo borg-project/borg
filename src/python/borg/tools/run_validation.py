@@ -101,12 +101,14 @@ class FakeDomain(object):
     def __init__(self, domain):
         self._real = domain
 
-        self.extensions = [x + ".rtd.csv" for x in domain.extensions]
+        #self.extensions = [x + ".rtd.csv" for x in domain.extensions]
+        self.extensions = [x for x in domain.extensions]
         self.solvers = dict(zip(self._real.solvers, map(FakeSolverFactory, self._real.solvers)))
 
     @contextlib.contextmanager
     def task_from_path(self, task_path):
-        yield task_path[:-8]
+        #yield task_path[:-8]
+        yield task_path
 
     def compute_features(self, task, cpu_seconds = None):
         """Read or compute features of an instance."""
@@ -142,12 +144,14 @@ class FakeDomain(object):
 def run_validation(name, domain, train_paths, test_paths, budget, split):
     """Make a validation run."""
 
-    solver = borg.portfolios.named[name](domain, train_paths, 50.0, 42)
+    #solver = borg.portfolios.named[name](domain, train_paths, 50.0, 42)
+    solver = borg.portfolios.named[name](domain, train_paths, 50.0, 36) # XXX
     successes = []
 
     logger.info("running portfolio %s with per-task budget %.2f", name, budget)
 
     for test_path in test_paths:
+        print test_path
         with domain.task_from_path(test_path) as test_task:
             cost_budget = borg.Cost(cpu_seconds = budget)
 
