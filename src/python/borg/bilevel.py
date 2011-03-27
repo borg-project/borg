@@ -128,18 +128,18 @@ class BilevelPortfolio(object):
 
     def _solve(self, task, budget, cores):
         # print oracle knowledge, if any
-        (runs,) = borg.portfolios.get_task_run_data([task]).values()
-        (oracle_history, oracle_counts, _) = \
-            borg.portfolios.action_rates_from_runs(
-                self._solver_name_index,
-                self._budget_index,
-                runs.tolist(),
-                )
-        true_rates = oracle_history / oracle_counts
-        hopeless = numpy.sum(true_rates) < 1e-2
-        messages = []
+        #(runs,) = borg.port
+        #(oracle_history, oracle_counts, _) = \
+            #borg.portfolios.action_rates_from_runs(
+                #self._solver_name_index,
+                #self._budget_index,
+                #runs.tolist(),
+                #)
+        #true_rates = oracle_history / oracle_counts
+        #hopeless = numpy.sum(true_rates) < 1e-2
+        #messages = []
 
-        messages.append("true rates:\n%s" % cargo.pretty_probability_matrix(true_rates))
+        #messages.append("true rates:\n%s" % cargo.pretty_probability_matrix(true_rates))
 
         # obtain features
         (_, features) = self._domain.compute_features(task, budget.cpu_seconds / 10.0)
@@ -164,6 +164,10 @@ class BilevelPortfolio(object):
 
             (tclass_weights_L, tclass_rates_LSB) = self._model.predict(failed_indices, features)
             (L, S, B) = tclass_rates_LSB.shape
+
+            # XXX force determinism
+            for (s, b) in failed_indices:
+                tclass_rates_LSB[:, s, :b + 1] = 1e-6
 
             # prepare augmented PMF matrix
             augmented_tclass_arrays = [tclass_rates_LSB]
@@ -223,11 +227,11 @@ class BilevelPortfolio(object):
             augmented_mean_cmf_AB = numpy.sum(tclass_weights_L[:, None, None] * augmented_tclass_cmf_LAB, axis = 0)
             subjective_rate = augmented_mean_cmf_AB[a, c]
 
-            #logger.info(
+            logger.info(
             #tclass_cmf_LSB = numpy.cumsum(tclass_rates_LSB, axis = -1)
             #mean_cmf_SB = numpy.sum(tclass_weights_L[:, None, None] * tclass_cmf_LSB, axis = 0)
             #messages.append("mean augmented subjective CMF:\n%s" % cargo.pretty_probability_matrix(mean_cmf_SB))
-            messages.append(
+            #messages.append(
                 "running %s@%i for %i with %i remaining (b = %.2f)" % (
                     name,
                     borg.normal_to_machine(solver.cpu_cost),
@@ -264,9 +268,9 @@ class BilevelPortfolio(object):
             process.stop()
 
         # XXX
-        if not self._domain.is_final(task, answer) and not hopeless:
-            for message in messages:
-                logger.info("%s", message)
+        #if not self._domain.is_final(task, answer) and not hopeless:
+            #for message in messages:
+                #logger.info("%s", message)
 
         return answer
 

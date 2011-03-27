@@ -35,8 +35,8 @@ lin_commands = {
     "clasp-1.3.7": ["{root}/clasp-1.3.7/clasp-1.3.7-x86-linux", "--seed={seed}", "{task}"],
     }
 scip_commands = {
-    #"scip-2.0.1-clp": ["{root}/scip-2.0.1.linux.x86_64.gnu.opt.clp", "-f", "{task}"],
-    #"scip-2.0.1-spx": ["{root}/scip-2.0.1.linux.x86_64.gnu.opt.spx", "-f", "{task}"],
+    "scip-2.0.1-clp": ["{root}/scip-2.0.1.linux.x86_64.gnu.opt.clp", "-f", "{task}"],
+    "scip-2.0.1-spx": ["{root}/scip-2.0.1.linux.x86_64.gnu.opt.spx", "-f", "{task}"],
     }
 
 def parse_competition(stdout):
