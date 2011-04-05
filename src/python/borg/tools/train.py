@@ -36,7 +36,7 @@ def main(out_path, portfolio_name, domain_name, *tasks_roots):
     logger.info("using %i tasks for training", len(train_paths))
 
     # train the portfolio
-    solver = borg.portfolios.named[portfolio_name](domain, train_paths, 50.0, 36)
+    solver = borg.portfolios.named[portfolio_name](domain, train_paths, 50.0, 42) # XXX
 
     logger.info("portfolio training complete")
 

@@ -17,46 +17,40 @@ logger = cargo.get_logger(__name__, default_level = "INFO")
 class PseudoBooleanTask(object):
     def __init__(self, path):
         self.path = path
+        self.support_paths = {}
 
         with open(path) as opb_file:
             self.header = instance.parse_opb_file_header(opb_file.readline())
 
-        (_, _, nonlinear) = self.header
+        (self.raw_M, self.raw_N, self.nonlinear) = self.header
 
-        if nonlinear:
+        if self.nonlinear:
             linearizer = os.path.join(borg.defaults.solvers_root, "PBSimple/PBlinearize")
             (linearized, _) = cargo.check_call_capturing([linearizer, self.path])
             (fd, self.linearized_path) = tempfile.mkstemp(suffix = ".opb")
+            self.support_paths["linearized"] = self.linearized_path
 
             with os.fdopen(fd, "w") as linearized_file:
                 linearized_file.write(linearized)
 
             logger.info("wrote linearized instance to %s", self.linearized_path)
         else:
-            self.linearized_path = None
+            self.linearized_path = path
 
         with borg.accounting() as accountant:
-            if self.linearized_path is None:
-                path_to_parse = self.path
-            else:
-                path_to_parse = self.linearized_path
-
-            with open(path_to_parse) as opb_file:
+            with open(self.linearized_path) as opb_file:
                 self.opb = instance.parse_opb_file_linear(opb_file)
 
         logger.info("parsing took %.2f s", accountant.total.cpu_seconds)
 
     def get_linearized_path(self):
-        if self.linearized_path is None:
-            return self.path
-        else:
-            return self.linearized_path
+        return self.linearized_path
 
     def clean(self):
-        if self.linearized_path is not None:
-            os.unlink(self.linearized_path)
+        for path in self.support_paths.values():
+            os.unlink(path)
 
-            self.linearized_path = None
+        self.support_paths = {}
 
 @borg.named_domain
 class PseudoBooleanSatisfiability(object):
@@ -102,5 +96,7 @@ class PseudoBooleanSatisfiability(object):
             print "s {0}".format(description)
 
             if certificate is not None:
-                print "v", " ".join(answer)
+                sorted_certificate = sorted(certificate, key = lambda l: int(l[2:] if l[0] == "-" else l[1:]))
+
+                print "v", " ".join(sorted_certificate[:task.raw_N])
 

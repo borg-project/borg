@@ -21,8 +21,9 @@ def collect_calibration_datum():
     command = [
         "/usr/bin/time",
         "-f", "%U",
-        os.path.join(borg.defaults.solvers_root, "akmaxsat"),
-        os.path.join(borg.defaults.solvers_root, "calibration/s2v120c1200-2.cnf"),
+        os.path.join(borg.defaults.solvers_root, "wbo1.4a"),
+        "-file-format=opb",
+        os.path.join(borg.defaults.solvers_root, "calibration/normalized-t3002.11tsp11.1900546076.opb"),
         ]
 
     logger.detail("running %s", command)
