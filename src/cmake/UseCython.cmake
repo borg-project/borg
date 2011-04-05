@@ -41,6 +41,7 @@ function(add_cython_module target_name base_name)
             ${CYTHON_EXECUTABLE}
             ${CYTHON_INCLUDE_ARGUMENTS}
             ${CMAKE_CURRENT_SOURCE_DIR}/${base_name}.pyx
+            -a
             -o
             ${CMAKE_CURRENT_BINARY_DIR}/${base_name}.c
         COMMAND
