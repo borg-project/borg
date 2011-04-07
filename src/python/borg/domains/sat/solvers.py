@@ -52,12 +52,21 @@ def parse_sat_output(stdout):
 
     return None
 
-def basic_solver(name, command):
-    """Return a basic competition solver callable."""
+class SAT_SolverFactory(object):
+    """Construct a basic competition solver callable."""
 
-    from borg.domains.solvers.common import MonitoredSolver
+    def __init__(self, command):
+        self._command = command
 
-    return cargo.curry(MonitoredSolver, parse_sat_output, command)
+    def __call__(self, task, stm_queue = None, solver_id = None):
+        return \
+            borg.solver_io.RunningSolver(
+                parse_sat_output,
+                self._command,
+                task.path,
+                stm_queue = stm_queue,
+                solver_id = solver_id,
+                )
 
-named = dict(zip(commands, itertools.starmap(basic_solver, commands.items())))
+named = dict(zip(commands, map(SAT_SolverFactory, commands.values())))
 
