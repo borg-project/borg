@@ -1,9 +1,8 @@
 try:
+    import os.path
     import numpy
 
-    from os.path import dirname
-
-    print dirname(numpy.__file__)
+    print os.path.dirname(numpy.__file__)
 except:
     raise SystemExit(1)
 

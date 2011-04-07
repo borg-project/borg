@@ -31,7 +31,7 @@ def compute_weights_min(instance):
 
 @feature
 def compute_weights_max(instance):
-    return numpy.min(instance.weights)
+    return numpy.max(instance.weights)
 
 @feature
 def compute_weights_mean(instance):

@@ -42,10 +42,11 @@ def run_solver_on(domain, solver_name, task_path, budget):
     domain_name = ("name of the problem domain",),
     tasks_root = ("path to task files", "positional", None, os.path.abspath),
     budget = ("per-instance budget", "positional", None, float),
+    discard = ("do not record results", "flag", "d"),
     runs = ("number of runs", "option", "r", int),
     workers = ("submit jobs?", "option", "w", int),
     )
-def main(domain_name, tasks_root, budget, runs = 4, workers = 0):
+def main(domain_name, tasks_root, budget, discard = False, runs = 4, workers = 0):
     """Collect solver running-time data."""
 
     cargo.enable_default_logging()
@@ -63,17 +64,18 @@ def main(domain_name, tasks_root, budget, runs = 4, workers = 0):
                     yield (run_solver_on, [domain, solver_name, path, budget])
 
     def collect_run((_, arguments), row):
-        (_, _, cnf_path, _) = arguments
-        csv_path = cnf_path + ".rtd.csv"
-        existed = os.path.exists(csv_path)
+        if not discard:
+            (_, _, cnf_path, _) = arguments
+            csv_path = cnf_path + ".rtd.csv"
+            existed = os.path.exists(csv_path)
 
-        with open(csv_path, "a") as csv_file:
-            writer = csv.writer(csv_file)
+            with open(csv_path, "a") as csv_file:
+                writer = csv.writer(csv_file)
 
-            if not existed:
-                writer.writerow(["solver", "seed", "budget", "cost", "answer"])
+                if not existed:
+                    writer.writerow(["solver", "seed", "budget", "cost", "answer"])
 
-            writer.writerow(row)
+                writer.writerow(row)
 
     cargo.distribute_or_labor(yield_runs(), workers, collect_run)
 

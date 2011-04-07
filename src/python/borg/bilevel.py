@@ -228,6 +228,9 @@ class BilevelPortfolio(object):
             subjective_rate = augmented_mean_cmf_AB[a, c]
 
             logger.info(
+            #tclass_cmf_LSB = numpy.cumsum(tclass_rates_LSB, axis = -1)
+            #mean_cmf_SB = numpy.sum(tclass_weights_L[:, None, None] * tclass_cmf_LSB, axis = 0)
+            #messages.append("mean augmented subjective CMF:\n%s" % cargo.pretty_probability_matrix(mean_cmf_SB))
             #messages.append(
                 "running %s@%i for %i with %i remaining (b = %.2f)" % (
                     name,

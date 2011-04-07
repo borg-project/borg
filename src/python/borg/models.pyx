@@ -6,8 +6,6 @@ import numpy
 import borg
 import cargo
 
-cimport numpy
-
 logger = cargo.get_logger(__name__, default_level = "DETAIL")
 
 def assert_probabilities(array):

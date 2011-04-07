@@ -144,8 +144,7 @@ class FakeDomain(object):
 def run_validation(name, domain, train_paths, test_paths, budget, split):
     """Make a validation run."""
 
-    #solver = borg.portfolios.named[name](domain, train_paths, 50.0, 42)
-    solver = borg.portfolios.named[name](domain, train_paths, 50.0, 36) # XXX
+    solver = borg.portfolios.named[name](domain, train_paths, 50.0, 42) # XXX
     successes = []
 
     logger.info("running portfolio %s with per-task budget %.2f", name, budget)

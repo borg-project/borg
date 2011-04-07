@@ -3,15 +3,12 @@
 #
 
 find_package(Numpy REQUIRED)
-#find_package(PythonLibs REQUIRED)
 
 execute_process(
     COMMAND
-        "python-config"
-        "--includes"
+        "python"
+        "${PROJECT_SOURCE_DIR}/src/scripts/echo_python_inc_path.py"
     OUTPUT_VARIABLE PYTHON_INCLUDE_DIRS
-    #ERROR_VARIABLE NUMPY_FOUND_PATH
-    #RESULT_VARIABLE ECHO_NUMPY_PATH_FAILED
     OUTPUT_STRIP_TRAILING_WHITESPACE
     )
 
@@ -19,11 +16,11 @@ message(STATUS "Python include path: ${PYTHON_INCLUDE_DIRS}")
 
 include_directories(
     ${NUMPY_INCLUDE_DIRS}
-    #${PYTHON_INCLUDE_DIRS}
+    ${PYTHON_INCLUDE_DIRS} # should be last
     )
 
-set(CMAKE_C_FLAGS         "${CMAKE_C_FLAGS} ${PYTHON_INCLUDE_DIRS}")
-set(CMAKE_C_FLAGS_DEBUG   "${CMAKE_C_FLAGS_DEBUG} ${PYTHON_INCLUDE_DIRS}")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
 
 #
 # configure cython
