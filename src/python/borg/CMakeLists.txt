@@ -30,5 +30,6 @@ install(
 
 add_subdirectory(tools)
 add_subdirectory(domains)
+add_subdirectory(visual)
 add_subdirectory(test)
 

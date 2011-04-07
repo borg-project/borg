@@ -1,6 +1,7 @@
 install(
 	FILES
         __init__.py
+        view.py
         train.py
         solve.py
 		run_solvers.py
