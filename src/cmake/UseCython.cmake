@@ -41,7 +41,6 @@ function(add_cython_module target_name base_name)
             ${CYTHON_EXECUTABLE}
             ${CYTHON_INCLUDE_ARGUMENTS}
             ${CMAKE_CURRENT_SOURCE_DIR}/${base_name}.pyx
-            -a
             -o
             ${CMAKE_CURRENT_BINARY_DIR}/${base_name}.c
         COMMAND
@@ -55,7 +54,12 @@ function(add_cython_module target_name base_name)
             ${module_depends}
         )
     add_library(${target_name} SHARED ${base_name}.c)
-    set_target_properties(${target_name} PROPERTIES OUTPUT_NAME ${base_name} PREFIX "")
+    set_target_properties(
+        ${target_name}
+        PROPERTIES
+        OUTPUT_NAME ${base_name}
+        PREFIX "")
+        #LINKER_LANGUAGE C)
 endfunction(add_cython_module)
 
 function(cython_include_directories)
