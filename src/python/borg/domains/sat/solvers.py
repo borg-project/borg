@@ -1,8 +1,8 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import re
-import itertools
 import cargo
+import borg
 
 logger = cargo.get_logger(__name__)
 
