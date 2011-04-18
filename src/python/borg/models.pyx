@@ -589,8 +589,8 @@ def fit_multinomial_matrix_mixture(successes, attempts, K):
 
     # expectation maximization
     previous_ll = -numpy.inf
-    prior_alpha = 1.0 + 1e-2 
-    prior_beta = 1.0 + 1e-1 
+    prior_alpha = 1.0 + 1e-3
+    prior_beta = 1.0 + 1e-1
     prior_upper = prior_alpha - 1.0
     prior_lower = B * prior_alpha + prior_beta - B - 1.0
     initial_n_K = numpy.random.randint(N, size = K)
@@ -619,7 +619,7 @@ def fit_multinomial_matrix_mixture(successes, attempts, K):
         ll = numpy.logaddexp.reduce(log_weights_K[:, None] + log_mass_KN, axis = 0)
         ll = numpy.sum(ll)
 
-        logger.debug("ll at EM iteration %i is %f", i, ll)
+        logger.info("ll at EM iteration %i is %f", i, ll)
 
         if numpy.abs(ll - previous_ll) <= 1e-4:
             break
@@ -633,15 +633,14 @@ def fit_multinomial_matrix_mixture(successes, attempts, K):
         components_KSB = numpy.sum(weighted_successes_KNSB, axis = 1) + prior_upper
         components_KSB /= (numpy.sum(weighted_attempts_KNS, axis = 1) + prior_lower)[..., None]
 
-        # XXX
-        ## split duplicates
-        #for j in xrange(K):
-            #for k in xrange(K):
-                #if j != k and numpy.sum(numpy.abs(components_KB[j] - components_KB[k])) < 1e-6:
-                    #previous_ll = -numpy.inf
-                    #n = numpy.random.randint(N)
-                    #components_KB[k] = successes_NB[n] + prior_upper
-                    #components_KB[k] /= attempts_N[n] + prior_lower
+        # split duplicates
+        for j in xrange(K):
+            for k in xrange(K):
+                if j != k and numpy.sum(numpy.abs(components_KSB[j] - components_KSB[k])) < 1e-6:
+                    previous_ll = -numpy.inf
+                    n = numpy.random.randint(N)
+                    components_KSB[k] = successes_NSB[n] + prior_upper
+                    components_KSB[k] /= attempts_NS[n, :, None] + prior_lower
 
     assert_probabilities(components_KSB)
 
@@ -656,8 +655,8 @@ class MultinomialMixtureModel(object):
         # fit the solver behavior classes
         logger.info("fitting run classes")
 
-        K = 8
-        (self._class_KSB, _) = fit_multinomial_mixture(successes, attempts, K)
+        K = 64
+        (self._class_KSB, _) = fit_multinomial_matrix_mixture(successes, attempts, K)
 
         for k in xrange(K):
             logger.detail(

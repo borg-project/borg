@@ -16,6 +16,7 @@ install(
 install(
     FILES
         defaults.py
+        aaai.py
         portfolios.py
         bilevel.py
         expenses.py

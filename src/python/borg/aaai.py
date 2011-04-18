@@ -62,7 +62,7 @@ class MultinomialMixturePortfolio(object):
         logger.info("solvers: %s", dict(enumerate(self._solver_names)))
 
         # fit our model
-        self._model = borg.models.DCM_Model(successes, attempts, features)
+        self._model = borg.models.MultinomialMixtureModel(successes, attempts)
 
     def __call__(self, task, budget, cores = 1):
         with borg.accounting():
@@ -190,5 +190,5 @@ class MultinomialMixturePortfolio(object):
 
         return answer
 
-borg.portfolios.named["aaai-dcm"] = DCM_MixturePortfolio
+borg.portfolios.named["aaai-mul"] = MultinomialMixturePortfolio
 

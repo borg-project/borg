@@ -17,6 +17,7 @@ def get_domain(name):
 from . import defaults
 from . import portfolios
 from . import bilevel
+from . import aaai
 from . import models
 from . import expenses
 from . import solver_io
