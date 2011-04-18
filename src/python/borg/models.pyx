@@ -578,3 +578,136 @@ class BilevelMultinomialModel(object):
 
         return (tclass_post_weights_L, tclass_post_rates_LSB)
 
+def fit_multinomial_matrix_mixture(successes, attempts, K):
+    """Fit a discrete mixture using EM."""
+
+    # mise en place
+    (N, S, B) = successes.shape
+
+    successes_NSB = successes
+    attempts_NS = attempts
+
+    # expectation maximization
+    previous_ll = -numpy.inf
+    prior_alpha = 1.0 + 1e-2 
+    prior_beta = 1.0 + 1e-1 
+    prior_upper = prior_alpha - 1.0
+    prior_lower = B * prior_alpha + prior_beta - B - 1.0
+    initial_n_K = numpy.random.randint(N, size = K)
+    components_KSB = successes_NSB[initial_n_K] + prior_upper
+    components_KSB /= (attempts_NS[initial_n_K] + prior_lower)[..., None]
+
+    for i in xrange(512):
+        # compute new responsibilities
+        log_mass_KNS = \
+            multinomial_log_mass_implied(
+                successes_NSB[None, ...],
+                attempts_NS[None, ...],
+                components_KSB[:, None, ...],
+                )
+        log_mass_KN = numpy.sum(log_mass_KNS, axis = -1)
+
+        log_responsibilities_KN = numpy.copy(log_mass_KN)
+        log_responsibilities_KN -= numpy.logaddexp.reduce(log_responsibilities_KN, axis = 0)
+
+        responsibilities_KN = numpy.exp(log_responsibilities_KN)
+
+        log_weights_K = numpy.logaddexp.reduce(log_responsibilities_KN, axis = 1)
+        log_weights_K -= numpy.log(N)
+
+        # compute ll and check for convergence
+        ll = numpy.logaddexp.reduce(log_weights_K[:, None] + log_mass_KN, axis = 0)
+        ll = numpy.sum(ll)
+
+        logger.debug("ll at EM iteration %i is %f", i, ll)
+
+        if numpy.abs(ll - previous_ll) <= 1e-4:
+            break
+
+        previous_ll = ll
+
+        # compute new components
+        weighted_successes_KNSB = successes_NSB[None, ...] * responsibilities_KN[..., None, None]
+        weighted_attempts_KNS = attempts_NS[None, ...] * responsibilities_KN[..., None]
+
+        components_KSB = numpy.sum(weighted_successes_KNSB, axis = 1) + prior_upper
+        components_KSB /= (numpy.sum(weighted_attempts_KNS, axis = 1) + prior_lower)[..., None]
+
+        # XXX
+        ## split duplicates
+        #for j in xrange(K):
+            #for k in xrange(K):
+                #if j != k and numpy.sum(numpy.abs(components_KB[j] - components_KB[k])) < 1e-6:
+                    #previous_ll = -numpy.inf
+                    #n = numpy.random.randint(N)
+                    #components_KB[k] = successes_NB[n] + prior_upper
+                    #components_KB[k] /= attempts_N[n] + prior_lower
+
+    assert_probabilities(components_KSB)
+
+    return (components_KSB, ll)
+
+class MultinomialMixtureModel(object):
+    """Simple multinomial mixture model."""
+
+    def __init__(self, successes, attempts):
+        """Fit the model to data."""
+
+        # fit the solver behavior classes
+        logger.info("fitting run classes")
+
+        K = 8
+        (self._class_KSB, _) = fit_multinomial_mixture(successes, attempts, K)
+
+        for k in xrange(K):
+            logger.detail(
+                "latent class %i:\n%s",
+                k,
+                cargo.pretty_probability_matrix(self._class_KSB[k]),
+                )
+
+    def predict(self, failures, features):
+        """Return probabilistic predictions of success."""
+
+        # mise en place
+        F = len(failures)
+        (L, S, K) = self._tclass_LSK.shape
+
+        # let the classifier seed our cluster probabilities
+        if len(features) > 1:
+            (tclass_lr_weights_L,) = self._classifier.predict_proba([features])
+
+            tclass_lr_weights_L += 1e-6
+            tclass_lr_weights_L /= numpy.sum(tclass_lr_weights_L)
+        else:
+            tclass_lr_weights_L = self._tclass_weights_L
+
+        # compute conditional tclass probabilities
+        rclass_fail_cmf_SKB = numpy.cumsum(1.0 - self._rclass_SKB, axis = -1)
+        tclass_post_weights_L = numpy.log(tclass_lr_weights_L)
+
+        for l in xrange(L):
+            for (s, b) in failures:
+                p = numpy.sum(rclass_fail_cmf_SKB[s, :, b] * self._tclass_LSK[l, s])
+
+                tclass_post_weights_L[l] += numpy.log(p)
+
+        tclass_post_weights_L -= numpy.logaddexp.reduce(tclass_post_weights_L)
+        tclass_post_weights_L = numpy.exp(tclass_post_weights_L)
+
+        # compute per-tclass conditional rclass probabilities
+        conditional_LSK = numpy.log(self._tclass_LSK)
+
+        for l in xrange(L):
+            for (s, b) in failures:
+                conditional_LSK[l, s, :] += rclass_fail_cmf_SKB[s, :, b]
+
+        conditional_LSK -= numpy.logaddexp.reduce(conditional_LSK, axis = -1)[..., None]
+        conditional_LSK = numpy.exp(conditional_LSK)
+
+        # compute posterior probabilities
+        tclass_post_rates_LSB = numpy.sum(conditional_LSK[..., None] * self._rclass_SKB[None, ...], axis = -2)
+        mean_post_rates_SB = numpy.sum(tclass_post_weights_L[:, None, None] * tclass_post_rates_LSB, axis = 0)
+
+        return (tclass_post_weights_L, tclass_post_rates_LSB)
+
