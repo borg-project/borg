@@ -1,6 +1,7 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import scipy.stats
+import scipy.special
 import scikits.learn.linear_model
 import numpy
 import borg
@@ -644,7 +645,7 @@ def fit_multinomial_matrix_mixture(successes, attempts, K):
 
     assert_probabilities(components_KSB)
 
-    return (components_KSB, ll)
+    return (numpy.exp(log_weights_K), components_KSB, ll)
 
 class MultinomialMixtureModel(object):
     """Simple multinomial mixture model."""
@@ -656,7 +657,7 @@ class MultinomialMixtureModel(object):
         logger.info("fitting run classes")
 
         K = 64
-        (self._class_KSB, _) = fit_multinomial_matrix_mixture(successes, attempts, K)
+        (self._weights_K, self._class_KSB, _) = fit_multinomial_matrix_mixture(successes, attempts, K)
 
         for k in xrange(K):
             logger.detail(
@@ -665,48 +666,159 @@ class MultinomialMixtureModel(object):
                 cargo.pretty_probability_matrix(self._class_KSB[k]),
                 )
 
-    def predict(self, failures, features):
+    def predict(self, failures):
         """Return probabilistic predictions of success."""
 
         # mise en place
         F = len(failures)
-        (L, S, K) = self._tclass_LSK.shape
+        (K, S, B) = self._class_KSB.shape
 
-        # let the classifier seed our cluster probabilities
-        if len(features) > 1:
-            (tclass_lr_weights_L,) = self._classifier.predict_proba([features])
+        # compute posterior class-membership probabilities
+        fail_cmf_KSB = numpy.cumsum(1.0 - self._class_KSB, axis = -1)
+        post_weights_K = numpy.log(self._weights_K)
 
-            tclass_lr_weights_L += 1e-6
-            tclass_lr_weights_L /= numpy.sum(tclass_lr_weights_L)
-        else:
-            tclass_lr_weights_L = self._tclass_weights_L
+        for (s, b) in failures:
+            post_weights_K += numpy.log(fail_cmf_KSB[:, s, b])
 
-        # compute conditional tclass probabilities
-        rclass_fail_cmf_SKB = numpy.cumsum(1.0 - self._rclass_SKB, axis = -1)
-        tclass_post_weights_L = numpy.log(tclass_lr_weights_L)
+        post_weights_K -= numpy.logaddexp.reduce(post_weights_K)
+        post_weights_K = numpy.exp(post_weights_K)
 
-        for l in xrange(L):
-            for (s, b) in failures:
-                p = numpy.sum(rclass_fail_cmf_SKB[s, :, b] * self._tclass_LSK[l, s])
+        return (post_weights_K, self._class_KSB)
 
-                tclass_post_weights_L[l] += numpy.log(p)
+def fit_dcm_minka(outcomes, weights):
+    outcomes_ND = outcomes
+    weights_N = weights
+    (N, D) = outcomes_ND.shape
+    alpha_D = numpy.ones(D)
 
-        tclass_post_weights_L -= numpy.logaddexp.reduce(tclass_post_weights_L)
-        tclass_post_weights_L = numpy.exp(tclass_post_weights_L)
+    for i in xrange(512):
+        sum_alpha = numpy.sum(alpha_D, axis = -1)
 
-        # compute per-tclass conditional rclass probabilities
-        conditional_LSK = numpy.log(self._tclass_LSK)
+        upper_ND = scipy.special.digamma(outcomes_ND + alpha_D) - scipy.special.digamma(alpha_D)
+        norms_N = numpy.sum(outcomes_ND, axis = -1)
+        lower_N = scipy.special.digamma(norms_N + sum_alpha) - scipy.special.digamma(sum_alpha)
 
-        for l in xrange(L):
-            for (s, b) in failures:
-                conditional_LSK[l, s, :] += rclass_fail_cmf_SKB[s, :, b]
+        alpha_new_D = numpy.sum(weights_N[:, None] * upper_ND, axis = 0)
+        alpha_new_D /= numpy.sum(weights_N * lower_N, axis = 0)
+        alpha_new_D *= alpha_D
 
-        conditional_LSK -= numpy.logaddexp.reduce(conditional_LSK, axis = -1)[..., None]
-        conditional_LSK = numpy.exp(conditional_LSK)
+        # XXX termination condition
 
-        # compute posterior probabilities
-        tclass_post_rates_LSB = numpy.sum(conditional_LSK[..., None] * self._rclass_SKB[None, ...], axis = -2)
-        mean_post_rates_SB = numpy.sum(tclass_post_weights_L[:, None, None] * tclass_post_rates_LSB, axis = 0)
+        if numpy.sum(numpy.abs(alpha_D - alpha_new_D)) < 1e-6:
+            return alpha_new_D
 
-        return (tclass_post_weights_L, tclass_post_rates_LSB)
+        alpha_D = alpha_new_D
+
+    return alpha_D
+
+def fit_dcm_matrix_mixture(successes, attempts, K):
+    """Fit a discrete mixture using EM."""
+
+    # mise en place
+    (N, S, B) = successes.shape
+    C = B + 1
+
+    # explicitly incorporate failure events
+    outcomes_NSC = numpy.empty((N, S, C))
+
+    outcomes_NSC[..., :B] = successes
+    outcomes_NSC[..., B] = attempts - numpy.sum(successes, axis = -1)
+
+    # expectation maximization
+    previous_ll = -numpy.inf
+    initial_n_K = numpy.random.randint(N, size = K)
+    components_KSC = outcomes_NSC[initial_n_K] + 1e-6
+    components_KSC /= numpy.sum(components_KSC, axis = -1)[..., None]
+
+    for i in xrange(512):
+        # compute new responsibilities
+        log_mass_KNS = dcm_pdf(outcomes_NSC[None, ...], components_KSC[:, None, ...])
+        log_mass_KN = numpy.sum(log_mass_KNS, axis = -1)
+
+        log_responsibilities_KN = numpy.copy(log_mass_KN)
+        log_responsibilities_KN -= numpy.logaddexp.reduce(log_responsibilities_KN, axis = 0)
+
+        responsibilities_KN = numpy.exp(log_responsibilities_KN)
+
+        log_weights_K = numpy.logaddexp.reduce(log_responsibilities_KN, axis = 1)
+        log_weights_K -= numpy.log(N)
+
+        # compute ll and check for convergence
+        ll = numpy.logaddexp.reduce(log_weights_K[:, None] + log_mass_KN, axis = 0)
+        ll = numpy.sum(ll)
+
+        logger.info("ll at EM iteration %i is %f", i, ll)
+
+        if numpy.abs(ll - previous_ll) <= 1e-4:
+            break
+
+        previous_ll = ll
+
+        # compute new components
+        for k in xrange(K):
+            for s in xrange(S):
+                components_KSC[k, s] = fit_dcm_minka(outcomes_NSC[:, s, :], responsibilities_KN[k])
+
+        print components_KSC
+
+        ## split duplicates
+        #for j in xrange(K):
+            #for k in xrange(K):
+                #if j != k and numpy.sum(numpy.abs(components_KSB[j] - components_KSB[k])) < 1e-6:
+                    #previous_ll = -numpy.inf
+                    #n = numpy.random.randint(N)
+                    #components_KSB[k] = successes_NSB[n] + prior_upper
+                    #components_KSB[k] /= attempts_NS[n, :, None] + prior_lower
+
+    return (numpy.exp(log_weights_K), components_KSC, ll)
+
+class DCM_MixtureModel(object):
+    """Simple DCM mixture model."""
+
+    def __init__(self, successes, attempts):
+        """Fit the model to data."""
+
+        # fit the solver behavior classes
+        logger.info("fitting run classes")
+
+        K = 4
+        (self._weights_K, self._class_KSB, _) = fit_dcm_matrix_mixture(successes, attempts, K)
+
+        for k in xrange(K):
+            logger.detail(
+                "latent class %i:\n%s",
+                k,
+                cargo.pretty_probability_matrix(self._class_KSB[k]),
+                )
+
+    def predict(self, failures):
+        """Return probabilistic predictions of success."""
+
+        # mise en place
+        F = len(failures)
+        (K, S, B) = self._class_KSB.shape
+
+        # approximate posterior classes
+        post_class_KSB = numpy.copy(self._class_KSB)
+
+        for (s, b) in failures:
+            increment = numpy.copy(self._class_KSB[:, s, b + 1:])
+            increment /= numpy.sum(increment, axis = -1)[..., None]
+
+            post_class_KSB[:, s, b + 1:] += increment
+
+        mean_class_KSB = numpy.copy(post_class_KSB)
+        mean_class_KSB /= numpy.sum(mean_class_KSB, axis = -1)[..., None]
+
+        # approximate posterior class-membership probabilities
+        fail_cmf_KSB = numpy.cumsum(1.0 - mean_class_KSB, axis = -1)
+        post_weights_K = numpy.log(self._weights_K)
+
+        for (s, b) in failures:
+            post_weights_K += numpy.log(fail_cmf_KSB[:, s, b])
+
+        post_weights_K -= numpy.logaddexp.reduce(post_weights_K)
+        post_weights_K = numpy.exp(post_weights_K)
+
+        return (post_weights_K, mean_class_KSB)
 

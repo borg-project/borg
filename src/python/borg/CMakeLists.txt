@@ -21,6 +21,7 @@ install(
         bilevel.py
         expenses.py
         solver_io.py
+        storage.py
         __init__.py
     DESTINATION lib/borg
     )

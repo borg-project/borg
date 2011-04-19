@@ -68,5 +68,29 @@ class SAT_SolverFactory(object):
                 solver_id = solver_id,
                 )
 
-named = dict(zip(commands, map(SAT_SolverFactory, commands.values())))
+#named = dict(zip(commands, map(SAT_SolverFactory, commands.values())))
+named = {
+    "sat/2009/CirCUs": None,
+    "sat/2009/IUT_BMB_SAT": None,
+    "sat/2009/LySAT_c": None,
+    "sat/2009/LySAT_i": None,
+    "sat/2009/ManySAT": None,
+    "sat/2009/SApperloT": None,
+    "sat/2009/TNM": None,
+    "sat/2009/VARSAT-industrial": None,
+    "sat/2009/adaptg2wsat2009++": None,
+    "sat/2009/clasp": None,
+    "sat/2009/gNovelty+-T": None,
+    "sat/2009/glucose": None,
+    "sat/2009/gnovelty+2": None,
+    "sat/2009/hybridGM3": None,
+    "sat/2009/iPAWS": None,
+    "sat/2009/march_hi": None,
+    "sat/2009/minisat_09z": None,
+    "sat/2009/minisat_cumr_p": None,
+    "sat/2009/mxc_09": None,
+    "sat/2009/precosat": None,
+    "sat/2009/rsat_09": None,
+    }
+#named = {"sat/2009/SATzilla2009_R": None}
 

@@ -12,6 +12,30 @@ import borg
 
 logger = cargo.get_logger(__name__, default_level = "INFO")
 
+def outcome_matrices_from_runs(solver_index, budgets, runs):
+    """Build run-outcome matrices from records."""
+
+    S = len(solver_index)
+    B = len(budgets)
+    N = len(runs)
+    successes = numpy.zeros((N, S, B))
+    attempts = numpy.zeros((N, S))
+
+    for (n, runs_by_solver) in enumerate(runs.values()):
+        for (run_solver, runs) in runs_by_solver.items():
+            for (run_budget, run_cost, run_answer) in runs:
+                s = solver_index.get(run_solver)
+
+                if s is not None and run_budget >= budgets[-1]:
+                    b = numpy.digitize([run_cost], budgets)
+
+                    attempts[n, s] += 1.0
+
+                    if b < B and run_answer:
+                        successes[n, s, b] += 1.0
+
+    return (successes, attempts)
+
 def outcome_matrices_from_paths(solver_index, budgets, paths):
     """Build run-outcome matrices from records."""
 
@@ -62,55 +86,25 @@ class MultinomialMixturePortfolio(object):
         logger.info("solvers: %s", dict(enumerate(self._solver_names)))
 
         # fit our model
-        self._model = borg.models.MultinomialMixtureModel(successes, attempts)
+        #self._model = borg.models.MultinomialMixtureModel(successes, attempts)
+        self._model = borg.models.DCM_MixtureModel(successes, attempts)
 
     def __call__(self, task, budget, cores = 1):
+        if cores != 1:
+            raise RuntimeError("no classic (AAAI) support for parallel portfolios")
+
         with borg.accounting():
             return self._solve(task, budget, cores)
 
     def _solve(self, task, budget, cores):
         # select a solver
-        queue = multiprocessing.Queue()
-        running = {}
-        paused = []
-        failed = []
-        answer = None
+        failures = []
 
         while True:
             # obtain model predictions
-            failed_indices = []
-
-            for solver in failed + paused + running.values():
-                (total_b,) = numpy.digitize([solver.cpu_budgeted], self._budgets)
-                if total_b == 0: # XXX hack
-                    total_b += 1
-
-                failed_indices.append((solver.s, total_b - 1))
-
-            (tclass_weights_L, tclass_rates_LSB) = self._model.predict(failed_indices, features)
-            (L, S, B) = tclass_rates_LSB.shape
-
-            # XXX force determinism
-            for (s, b) in failed_indices:
-                tclass_rates_LSB[:, s, :b + 1] = 1e-6
-
-            # prepare augmented PMF matrix
-            augmented_tclass_arrays = [tclass_rates_LSB]
-
-            for solver in paused:
-                s = solver.s
-                (c,) = numpy.digitize([solver.cpu_cost], self._budgets)
-                if c > 0: # XXX hack
-                    c -= 1
-
-                paused_tclass_LB = numpy.zeros((L, B))
-
-                paused_tclass_LB[:, :B - c - 1] = tclass_rates_LSB[:, s, c + 1:]
-                paused_tclass_LB /= 1.0 - numpy.sum(tclass_rates_LSB[:, s, :c + 1], axis = -1)[..., None]
-
-                augmented_tclass_arrays.append(paused_tclass_LB[:, None, :])
-
-            augmented_tclass_rates_LAB = numpy.hstack(augmented_tclass_arrays)
+            (class_weights_K, class_rates_KSB) = self._model.predict(failures)
+            (K, S, B) = class_rates_KSB.shape
+            mean_rates_SB = numpy.sum(class_weights_K[:, None, None] * class_rates_KSB, axis = 0)
 
             # make a plan...
             remaining = budget - borg.get_accountant().total
@@ -118,28 +112,15 @@ class MultinomialMixturePortfolio(object):
             (feasible_b,) = numpy.digitize([normal_cpu_budget], self._budgets)
 
             if feasible_b == 0:
-                break
+                return None
 
-            raw_plan = \
-                plan_knapsack_multiverse(
-                    tclass_weights_L,
-                    augmented_tclass_rates_LAB[..., :feasible_b],
-                    )
-
-            # interpret the plan's first action
-            (a, c) = raw_plan[0]
-            planned_cpu_cost = self._budgets[c]
-
-            if a >= S:
-                solver = paused.pop(a - S)
-                s = solver.s
-                name = self._solver_names[s]
-            else:
-                s = a
-                name = self._solver_names[s]
-                solver = self._domain.solvers[name](task, queue, uuid.uuid4())
-                solver.s = s
-                solver.cpu_cost = 0.0
+            discounts_B = (1.0 - 1e-4)**numpy.array(self._budgets)
+            discounted_SB = mean_rates_SB * discounts_B
+            discounted_Sb = discounted_SB[:feasible_b]
+            (s, b) = numpy.unravel_index(numpy.argmax(discounted_Sb), discounted_Sb.shape)
+            name = self._solver_names[s]
+            solver = self._domain.solvers[name]
+            planned_cpu_cost = self._budgets[b]
 
             # don't waste our final seconds before the buzzer
             if normal_cpu_budget - planned_cpu_cost < self._budgets[0]:
@@ -147,48 +128,26 @@ class MultinomialMixturePortfolio(object):
             else:
                 planned_cpu_cost = planned_cpu_cost
 
-            # be informative
-            augmented_tclass_cmf_LAB = numpy.cumsum(augmented_tclass_rates_LAB, axis = -1)
-            augmented_mean_cmf_AB = numpy.sum(tclass_weights_L[:, None, None] * augmented_tclass_cmf_LAB, axis = 0)
-            subjective_rate = augmented_mean_cmf_AB[a, c]
+            machine_cost = borg.normal_to_machine(planned_cpu_cost)
 
+            # be informative
             logger.info(
-                "running %s@%i for %i with %i remaining (b = %.2f)" % (
+                "running %s for %i with %i remaining (marginal = %.2f)" % (
                     name,
-                    borg.normal_to_machine(solver.cpu_cost),
-                    borg.normal_to_machine(planned_cpu_cost),
+                    machine_cost,
                     remaining.cpu_seconds,
-                    subjective_rate,
+                    mean_rates_SB[s, b],
                     ),
                 )
 
-            # ... and follow through
-            solver.unpause_for(borg.normal_to_machine(planned_cpu_cost))
+            answer = solver(task)(machine_cost)
 
-            running[solver._solver_id] = solver
+            if self._domain.is_final(task, answer):
+                logger.info("run succeeded!")
 
-            solver.cpu_budgeted = solver.cpu_cost + planned_cpu_cost
-
-            if len(running) == cores:
-                (solver_id, run_cpu_seconds, answer, terminated) = queue.get()
-
-                borg.get_accountant().charge_cpu(run_cpu_seconds)
-
-                solver = running.pop(solver_id)
-
-                solver.cpu_cost += borg.machine_to_normal(run_cpu_seconds)
-
-                if self._domain.is_final(task, answer):
-                    break
-                elif terminated:
-                    failed.append(solver)
-                else:
-                    paused.append(solver)
-
-        for process in paused + running.values():
-            process.stop()
-
-        return answer
+                return answer
+            else:
+                failures.append((s, b))
 
 borg.portfolios.named["aaai-mul"] = MultinomialMixturePortfolio
 

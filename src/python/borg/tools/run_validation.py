@@ -37,8 +37,9 @@ class FakeSolver(object):
         # gather candidate runs, and select one
         runs = []
         answer_map = {"True": True, "False": False}
+        csv_path = task_path + ".rtd.csv.gz"
 
-        with open(task_path + ".rtd.csv") as csv_file:
+        with cargo.openz(csv_path) as csv_file:
             reader = csv.reader(csv_file)
 
             for (solver_name, _, run_budget, run_cost, run_answer) in reader:
@@ -98,17 +99,24 @@ class FakeSolverFactory(object):
 class FakeDomain(object):
     name = "fake"
 
-    def __init__(self, domain):
+    def __init__(self, domain, solver_names = None):
         self._real = domain
 
-        #self.extensions = [x + ".rtd.csv" for x in domain.extensions]
-        self.extensions = [x for x in domain.extensions]
-        self.solvers = dict(zip(self._real.solvers, map(FakeSolverFactory, self._real.solvers)))
+        self.extensions = [x + ".rtd.csv.gz" for x in domain.extensions]
+        #self.extensions = [x for x in domain.extensions]
+
+        if solver_names is None:
+            self.solvers = dict(zip(self._real.solvers, map(FakeSolverFactory, self._real.solvers)))
+        else:
+            self.solvers = dict(zip(solver_names, map(FakeSolverFactory, solver_names)))
 
     @contextlib.contextmanager
     def task_from_path(self, task_path):
-        #yield task_path[:-8]
+        #yield task_path[:-11]
         yield task_path
+
+    def to_path(self, task_path):
+        return task_path[:-11]
 
     def compute_features(self, task, cpu_seconds = None):
         """Read or compute features of an instance."""
@@ -144,7 +152,7 @@ class FakeDomain(object):
 def run_validation(name, domain, train_paths, test_paths, budget, split):
     """Make a validation run."""
 
-    solver = borg.portfolios.named[name](domain, train_paths, 50.0, 42) # XXX
+    solver = borg.portfolios.named[name](domain, train_paths, 100.0, 50) # XXX
     successes = []
 
     logger.info("running portfolio %s with per-task budget %.2f", name, budget)
@@ -194,7 +202,16 @@ def run_validation(name, domain, train_paths, test_paths, budget, split):
     runs = ("number of runs", "option", "r", int),
     workers = ("submit jobs?", "option", "w", int),
     )
-def main(out_path, domain_name, budget, tasks_root, tests_root = None, live = False, runs = 16, workers = 0):
+def main(
+    out_path,
+    domain_name,
+    budget,
+    tasks_root,
+    tests_root = None,
+    live = False,
+    runs = 16,
+    workers = 0,
+    ):
     """Collect validation results."""
 
     cargo.enable_default_logging()
@@ -208,7 +225,7 @@ def main(out_path, domain_name, budget, tasks_root, tests_root = None, live = Fa
         else:
             domain = FakeDomain(borg.get_domain(domain_name))
 
-        paths = list(cargo.files_under(tasks_root, domain.extensions))
+        paths = map(domain.to_path, list(cargo.files_under(tasks_root, domain.extensions)))
         examples = int(round(len(paths) * 0.50))
 
         logger.info("found %i tasks", len(paths))
@@ -235,5 +252,5 @@ def main(out_path, domain_name, budget, tasks_root, tests_root = None, live = Fa
 
         writer.writerow(["name", "budget", "cost", "rate", "split"])
 
-        cargo.distribute_or_labor(yield_runs(), workers, lambda _, r: writer.writerows(r))
+        cargo.do_or_distribute(yield_runs(), workers, lambda _, r: writer.writerows(r))
 

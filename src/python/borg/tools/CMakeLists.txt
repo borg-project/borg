@@ -8,6 +8,7 @@ install(
 		run_validation.py
 		get_features.py
         calibrate.py
+        expand_runs.py
 	DESTINATION lib/borg/tools
 	)
 

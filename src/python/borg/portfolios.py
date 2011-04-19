@@ -32,8 +32,10 @@ def get_task_run_data(task_paths):
     data = {}
 
     for path in task_paths:
-        csv_path = "{0}.rtd.csv".format(path)
-        data[path] = numpy.recfromcsv(csv_path, usemask = True)
+        csv_path = "{0}.rtd.csv.gz".format(path)
+
+        with cargo.openz(csv_path) as csv_file:
+            data[path] = numpy.recfromcsv(csv_file, usemask = True)
 
     return data
 

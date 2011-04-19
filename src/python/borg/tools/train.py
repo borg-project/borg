@@ -9,7 +9,9 @@ if __name__ == "__main__":
 
     plac.call(main)
 
+import csv
 import cPickle as pickle
+import collections
 import cargo
 import borg
 
@@ -19,24 +21,23 @@ logger = cargo.get_logger(__name__, default_level = "INFO")
     out_path = ("path to store solver"),
     portfolio_name = ("name of the portfolio to train"),
     domain_name = ("name of the problem domain"),
-    tasks_roots = ("paths to training task directories"),
+    train_path = ("path to training data"),
     )
-def main(out_path, portfolio_name, domain_name, *tasks_roots):
+def main(out_path, portfolio_name, domain_name, train_path):
     """Train a solver."""
 
     cargo.enable_default_logging()
 
     # find the training tasks
-    domain = borg.get_domain(domain_name)
-    train_paths = []
-    
-    for tasks_root in tasks_roots:
-        train_paths.extend(cargo.files_under(tasks_root, domain.extensions))
+    (train_runs, solver_names) = borg.read_train_runs(train_path)
 
-    logger.info("using %i tasks for training", len(train_paths))
+    logger.info("loaded %i runs for training", len(train_runs))
 
     # train the portfolio
-    solver = borg.portfolios.named[portfolio_name](domain, train_paths, 100.0, 50)
+    #domain = borg.get_domain(domain_name)
+    import borg.tools.run_validation
+    domain = borg.tools.run_validation.FakeDomain(borg.get_domain(domain_name), solver_names)
+    solver = borg.portfolios.named[portfolio_name](domain, train_runs, 100.0, 50)
 
     logger.info("portfolio training complete")
 
