@@ -1,0 +1,12 @@
+def build(context):
+    context(
+        source = [
+            "__init__.py",
+            ],
+        install_path = "${PREFIX}/lib/borg/domains",
+        )
+
+    context.recurse("max_sat")
+    #context.recurse("pb")
+    #context.recurse("sat")
+
