@@ -2,7 +2,7 @@ import os.path
 
 def configure(context):
     # extract its installation path
-    context.start_msg("Locating NumPy installation path")
+    context.start_msg("Checking for NumPy module")
 
     try:
         import numpy
@@ -21,7 +21,7 @@ def build(context):
     context(
         features = "c cshlib pyext",
         source = "models.pyx",
-        target = base,
+        target = "models",
         install_path = "${PREFIX}/lib/cp_2011",
         )
     context(
