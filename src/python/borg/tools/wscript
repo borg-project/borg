@@ -1,0 +1,15 @@
+def build(context):
+    context(
+        source = [
+            "__init__.py",
+            "calibrate.py",
+            "get_features.py",
+            "run_solvers.py",
+            "run_validation.py",
+            "solve.py",
+            "train.py",
+            "view.py",
+            ],
+        install_path = "${PREFIX}/lib/borg/tools",
+        )
+

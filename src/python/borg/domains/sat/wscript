@@ -1,5 +1,5 @@
 def build(context):
-    install_path = "${PREFIX}/lib/borg/domains/max_sat"
+    install_path = "${PREFIX}/lib/borg/domains/sat"
 
     def cython_build(base):
         context(
@@ -9,16 +9,14 @@ def build(context):
             install_path = install_path,
             )
 
-    cython_build("features")
-    cython_build("instance")
+    cython_build("dimacs")
 
     context(
         source = [
             "__init__.py",
+            "features.py",
             "solvers.py",
             ],
         install_path = install_path,
         )
-
-    context.recurse("test")
 
