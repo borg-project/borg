@@ -1,0 +1,24 @@
+def build(context):
+    install_path = "${PREFIX}/lib/borg/domains/max_sat"
+
+    def cython_build(base):
+        context(
+            features = "c cshlib pyext",
+            source = "{0}.pyx".format(base),
+            target = base,
+            install_path = install_path,
+            )
+
+    cython_build("features")
+    cython_build("instance")
+
+    context(
+        source = [
+            "__init__.py",
+            "solvers.py",
+            ],
+        install_path = install_path,
+        )
+
+    context.recurse("test")
+

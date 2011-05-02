@@ -1,3 +1,6 @@
 .*.swp
 *.pyc
+.waf-*
+.lock-wafbuild
 build/
+virtualenvs/

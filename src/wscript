@@ -1,0 +1,9 @@
+def options(context):
+    context.recurse("python")
+
+def configure(context):
+    context.recurse("python")
+
+def build(context):
+    context.recurse("python")
+

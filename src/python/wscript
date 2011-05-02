@@ -1,0 +1,24 @@
+def options(context):
+    context.load("compiler_c")
+    context.load("python")
+    context.load("cython")
+
+def configure(context):
+    context.load("compiler_c")
+    context.load("python")
+    context.check_python_headers()
+    context.check_python_version((2, 6))
+    context.load("cython")
+
+    context.recurse("borg")
+
+def build(context):
+    context(
+        source = [
+            "cargo_site_defaults.py",
+            ],
+        install_path = "${PREFIX}/lib",
+        )
+
+    context.recurse("borg")
+

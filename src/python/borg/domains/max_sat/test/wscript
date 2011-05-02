@@ -1,0 +1,13 @@
+def build(context):
+    install_path = "${PREFIX}/lib/borg/domains/max_sat/test"
+
+    context(
+        source = [
+            "__init__.py",
+            "test_instance.py",
+            ],
+        install_path = install_path,
+        )
+
+    context.install_files(install_path, "s2v120c1200-2.cnf")
+

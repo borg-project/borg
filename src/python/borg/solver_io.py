@@ -71,9 +71,9 @@ class SolverProcess(multiprocessing.Process):
                 def handle_sigusr1(number, frame):
                     raise DeathRequestedError()
 
-                signal.signal(signal.SIGUSR1, handle_sigusr1)
-
                 try:
+                    signal.signal(signal.SIGUSR1, handle_sigusr1)
+
                     self.handle_subsolver()
                 finally:
                     signal.signal(signal.SIGUSR1, signal.SIG_IGN)
@@ -201,7 +201,7 @@ class RunningSolver(object):
     def stop(self):
         """Terminate the solver."""
 
-        if self._process.pid is not None:
+        if self._process.is_alive():
             os.kill(self._process.pid, signal.SIGUSR1)
 
             self._process.join()

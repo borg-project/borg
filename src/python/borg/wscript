@@ -1,0 +1,46 @@
+import os.path
+
+def configure(context):
+    # extract its installation path
+    context.start_msg("Checking for NumPy module")
+
+    try:
+        import numpy
+
+        path = os.path.dirname(numpy.__file__)
+    except ImportError:
+        context.end_msg(False)
+        context.fatal("Unable to import NumPy")
+
+    context.end_msg(path)
+
+    # bring in its headers
+    context.env.append_value("INCLUDES", os.path.join(path, "core/include"))
+
+def build(context):
+    install_path = "${PREFIX}/lib/borg"
+
+    context(
+        features = "c cshlib pyext",
+        source = "models.pyx",
+        target = "models",
+        install_path = install_path,
+        )
+    context(
+        source = [
+            "__init__.py",
+            "bilevel.py",
+            "defaults.py",
+            "expenses.py",
+            "experimental.py",
+            "portfolios.py",
+            "solver_io.py",
+            ],
+        install_path = install_path,
+        )
+
+    context.recurse("domains")
+    context.recurse("tools")
+    context.recurse("visual")
+    context.recurse("test")
+
