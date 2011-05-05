@@ -4,18 +4,18 @@
 <meta charset="utf-8"> 
 <title>borg:view</title>
 <link rel="stylesheet" href="borgview.css" type="text/css">
-<script type="text/javascript" src="protovis-3.2/protovis-d3.2.js"></script>
+<script type="text/javascript" src="http://code.jquery.com/jquery-1.6.min.js"></script>
+<script type="text/javascript" src="mbostock-d3-c4a153e/d3.js"></script>
 <script type="text/javascript" src="borgview.js"></script>
 </head>
 <body>
-{% for tclass_data in tclass_data_sets %}
-<p>
-<h2>tclass</h2>
-<script type="text/javascript">
-renderTClassGrid({{ tclass_data.tolist() }}, {{ names }}, {{ budgets }});
-</script>
-</p>
-{% endfor %}
+<div id="runs-table">
+<div id="introduction">
+<h1>Category: <span class="category-name">RANDOM</span></h1>
+<img src="images/borg-cube-64.png">
+</div>
+<div id="table-header"></div>
+</div>
 </body>
 </html>
 

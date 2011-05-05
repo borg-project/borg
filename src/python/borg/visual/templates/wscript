@@ -3,8 +3,8 @@ def build(context):
         "${PREFIX}/lib/borg/visual/templates",
         [
             "index.html",
-            "borgview.js",
             "borgview.css",
+            "borgview.js",
             ]
         )
 

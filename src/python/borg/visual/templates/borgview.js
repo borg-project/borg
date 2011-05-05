@@ -1,111 +1,162 @@
-//var h = 600;
-//var w = 800;
+//(function($) {
+    //// adapted from http://ajaxian.com/archives/text-overflow-for-firefox-via-jquery
 
-//var vis = new pv.Panel()
-    //.width(w)
-    //.height(h)
-    //.bottom(20)
-    //.left(20)
-    //.events("all")
-    //.event("mousemove", pv.Behavior.point());
+    //$.fn.ellipsis = function(enableUpdating) {
+		//var style = document.documentElement.style;
 
-//vis.add(pv.Layout.Grid)
-    //.rows([data, data])
-    //.cell.add(pv.Bar)
-    //.def("active", -1)
-    //.fillStyle(pv.ramp("white", "black"))
-    //.event("point", function() this.active(this.index).parent)
-    //.event("unpoint", function() this.active(-1).parent)
-    //.anchor("right")
-    //.add(pv.Label)
-    //.visible(function() this.anchorTarget().active() == this.index)
-    //.text(function(d) d.toFixed(2));
+		//if (!('textOverflow' in style || 'OTextOverflow' in style)) {
+			//return this.each(function() {
+				//var el = $(this);
 
-//vis.add(pv.Rule)
-    //.data(y.ticks())
-    //.bottom(y)
-    //.anchor("left")
-    //.add(pv.Label)
-    //.text(y.tickFormat);
+				//if(el.css("overflow") == "hidden"){
+					//var originalText = el.html();
+					//var w = el.width();
 
-//vis.add(pv.Rule)
-    //.data(x.ticks())
-    //.left(x)
-    //.anchor("bottom")
-    //.add(pv.Label)
-    //.text(x.tickFormat);
+					//var t = $(this.cloneNode(true)).hide().css({
+                        //'position': 'absolute',
+                        //'width': 'auto',
+                        //'overflow': 'visible',
+                        //'max-width': 'inherit'
+                    //});
+					//el.after(t);
 
-//vis.add(pv.Dot)
-    //.def("active", -1)
-    //.data(data)
-    //.left(function(d) x(d.x))
-    //.bottom(function(d) y(d.y))
-    //.strokeStyle("orange")
-    //.fillStyle(function() this.strokeStyle().alpha(0.2))
-    //.event("point", function() this.active(this.index).parent)
-    //.event("unpoint", function() this.active(-1).parent)
-    //.anchor("right")
-    //.add(pv.Label)
-    //.visible(function() this.anchorTarget().active() == this.index)
-    //.text(function(d) d.y.toFixed(2));
+					//var text = originalText;
+					//while(text.length > 0 && t.width() > el.width()){
+						//text = text.substr(0, text.length - 1);
+						//t.html(text + "...");
+					//}
+					//el.html(t.html());
 
-//vis.render();
+					//t.remove();
 
-renderTClassGrid = function(rates_SB, names, budgets) {
-    var w = 1000;
-    var h = 400;
+					//if(enableUpdating == true){
+						//var oldW = el.width();
+						//setInterval(function(){
+							//if(el.width() != oldW){
+								//oldW = el.width();
+								//el.html(originalText);
+								//el.ellipsis();
+							//}
+						//}, 200);
+					//}
+				//}
+			//});
+		//}
+        //else
+            //return this;
+	//};
+//})(jQuery);
 
-    var root = new pv.Panel()
-        .top(30)
-        .width(w)
-        .height(h);
+// keep the table header in view
+$(function() {
+    var $tableHeader = $("div#table-header");
+    var headerTop = $tableHeader.offset().top;
 
-    rates_data = [];
+    $(window).scroll(function() {
+        if($(document).scrollTop() > headerTop) {
+            if(!$tableHeader.data("overlaid")) {
+                var tableWidth = $("div#introduction").outerWidth();
 
-    for(i in rates_SB) {
-        row = [];
+                $("div#introduction").css("margin-bottom", $tableHeader.outerHeight());
 
-        for(j in rates_SB[i]) {
-            row.push({
-                "i": i,
-                "j": j,
-                "p": rates_SB[i][j],
-                });
+                $tableHeader
+                    .css("position", "fixed")
+                    .width(tableWidth)
+                    .data("overlaid", true);
+            }
         }
+        else {
+            if($tableHeader.data("overlaid")) {
+                $tableHeader
+                    .css("position", "static")
+                    .data("overlaid", false);
 
-        rates_data.push(row);
-    }
+                $("div#introduction").css("margin-bottom", "");
+            }
+        }
+    });
+});
 
-    var grid = root
-        .add(pv.Panel)
-        .data(rates_data)
-        .top(function(d) { return this.index * 21; });
+var renderView = function() {
+    // render column headings
+    d3.select("#table-header")
+        .selectAll(".solver-name-outer")
+        .data(borgView.solvers)
+        .enter()
+        .append("div")
+        .attr("class", "solver-name-outer")
+        .append("div")
+        .attr("class", "solver-name")
+        .text(function (name) { return name; });
 
-    grid.add(pv.Bar)
-        .data(function(d) { return d; })
-        .width(20)
-        .height(20)
-        .left(function(d) { return this.index * 21; });
+    var nameWidths = $.map($("div.solver-name-outer"), function (o) { return $(o).outerWidth(); });
 
-    grid.anchor("right")
-        .add(pv.Label)
-        .top(11)
-        .text("foo");
+    $("div#table-header").height(d3.max(nameWidths));
+    $("div.solver-name-outer").width("25px");
+    $("div.solver-name").css({
+        "-webkit-transform": "rotate(90deg)",
+        "-moz-transform": "rotate(90deg)",
+        "-ms-transform": "rotate(90deg)",
+        "-o-transform": "rotate(90deg)",
+        "transform": "rotate(90deg)"
+        });
 
-    root.add(pv.Label)
-        .data(budgets)
-        .textAngle(-Math.PI / 2)
-        .left(function(d) { return this.index * 21 + 10; });
+    // render runs table
+    var runsRows = 
+        d3.select("#runs-table")
+            .selectAll(".instance-runs")
+            .data(borgView.runs)
+            .enter()
+            .append("div")
+            .attr("class", "instance-runs");
+    var maxCost = 6100.0;
+    var costScale = d3.scale.linear().domain([0.0, maxCost]);
+    var costColor = d3.interpolateRgb("rgb(237,248,177)", "rgb(44,127,184)");
 
-    //var grid = vis.add(pv.Layout.Grid);
+    runsRows
+        .selectAll(".instance-title")
+        .data(function(datum) { return [datum.instance]; })
+        .enter()
+        .append("div")
+        .attr("class", "instance-title")
+        .text(function (title) { return title; });
 
-    //grid
-        //.rows(rates_SK)
-        //.cell.add(pv.Bar)
-        //.fillStyle(pv.ramp("#EEEEEE", "black"));
+    runsRows
+        .selectAll(".instance-run")
+        .data(function(datum) { return datum.runs; })
+        .enter()
+        .append("div")
+        .attr("class", "instance-run")
+        .attr("title", function (datum) { return datum.cost; })
+        .style(
+            "background-color",
+            function (datum) {
+                if(datum.answer != null)
+                    return costColor(costScale(datum.cost));
+                else
+                    return "rgb(0,0,0)";
+                }
+            );
+    };
 
-    //grid.anchor("right").add(pv.Label).data([1, 2]).visible(true).width(50).text("foo");
+borgView = { "loaded": 0 };
 
-    root.render();
-};
+d3.json(
+    "data/runs.json",
+    function(runs) {
+        borgView.runs = runs;
+        borgView.loaded += 1;
+
+        if(borgView.loaded >= 2)
+            renderView();
+    });
+d3.json(
+    "data/solvers.json",
+    function(solvers) {
+        borgView.solvers = solvers;
+        borgView.loaded += 1;
+
+        if(borgView.loaded >= 2)
+            renderView();
+    });
 

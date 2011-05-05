@@ -1,4 +1,75 @@
 body {
+    font-family: sans-serif;
+    font-size: 14px;
+    line-height: 18px;
     text-align: center;
+    margin: 0px;
+    padding: 0px;
+    background-color: white;
+    color: black;
+}
+
+#introduction {
+    text-align: left;
+    height: 64px;
+    margin-bottom: 10px;
+}
+
+#introduction h1 {
+    display: inline;
+    font-size: 50px;
+    line-height: 64px;
+}
+
+#introduction img {
+    float: right;
+}
+
+#runs-table {
+    display: inline-block;
+    text-align: left;
+    padding: 20px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+#table-header {
+    background-color: rgba(255, 255, 255, 0.75);
+    position: relative;
+    top: 0px;
+    width: 100%;
+}
+
+.solver-name-outer {
+    display: inline-block;
+    z-index: -1;
+}
+
+.solver-name {
+    padding-left: 8px;
+    padding-right: 4px;
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+.category-name {
+    font-family: monospace;
+}
+
+.instance-runs {
+    display: block;
+    height: 25px;
+}
+
+.instance-run {
+    display: inline-block;
+    width: 25px;
+    height: 25px;
+}
+
+.instance-title {
+    margin-left: 20px;
+    float: right;
+    font-weight: bold;
 }
 
