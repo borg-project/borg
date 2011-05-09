@@ -9,6 +9,14 @@ body {
     color: black;
 }
 
+h1 {
+    font-weight: bold;
+}
+
+select {
+    width: 200px;
+}
+
 #introduction {
     text-align: left;
     height: 64px;
@@ -26,6 +34,7 @@ body {
 }
 
 #runs-table {
+    position: relative;
     display: inline-block;
     text-align: left;
     padding: 20px;
@@ -33,11 +42,35 @@ body {
     margin-right: auto;
 }
 
+#runs-list .ui-selecting {
+    background: #FECA40;
+}
+
+#runs-list .ui-selected {
+    outline: #789898 2px solid;
+    background: #F39814;
+    color: white;
+}
+
 #table-header {
-    background-color: rgba(255, 255, 255, 0.75);
+    background-color: rgba(255, 255, 255, 0.9);
     position: relative;
     top: 0px;
     width: 100%;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    padding-right: 4px;
+}
+
+#row-interface {
+    display: none;
+    position: absolute;
+    right: 0px;
+    margin-right: 20px;
+}
+
+#header-ui-controls {
+    float: right;
 }
 
 .solver-name-outer {
@@ -47,7 +80,6 @@ body {
 
 .solver-name {
     padding-left: 8px;
-    padding-right: 4px;
     font-weight: bold;
     white-space: nowrap;
 }
@@ -59,6 +91,7 @@ body {
 .instance-runs {
     display: block;
     height: 25px;
+    padding-right: 4px;
 }
 
 .instance-run {
@@ -71,5 +104,6 @@ body {
     margin-left: 20px;
     float: right;
     font-weight: bold;
+    line-height: 25px;
 }
 

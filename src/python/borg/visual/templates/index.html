@@ -3,19 +3,39 @@
 <head>
 <meta charset="utf-8"> 
 <title>borg:view</title>
+<link rel="stylesheet" href="http://yui.yahooapis.com/3.3.0/build/cssreset/reset-min.css" type="text/css">
 <link rel="stylesheet" href="borgview.css" type="text/css">
+<link rel="stylesheet" href="jquery-ui-1.8.12/css/ui-lightness/jquery-ui-1.8.12.custom.css" type="text/css">
+<link rel="stylesheet" href="ui.selectmenu.css" type="text/css">
 <script type="text/javascript" src="http://code.jquery.com/jquery-1.6.min.js"></script>
+<script type="text/javascript" src="jquery-ui-1.8.12/js/jquery-ui-1.8.12.custom.min.js"></script>
+<script type="text/javascript" src="ui.selectmenu.js"></script>
 <script type="text/javascript" src="mbostock-d3-c4a153e/d3.js"></script>
 <script type="text/javascript" src="borgview.js"></script>
 </head>
 <body>
+
 <div id="runs-table">
-<div id="introduction">
-<h1>Category: <span class="category-name">RANDOM</span></h1>
-<img src="images/borg-cube-64.png">
+    <div id="introduction">
+        <h1>Category: <span class="category-name">RANDOM</span></h1>
+        <img src="images/borg-cube-64.png">
+    </div>
+    <div id="table-header">
+        <div id="header-ui-controls">
+            <!--<label for="row-order-select">Order Rows By:</label>-->
+            <select id="row-order-select">
+                <option value="byName">Sort by Name</option>
+                <option value="byTotalCost">Sort by Total Cost</option>
+                <option value="bySimilarity">Sort by Similarity</option>
+            </select>
+        </div>
+    </div>
+    <ul id="runs-list"></ul>
+    <div id="row-interface">
+        <button class="raise-button">Raise</button>
+    </div>
 </div>
-<div id="table-header"></div>
-</div>
+
 </body>
 </html>
 

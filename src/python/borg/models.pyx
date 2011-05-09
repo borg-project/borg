@@ -508,7 +508,7 @@ class BilevelMultinomialModel(object):
         logger.info("fitting task classes")
 
         L = 16
-        (self._tclass_LSK, self._tclass_weights_L, tclass_res_LN, _) = \
+        (self._tclass_LSK, self._tclass_weights_L, self._tclass_res_LN, _) = \
             fit_multinomial_outer_mixture(
                 rclass_res,
                 rclass_mass,
@@ -522,7 +522,7 @@ class BilevelMultinomialModel(object):
         train_y = []
 
         for (n, task_features) in enumerate(features):
-            counts_L = numpy.round(tclass_res_LN[:, n] * 100.0).astype(int)
+            counts_L = numpy.round(self._tclass_res_LN[:, n] * 100.0).astype(int)
 
             train_x.extend([task_features] * numpy.sum(counts_L))
 
