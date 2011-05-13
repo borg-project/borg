@@ -1,12 +1,19 @@
-body {
-    font-family: sans-serif;
-    font-size: 14px;
+/*
+ * GLOBAL RULES
+ */
+
+html {
+    font-family: "Nobile", sans-serif;
+    font-size: 12px;
     line-height: 18px;
-    text-align: center;
-    margin: 0px;
-    padding: 0px;
     background-color: white;
     color: black;
+}
+
+body {
+    position: absolute;
+    width: 100%;
+    height: 100%;
 }
 
 h1 {
@@ -17,56 +24,48 @@ select {
     width: 200px;
 }
 
-#introduction {
+nav a {
+    display: block;
+}
+
+/*
+ * SIDEBAR
+ */
+
+aside {
+    position: fixed;
+    top: 0px;
+    left: 0px;
+    width: 180px;
+    padding: 20px;
     text-align: left;
-    height: 64px;
-    margin-bottom: 10px;
 }
 
-#introduction h1 {
-    display: inline;
-    font-size: 50px;
-    line-height: 64px;
+aside > section {
+    margin-bottom: 20px;
 }
 
-#introduction img {
-    float: right;
+aside > footer {
+    position: fixed;
+    left: 20px;
+    bottom: 20px;
 }
+
+/*
+ * RUNS TABLE
+ */
 
 #runs-table {
-    position: relative;
-    display: inline-block;
-    text-align: left;
-    padding: 20px;
-    margin-left: auto;
-    margin-right: auto;
+    position: absolute;
+    top: 20px;
+    left: 220px;
 }
 
-#runs-list .ui-selecting {
-    background: #FECA40;
-}
-
-#runs-list .ui-selected {
-    outline: #789898 2px solid;
-    background: #F39814;
-    color: white;
-}
-
-#table-header {
+#runs-table > header {
     background-color: rgba(255, 255, 255, 0.9);
     position: relative;
-    top: 0px;
-    width: 100%;
     padding-top: 4px;
     padding-bottom: 4px;
-    padding-right: 4px;
-}
-
-#row-interface {
-    display: none;
-    position: absolute;
-    right: 0px;
-    margin-right: 20px;
 }
 
 #header-ui-controls {
@@ -79,13 +78,30 @@ select {
 }
 
 .solver-name {
-    padding-left: 8px;
+    padding-left: 4px;
     font-weight: bold;
     white-space: nowrap;
 }
 
-.category-name {
-    font-family: monospace;
+/*
+ * OTHER RULES
+ */
+
+#runs-list .ui-selecting {
+    background: #FECA40;
+}
+
+#runs-list .ui-selected {
+    outline: #789898 2px solid;
+    background: #F39814;
+    color: white;
+}
+
+#row-interface {
+    display: none;
+    position: absolute;
+    right: 0px;
+    margin-right: 20px;
 }
 
 .instance-runs {
@@ -105,5 +121,26 @@ select {
     float: right;
     font-weight: bold;
     line-height: 25px;
+}
+
+/*
+ * INSTANCE PROJECTION
+ */
+
+#visualization {
+    position: absolute;
+    top: 20px;
+    left: 220px;
+    right: 20px;
+    bottom: 20px;
+    width: auto;
+    height: auto;
+}
+
+#instance-projection {
+}
+
+#instance-projection circle {
+    fill: rgba(128, 55, 200, 0.5);
 }
 
