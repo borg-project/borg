@@ -22,7 +22,6 @@ def sanitize(name):
     return name.replace("/", "_")
 
 def write_category(root_path, name, category):
-
     # generate cluster projection
     model = category.model
     similarity_NN = numpy.dot(model._tclass_res_LN.T, model._tclass_res_LN)
@@ -43,7 +42,7 @@ def write_category(root_path, name, category):
         json.dump(category.solvers, output_file)
 
     with open(os.path.join(data_path, "instances.json"), "w") as output_file:
-        json.dump(map(os.path.basename, category.instances), output_file)
+        json.dump(category.instances, output_file)
 
     with open(os.path.join(data_path, "similarity.json"), "w") as output_file:
         json.dump(similarity_NN.tolist(), output_file)
@@ -65,7 +64,7 @@ def write_category(root_path, name, category):
                 )
 
     reify_ui_path()
-    reify_ui_path("tabular")
+    reify_ui_path("table")
     reify_ui_path("projection")
 
     logger.info("reified interface URLs")

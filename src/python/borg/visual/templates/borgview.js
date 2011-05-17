@@ -12,9 +12,9 @@ var load = function (loadable, callback) {
 
             completed += 1;
 
-            console.log("loaded " + request.path + " (" + completed + " of " + loadable.resources.length + ")");
-
             if (completed == loadable.resources.length) {
+                console.log("finished loading " + completed + " resource(s)");
+
                 if (callback !== undefined) {
                     callback();
                 }
@@ -46,42 +46,29 @@ var newTableView = function(ui, category) {
             {name: "similarity", path: "data/" + category.path + "/similarity.json"}
         ]
     };
-    var sorts = {
-        byName: function (a, b) {
-            return d3.ascending(a.instance, b.instance);
-        },
-        byTotalCost: function (a, b) {
-            return d3.descending(a.total_cost, b.total_cost);
-        },
-        bySimilarity: function (a, b) {
-            var ai = renderer.instances.indexOf(a.instance);
-            var bi = renderer.instances.indexOf(b.instance);
-            var ti = renderer.top_instance_index;
-
-            return d3.descending(this.similarity[ti][ai], this.similarity[ti][bi]);
-        }
-    };
-
-    view.reorder = function (sort) {
-        console.log("reordering by " + sort);
-
-        this.sort = sort;
-
-        var runsRows = d3.selectAll("#runs-list .instance-runs");
-
-        this.top_instance_index = this.instances.indexOf(runsRows[0][0].__data__.instance);
-
-        runsRows.sort(sort);
-
-        this.top_instance_index = this.instances.indexOf(runsRows[0][0].__data__.instance);
-    };
 
     view.loaded = function () {
         // mise en place
-        var $runsTable = $("#runs-table");
+        var markup = [
+            '<section id="runs-table">',
+            '    <header>',
+            '        <div id="header-ui-controls">',
+            '            <!--<label for="row-order-select">Order Rows By:</label>-->',
+            '            <select id="row-order-select">',
+            '                <option value="byName">Sort by Name</option>',
+            '                <option value="byTotalCost">Sort by Total Cost</option>',
+            '                <option value="bySimilarity">Sort by Similarity</option>',
+            '            </select>',
+            '        </div>',
+            '    </header>',
+            '    <ul id="runs-list"></ul>',
+            '    <div id="row-interface">',
+            '        <button class="raise-button">Raise</button>',
+            '    </div>',
+            '</section>'
+        ];
+        var $runsTable = $(markup.join("\n")).appendTo("#display");
         var $tableHeader = $("#runs-table > header");
-
-        $runsTable.show();
 
         // compute run costs
         for(var i = 0; i < this.runs.length; i += 1) {
@@ -106,10 +93,7 @@ var newTableView = function(ui, category) {
                         $("#runs-table").css("margin-top", $tableHeader.outerHeight());
 
                         $tableHeader
-                            .css({
-                                position: "fixed",
-                                top: headerTop
-                            })
+                            .css({position: "fixed", top: headerTop})
                             .width(tableWidth - 4) // XXX hard-coded constant
                             .data("overlaid", true);
                     }
@@ -119,10 +103,7 @@ var newTableView = function(ui, category) {
                         $("#runs-table").css("margin-top", "");
 
                         $tableHeader
-                            .css({
-                                position: "static",
-                                top: ""
-                            })
+                            .css({position: "static", top: ""})
                             .data("overlaid", false);
                     }
                 }
@@ -197,7 +178,7 @@ var newTableView = function(ui, category) {
         $("#row-order-select")
             .selectmenu({ style: "dropdown" })
             .change(function (event, ui) {
-                this.reorder(sorts[$(this).val()]);
+                view.reorder(sorts[$(this).val()]);
             });
 
         // set up row interface UI
@@ -211,11 +192,11 @@ var newTableView = function(ui, category) {
                     .detach()
                     .prependTo("#runs-list");
 
-                this.reorder(this.sort);
+                view.reorder(view.sort);
             });
 
         // handle row-click events
-        $("body")
+        $("body") // XXX correctly remove this handler on unload
             .click(function () {
                 $("li.ui-selected").removeClass("ui-selected");
                 $("#row-interface").hide();
@@ -236,10 +217,37 @@ var newTableView = function(ui, category) {
     };
 
     view.unload = function () {
-        $("#runs-table").hide();
+        $("#display").empty();
+    };
 
-        d3.selectAll("#runs-list > li").remove();
-        d3.selectAll("#runs-table > header > .solver-name-outer").remove();
+    var sorts = {
+        byName: function (a, b) {
+            return d3.ascending(a.instance, b.instance);
+        },
+        byTotalCost: function (a, b) {
+            return d3.descending(a.total_cost, b.total_cost);
+        },
+        bySimilarity: function (a, b) {
+            var ai = view.instances.indexOf(a.instance);
+            var bi = view.instances.indexOf(b.instance);
+            var ti = view.top_instance_index;
+
+            return d3.descending(view.similarity[ti][ai], view.similarity[ti][bi]);
+        }
+    };
+
+    view.reorder = function (sort) {
+        console.log("reordering by " + sort);
+
+        this.sort = sort;
+
+        var runsRows = d3.selectAll("#runs-list .instance-runs");
+
+        this.top_instance_index = this.instances.indexOf(runsRows[0][0].__data__.instance);
+
+        runsRows.sort(sort);
+
+        this.top_instance_index = this.instances.indexOf(runsRows[0][0].__data__.instance);
     };
 
     return view;
@@ -260,7 +268,7 @@ var newProjectionView = function (ui) {
     };
 
     view.loaded = function () {
-        var $projection = $("#instance-projection");
+        var $projection = $('<svg id="instance-projection"></svg>').appendTo("#display");
 
         var xScale = d3.scale.linear().domain([-1, 1]).range([0, $projection.innerWidth()]);
         var yScale = d3.scale.linear().domain([-1, 1]).range([0, $projection.innerHeight()]);
@@ -274,14 +282,10 @@ var newProjectionView = function (ui) {
                 .attr("cx", function(d) { return xScale(d[0]); })
                 .attr("cy", function(d) { return yScale(d[1]); })
                 .attr("r", 8);
-
-        $projection.show();
     };
 
     view.unload = function() {
-        d3.selectAll("#instance-projection *").remove();
-
-        $("#instance-projection").hide();
+        $("#display").empty();
     };
 
     return view;
@@ -296,7 +300,6 @@ var viewFactories = [
     {name: "projection", text: "Projection View", build: newProjectionView},
 ];
 var ui = {
-    rootURL: "{{ base_url }}",
     view: null,
     viewFactory: viewFactories[1],
     category: null,
@@ -347,6 +350,8 @@ ui.changeCategory = function (category) {
 };
 
 ui.changeView = function (factory) {
+    console.log("changing to category " + this.category.name + ", " + factory.name + " view");
+
     // update our location
     window.history.pushState(null, null, "ui/" + this.category.path + "/" + factory.name);
 
