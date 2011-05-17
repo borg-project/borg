@@ -89,6 +89,25 @@ class CategoryData(object):
 
         return self
 
+class ViewData(object):
+    def __init__(self, relative_to, setup):
+        self.setup = setup
+
+        # fit a model to each category
+        categories = {}
+
+        for category in setup["categories"]:
+            path = os.path.join(relative_to, category["file"])
+
+            categories[category["name"]] = \
+                CategoryData().fit(
+                    path,
+                    setup["budget_interval"],
+                    setup["budget_count"],
+                    )
+
+        self.categories = categories
+
 @plac.annotations(
     out_path = ("path to write model(s)"),
     setup_path = ("path to configuration"),
@@ -98,28 +117,17 @@ def main(out_path, setup_path):
 
     cargo.enable_default_logging()
 
-    # load the configuration
+    # build the configuration
     with open(setup_path) as setup_file:
         setup = json.load(setup_file)
 
-    # fit a model to each category
-    categories = {}
+    view = ViewData(os.path.dirname(setup_path), setup)
 
-    for category in setup["categories"]:
-        path = os.path.join(os.path.dirname(setup_path), category["file"])
-
-        categories[category["name"]] = \
-            CategoryData().fit(
-                path,
-                setup["budget_interval"],
-                setup["budget_count"],
-                )
-
-    # write all categories
+    # write it to disk
     logger.info("writing visualization data to %s", out_path)
 
     with open(out_path, "w") as out_file:
-        pickle.dump(categories, out_file)
+        pickle.dump(view, out_file)
 
     ## generate cluster projection
     #pca = scikits.learn.decomposition.pca.KernelPCA(n_components = 2, kernel = "precomputed")

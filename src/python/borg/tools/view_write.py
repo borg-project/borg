@@ -51,14 +51,24 @@ def write_category(root_path, name, category):
     with open(os.path.join(data_path, "projection.json"), "w") as output_file:
         json.dump(projected_N2.tolist(), output_file)
 
-    ## write symlinks
-    #pseudo_path = os.path.join(root_path, "categories", sanitized)
-
-    #if not os.path.exists(pseudo_path):
-        #os.makedirs(pseudo_path)
-        #os.symlink(os.path.join(root_path, "index.html"), os.path.join(pseudo_path, "index.html"))
-
     logger.info("wrote %s files to %s", name, data_path)
+
+    # reify URLs to the filesystem
+    def reify_ui_path(*components):
+        pseudo_path = os.path.join(root_path, "ui", sanitized, *components)
+
+        if not os.path.exists(pseudo_path):
+            os.makedirs(pseudo_path)
+            os.symlink(
+                os.path.join(root_path, "index.html"),
+                os.path.join(pseudo_path, "index.html"),
+                )
+
+    reify_ui_path()
+    reify_ui_path("tabular")
+    reify_ui_path("projection")
+
+    logger.info("reified interface URLs")
 
 @plac.annotations(
     out_path = ("path to write visualization"),
@@ -76,7 +86,7 @@ def main(out_path, fit_path):
         fit = pickle.load(fit_file)
 
     # write data directories
-    for (name, category) in fit.items():
+    for (name, category) in fit.categories.items():
         write_category(out_path, name, category)
 
     # generate the visualization
@@ -89,12 +99,12 @@ def main(out_path, fit_path):
         with open(os.path.join(out_path, output_name), "w") as output_file:
             output_file.write(template.render(**kwargs))
 
-    write_rendered("index.html", "index.html")
+    write_rendered("index.html", "index.html", base_url = fit.setup["base_url"])
+    write_rendered("borgview.js", "borgview.js", base_url = fit.setup["base_url"])
     write_rendered("borgview.css", "borgview.css")
-    write_rendered("borgview.js", "borgview.js")
 
     with open(os.path.join(out_path, "categories.json"), "w") as output_file:
-        category_list = [{"name": k, "path": sanitize(k)} for k in fit.keys()]
+        category_list = [{"name": k, "path": sanitize(k)} for k in fit.categories.keys()]
 
         json.dump(category_list, output_file)
 

@@ -56,6 +56,7 @@ aside > footer {
  */
 
 #runs-table {
+    display: none;
     position: absolute;
     top: 20px;
     left: 220px;
@@ -138,6 +139,7 @@ aside > footer {
 }
 
 #instance-projection {
+    display: none;
 }
 
 #instance-projection circle {
