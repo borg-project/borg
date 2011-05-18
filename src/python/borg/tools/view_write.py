@@ -12,7 +12,6 @@ import json
 import cPickle as pickle
 import numpy
 import jinja2
-import scikits.learn.decomposition.pca
 import cargo
 import borg
 
@@ -22,12 +21,6 @@ def sanitize(name):
     return name.replace("/", "_")
 
 def write_category(root_path, name, category):
-    # generate cluster projection
-    model = category.model
-    similarity_NN = numpy.dot(model._tclass_res_LN.T, model._tclass_res_LN)
-    kpca = scikits.learn.decomposition.pca.KernelPCA(n_components = 2, kernel = "precomputed")
-    projected_N2 = kpca.fit_transform(similarity_NN)
-
     # write data files
     sanitized = sanitize(name)
     data_path = os.path.join(root_path, "data", sanitized)
@@ -44,11 +37,8 @@ def write_category(root_path, name, category):
     with open(os.path.join(data_path, "instances.json"), "w") as output_file:
         json.dump(category.instances, output_file)
 
-    with open(os.path.join(data_path, "similarity.json"), "w") as output_file:
-        json.dump(similarity_NN.tolist(), output_file)
-
-    with open(os.path.join(data_path, "projection.json"), "w") as output_file:
-        json.dump(projected_N2.tolist(), output_file)
+    with open(os.path.join(data_path, "membership.json"), "w") as output_file:
+        json.dump(category.model._tclass_res_LN.T.tolist(), output_file)
 
     logger.info("wrote %s files to %s", name, data_path)
 
@@ -65,6 +55,7 @@ def write_category(root_path, name, category):
 
     reify_ui_path()
     reify_ui_path("table")
+    reify_ui_path("cluster")
     reify_ui_path("projection")
 
     logger.info("reified interface URLs")

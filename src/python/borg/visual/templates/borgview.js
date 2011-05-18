@@ -35,15 +35,15 @@ var load = function (loadable, callback) {
 // TABLE VIEW
 //
 
-var newTableView = function(ui, category) {
+var newTableView = function(ui) {
     var view = {
         sort: null,
         top_instance_index: null,
         resources: [
-            {name: "runs", path: "data/" + category.path + "/runs.json"},
-            {name: "solvers", path: "data/" + category.path + "/solvers.json"},
-            {name: "instances", path: "data/" + category.path + "/instances.json"},
-            {name: "similarity", path: "data/" + category.path + "/similarity.json"}
+            {name: "runs", path: "data/" + ui.category.path + "/runs.json"},
+            {name: "solvers", path: "data/" + ui.category.path + "/solvers.json"},
+            {name: "instances", path: "data/" + ui.category.path + "/instances.json"},
+            {name: "similarity", path: "data/" + ui.category.path + "/similarity.json"}
         ]
     };
 
@@ -292,16 +292,188 @@ var newProjectionView = function (ui) {
 };
 
 //
+// GRAPH VIEW
+//
+
+var newGraphView = function (ui) {
+    var view = {
+        resources: [
+            {name: "instances", path: "data/" + ui.category.path + "/instances.json"},
+            {name: "membership", path: "data/" + ui.category.path + "/membership.json"}
+        ]
+    };
+
+    view.loaded = function () {
+        var $projection = $('<svg id="graph-view"></svg>').appendTo("#display");
+
+        //var nodes = [{name: "Foo"}, {name: "Bar"}];
+        var nodes = view.instances.map(function (name) { return {name: name}; });
+        nodes = nodes.slice(0, 100);
+        //var links = [{source: 0, target: 1, value: -4}];
+        var links = [];
+
+        for (var i = 0; i < nodes.length; i += 1) {
+            for (var j = i + 1; j < nodes.length; j += 1) {
+                var similarity = view.similarity[i][j];
+
+                if (similarity > 8) {
+                    links.push({source: i, target: j, value: similarity});
+                    console.log(i + "--" + j + " = " + (similarity));
+                }
+            }
+        }
+
+        console.log(links.length + " graph links");
+
+        var layout = 
+            d3.layout.force()
+                .charge(-10000)
+                .distance(50)
+                .nodes(nodes)
+                .links(links)
+                .size([$projection.innerHeight(), $projection.innerWidth()])
+                .start();
+        //var d3links =
+            //d3.select("#graph-view")
+                //.selectAll("line")
+                //.data(links)
+                //.enter()
+                //.append("svg:line")
+                //.style("stroke-width", function (d) { return Math.sqrt(d.value); })
+                //.attr("x1", function (d) { return d.source.x; })
+                //.attr("y1", function (d) { return d.source.y; })
+                //.attr("x2", function (d) { return d.target.x; })
+                //.attr("y2", function (d) { return d.target.y; });
+        var d3nodes =
+            d3.select("#graph-view")
+                .selectAll("circle")
+                .data(nodes)
+                .enter()
+                .append("svg:circle")
+                .attr("r", 8)
+                .attr("cx", function (d) { return d.x; })
+                .attr("cy", function (d) { return d.y; })
+                .call(layout.drag);
+
+        layout.on("tick", function () {
+            d3nodes
+                .attr("cx", function (d) { return d.x; })
+                .attr("cy", function (d) { return d.y; });
+            //d3links
+                //.attr("x1", function (d) { return d.source.x; })
+                //.attr("y1", function (d) { return d.source.y; })
+                //.attr("x2", function (d) { return d.target.x; })
+                //.attr("y2", function (d) { return d.target.y; });
+        });
+    };
+
+    view.unload = function() {
+        $("#display").empty();
+    };
+
+    return view;
+};
+
+//
+// CLUSTER VIEW
+//
+
+var newClusterView = function (ui) {
+    var view = {
+        resources: [
+            {name: "instances", path: "data/" + ui.category.path + "/instances.json"},
+            {name: "membership", path: "data/" + ui.category.path + "/membership.json"}
+        ]
+    };
+
+    view.loaded = function () {
+        // compute membership vectors
+        // XXX don't hard-code cluster count and increment
+        var vectors = [];
+        var clusters = 16;
+        var clustersPerSide = clusters / 4;
+        var increment = 0.25;
+
+        for (var i = 0; i < clustersPerSide; i += 1) {
+            vectors[i] = {x: i * increment - 0.5, y: -0.5};
+            vectors[i + clustersPerSide] = {x: 0.5, y: i * increment - 0.5};
+            vectors[i + clustersPerSide * 2] = {x: 0.5 - i * increment, y: 0.5};
+            vectors[i + clustersPerSide * 3] = {x: -0.5, y: i * increment - 0.5};
+        }
+
+        // compute instance node positions
+        var nodes = [];
+        var xDomain = [null, null];
+        var yDomain = [null, null];
+
+        for (var i = 0; i < view.instances.length; i += 1) {
+            var node = {x: 0.5, y: 0.5, name: view.instances[i], dominant: 0};
+
+            for (var j = 0; j < clusters; j += 1) {
+                var m = view.membership[i][j];
+
+                if (m > view.membership[i][node.dominant]) {
+                    node.dominant = j;
+                }
+
+                node.x += m * vectors[j].x;
+                node.y += m * vectors[j].y;
+            }
+
+            if (xDomain[0] === null || node.x < xDomain[0]) {
+                xDomain[0] = node.x;
+            }
+            if (xDomain[1] === null || node.x > xDomain[1]) {
+                xDomain[1] = node.x;
+            }
+            if (yDomain[0] === null || node.y < yDomain[0]) {
+                yDomain[0] = node.y;
+            }
+            if (yDomain[1] === null || node.y > yDomain[1]) {
+                yDomain[1] = node.y;
+            }
+
+            nodes[i] = node;
+        }
+
+        // position nodes on screen
+        var $clusterView = $('<svg id="cluster-view"></svg>').appendTo("#display");
+        var xScale = d3.scale.linear().domain(xDomain).range([8, $clusterView.innerWidth() - 8]);
+        var yScale = d3.scale.linear().domain(yDomain).range([8, $clusterView.innerHeight() - 8]);
+        var colors = d3.scale.category20();
+
+        d3.select("#cluster-view")
+            .selectAll("circle")
+            .data(nodes)
+            .enter()
+            .append("svg:circle")
+            .attr("r", 8)
+            .attr("cx", function (d) { return xScale(d.x); })
+            .attr("cy", function (d) { return yScale(d.y); })
+            .style("fill", function (d) { return colors(d.dominant / 16.0); })
+            .style("fill-opacity", 0.5);
+    };
+
+    view.unload = function() {
+        $("#display").empty();
+    };
+
+    return view;
+};
+
+//
 // INTERFACE GLUE
 //
 
 var viewFactories = [
+    //{name: "projection", text: "Projection View", build: newProjectionView},
+    //{name: "graph", text: "Graph View", build: newGraphView},
+    {name: "cluster", text: "Cluster View", build: newClusterView},
     {name: "table", text: "Table View", build: newTableView},
-    {name: "projection", text: "Projection View", build: newProjectionView},
 ];
 var ui = {
     view: null,
-    viewFactory: viewFactories[1],
+    viewFactory: viewFactories[0],
     category: null,
     resources: [{name: "categories", path: "categories.json"}]
 };
@@ -366,7 +538,7 @@ ui.changeView = function (factory) {
 
     // switch to the new view
     this.viewFactory = factory;
-    this.view = factory.build(this, this.category);
+    this.view = factory.build(this);
 
     load(this.view, callback);
 };

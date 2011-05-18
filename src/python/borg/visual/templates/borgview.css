@@ -34,11 +34,14 @@ nav a {
 
 aside {
     position: fixed;
-    top: 0px;
+    top: -10px;
     left: 0px;
     width: 180px;
+    height: 100%;
     padding: 20px;
+    padding-top: 30px;
     text-align: left;
+    box-shadow: 0px 0px 20px #AAA;
 }
 
 aside > section {
@@ -57,8 +60,8 @@ aside > footer {
 
 #runs-table {
     position: absolute;
-    top: 20px;
-    left: 220px;
+    /*top: 20px;*/
+    /*left: 220px;*/
 }
 
 #runs-table > header {
@@ -127,10 +130,10 @@ aside > footer {
  * INSTANCE PROJECTION
  */
 
-#visualization {
+#display {
     position: absolute;
     top: 20px;
-    left: 220px;
+    left: 240px;
     right: 20px;
     bottom: 20px;
     width: auto;
@@ -142,5 +145,19 @@ aside > footer {
 
 #instance-projection circle {
     fill: rgba(128, 55, 200, 0.5);
+}
+
+/*
+ * GRAPH VIEW
+ */
+
+#graph-view > circle {
+    fill: rgba(128, 55, 200, 0.5);
+}
+
+#graph-view > line {
+    fill: rgba(128, 128, 128, 0.5);
+    stroke: #999;
+    stroke-opacity: .6;
 }
 
