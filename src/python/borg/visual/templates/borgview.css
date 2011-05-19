@@ -127,7 +127,7 @@ aside > footer {
 }
 
 /*
- * INSTANCE PROJECTION
+ * CLUSTER VIEW
  */
 
 #display {
@@ -135,29 +135,31 @@ aside > footer {
     top: 20px;
     left: 240px;
     right: 20px;
-    bottom: 20px;
+    bottom: 220px;
     width: auto;
     height: auto;
 }
 
-#instance-projection {
+#density-plot-area {
+    position: absolute;
+    overflow: hidden;
+    height: 200px;
+    left: 240px;
+    right: 20px;
+    bottom: 0px;
 }
 
-#instance-projection circle {
-    fill: rgba(128, 55, 200, 0.5);
-}
-
-/*
- * GRAPH VIEW
- */
-
-#graph-view > circle {
-    fill: rgba(128, 55, 200, 0.5);
-}
-
-#graph-view > line {
+#density-plot rect {
     fill: rgba(128, 128, 128, 0.5);
-    stroke: #999;
-    stroke-opacity: .6;
+    stroke: white;
+    stroke-width: 1;
+}
+
+#density-select {
+    width: 160px;
+}
+
+#in-progress-selection {
+    fill: rgba(22, 128, 55, 0.2);
 }
 

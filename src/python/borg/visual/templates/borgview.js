@@ -254,133 +254,14 @@ var newTableView = function(ui) {
 };
 
 //
-// PROJECTION VIEW
-//
-
-var newProjectionView = function (ui) {
-    var view = {
-        resources: [
-            {name: "runs", path: "data/" + ui.category.path + "/runs.json"},
-            {name: "solvers", path: "data/" + ui.category.path + "/solvers.json"},
-            {name: "instances", path: "data/" + ui.category.path + "/instances.json"},
-            {name: "projection", path: "data/" + ui.category.path + "/projection.json"}
-        ]
-    };
-
-    view.loaded = function () {
-        var $projection = $('<svg id="instance-projection"></svg>').appendTo("#display");
-
-        var xScale = d3.scale.linear().domain([-1, 1]).range([0, $projection.innerWidth()]);
-        var yScale = d3.scale.linear().domain([-1, 1]).range([0, $projection.innerHeight()]);
-
-        var runsRows = 
-            d3.select("#instance-projection")
-                .selectAll("circle")
-                .data(this.projection)
-                .enter()
-                .append("svg:circle")
-                .attr("cx", function(d) { return xScale(d[0]); })
-                .attr("cy", function(d) { return yScale(d[1]); })
-                .attr("r", 8);
-    };
-
-    view.unload = function() {
-        $("#display").empty();
-    };
-
-    return view;
-};
-
-//
-// GRAPH VIEW
-//
-
-var newGraphView = function (ui) {
-    var view = {
-        resources: [
-            {name: "instances", path: "data/" + ui.category.path + "/instances.json"},
-            {name: "membership", path: "data/" + ui.category.path + "/membership.json"}
-        ]
-    };
-
-    view.loaded = function () {
-        var $projection = $('<svg id="graph-view"></svg>').appendTo("#display");
-
-        //var nodes = [{name: "Foo"}, {name: "Bar"}];
-        var nodes = view.instances.map(function (name) { return {name: name}; });
-        nodes = nodes.slice(0, 100);
-        //var links = [{source: 0, target: 1, value: -4}];
-        var links = [];
-
-        for (var i = 0; i < nodes.length; i += 1) {
-            for (var j = i + 1; j < nodes.length; j += 1) {
-                var similarity = view.similarity[i][j];
-
-                if (similarity > 8) {
-                    links.push({source: i, target: j, value: similarity});
-                    console.log(i + "--" + j + " = " + (similarity));
-                }
-            }
-        }
-
-        console.log(links.length + " graph links");
-
-        var layout = 
-            d3.layout.force()
-                .charge(-10000)
-                .distance(50)
-                .nodes(nodes)
-                .links(links)
-                .size([$projection.innerHeight(), $projection.innerWidth()])
-                .start();
-        //var d3links =
-            //d3.select("#graph-view")
-                //.selectAll("line")
-                //.data(links)
-                //.enter()
-                //.append("svg:line")
-                //.style("stroke-width", function (d) { return Math.sqrt(d.value); })
-                //.attr("x1", function (d) { return d.source.x; })
-                //.attr("y1", function (d) { return d.source.y; })
-                //.attr("x2", function (d) { return d.target.x; })
-                //.attr("y2", function (d) { return d.target.y; });
-        var d3nodes =
-            d3.select("#graph-view")
-                .selectAll("circle")
-                .data(nodes)
-                .enter()
-                .append("svg:circle")
-                .attr("r", 8)
-                .attr("cx", function (d) { return d.x; })
-                .attr("cy", function (d) { return d.y; })
-                .call(layout.drag);
-
-        layout.on("tick", function () {
-            d3nodes
-                .attr("cx", function (d) { return d.x; })
-                .attr("cy", function (d) { return d.y; });
-            //d3links
-                //.attr("x1", function (d) { return d.source.x; })
-                //.attr("y1", function (d) { return d.source.y; })
-                //.attr("x2", function (d) { return d.target.x; })
-                //.attr("y2", function (d) { return d.target.y; });
-        });
-    };
-
-    view.unload = function() {
-        $("#display").empty();
-    };
-
-    return view;
-};
-
-//
 // CLUSTER VIEW
 //
 
 var newClusterView = function (ui) {
     var view = {
         resources: [
+            {name: "runs", path: "data/" + ui.category.path + "/runs.json"},
+            {name: "solvers", path: "data/" + ui.category.path + "/solvers.json"},
             {name: "instances", path: "data/" + ui.category.path + "/instances.json"},
             {name: "membership", path: "data/" + ui.category.path + "/membership.json"}
         ]
@@ -452,10 +333,126 @@ var newClusterView = function (ui) {
             .attr("cy", function (d) { return yScale(d.y); })
             .style("fill", function (d) { return colors(d.dominant / 16.0); })
             .style("fill-opacity", 0.5);
+
+        // build the configuration controls
+        var $densitySelect = $('<select id="density-select"></select>');
+
+        $densitySelect.appendTo("#configuration-section > div");
+
+        d3.select("#density-select")
+            .selectAll("option")
+            .data(this.solvers)
+            .enter()
+            .append("option")
+            .attr("value", function (d) { return d; })
+            .text(function (d) { return d; });
+
+        $densitySelect
+            .selectmenu({ style: "dropdown" })
+            .change(function (event) {
+                view.updatePlot($(this).val());
+            });
+
+        // build the density plot
+        this.updatePlot(this.solvers[0], true);
+
+        // prepare for selection areas
+        var selectionPoints = [];
+        var selectionString = function () {
+            return "" +
+                selectionPoints[0].x + "," + selectionPoints[0].y + " " +
+                selectionPoints[1].x + "," + selectionPoints[0].y + " " +
+                selectionPoints[1].x + "," + selectionPoints[1].y + " " +
+                selectionPoints[0].x + "," + selectionPoints[1].y;
+        };
+
+        $clusterView
+            .mousedown(function (event) {
+                selectionPoints[0] = {x: event.layerX, y: event.layerY};
+                selectionPoints[1] = selectionPoints[0];
+                console.log(selectionString());
+
+                d3.select("#cluster-view")
+                    .selectAll("polygon")
+                    .data([0])
+                    .enter()
+                    .append("svg:polygon")
+                    .attr("id", "in-progress-selection")
+                    .attr("points", selectionString());
+            })
+            .mousemove(function (event) {
+                // only do this if a selection is extant
+                var selection = d3.select("#in-progress-selection");
+
+                if (!selection.empty()) {
+                    selectionPoints[1] = {x: event.layerX, y: event.layerY};
+
+                    selection.attr("points", selectionString());
+                }
+            })
+            .mouseup(function (event) {
+                d3.select("#in-progress-selection").remove();
+            });
     };
 
-    view.unload = function() {
+    view.updatePlot = function (solver, initialize) {
+        // build an empty bin vector
+        var bins = [];
+        var binCount = 40;
+
+        for (var i = 0; i < binCount; i += 1) {
+            bins[i] = 0;
+        }
+
+        // prepare the DOM, if need be
+        if (initialize) {
+            $("<div id=\"density-plot-area\"></div>")
+                .appendTo("body")
+                .append("<svg id=\"density-plot\"></svg>");
+
+            d3.select("#density-plot")
+                .selectAll("rect")
+                .data(bins)
+                .enter()
+                .append("svg:rect");
+        }
+
+        // populate the bins
+        var getMaxCost = function (d) { return d3.max(d.runs, function (c) { return c.cost; }); };
+        var maxCost = d3.max(this.runs, getMaxCost);
+        var binSize = maxCost / binCount;
+
+        for (var i = 0; i < this.runs.length; i += 1) {
+            var instanceRuns = this.runs[i].runs;
+
+            for (var j = 0; j < instanceRuns.length; j += 1) {
+                var run = instanceRuns[j];
+
+                if (run.solver == solver) {
+                    var bin = Math.floor(run.cost / binSize);
+
+                    bins[bin] += 1;
+                }
+            }
+        }
+
+        var maxBin = d3.max(bins);
+        var barWidth = $("#density-plot").innerWidth() / binCount;
+        var barMaxHeight = $("#density-plot").innerHeight();
+
+        // draw the bars
+        d3.selectAll("#density-plot rect")
+            .data(bins)
+            .attr("x", function (d, i) { return i * barWidth; })
+            .attr("y", function (d) { return barMaxHeight - (d / maxBin) * barMaxHeight; })
+            .attr("width", barWidth)
+            .attr("height", function (d) { return (d / maxBin) * barMaxHeight; });
+    };
+
+    view.unload = function () {
         $("#display").empty();
+        $("#density-plot-area").remove();
+        $("#configuration-section > div").empty();
     };
 
     return view;
@@ -466,8 +463,6 @@ var newClusterView = function (ui) {
 //
 
 var viewFactories = [
-    //{name: "projection", text: "Projection View", build: newProjectionView},
-    //{name: "graph", text: "Graph View", build: newGraphView},
     {name: "cluster", text: "Cluster View", build: newClusterView},
     {name: "table", text: "Table View", build: newTableView},
 ];
