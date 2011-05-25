@@ -5,7 +5,7 @@
 html {
     font-family: "Nobile", sans-serif;
     font-size: 12px;
-    line-height: 18px;
+    line-height: 20px;
     background-color: white;
     color: black;
 }
@@ -24,8 +24,26 @@ select {
     width: 200px;
 }
 
+p {
+    margin-bottom: 20px;
+}
+
 nav a {
     display: block;
+}
+
+/*
+ * JQUERY UI CUSTOMIZATION
+ */
+
+.ui-selectmenu {
+    font-family: inherit;
+    height: 18px;
+}
+
+.ui-selectmenu-status {
+    padding-top: 0px;
+    line-height: 18px;
 }
 
 /*
@@ -140,6 +158,8 @@ aside > footer {
     height: auto;
 }
 
+#cluster-view { cursor: crosshair; }
+
 #density-plot-area {
     position: absolute;
     overflow: hidden;
@@ -149,17 +169,43 @@ aside > footer {
     bottom: 0px;
 }
 
-#density-plot rect {
-    fill: rgba(128, 128, 128, 0.5);
+.instance-point { fill-opacity: 0.5; }
+
+.histogram-bar {
     stroke: white;
     stroke-width: 1;
 }
 
-#density-select {
-    width: 160px;
+#density-select { width: 160px; }
+
+.selection-region {
+    fill-opacity: 0.1;
+    stroke-width: 1;
+    stroke-opacity: 0.5;
+    stroke-dasharray: 5,5;
 }
 
-#in-progress-selection {
-    fill: rgba(22, 128, 55, 0.2);
+.selection-region.highlighted { stroke-opacity: 1.0; }
+
+#selections-list > li { margin-left: 1px; }
+
+#selections-list > li.hidden { text-decoration: line-through; }
+
+#selections-list > li > .ui-icon {
+    display: inline-block;
+    height: 17px;
+    width: 17px;
+    position: relative;
+    right: 2px;
+    vertical-align: bottom;
+    cursor: pointer;
+}
+
+#selections-list > li > .ui-icon:hover { outline: 1px #aaaaaa solid; }
+
+.cluster-arrow {
+    stroke: black;
+    stroke-opacity: 0.1;
+    stroke-width: 8;
 }
 

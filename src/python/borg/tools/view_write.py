@@ -8,6 +8,7 @@ if __name__ == "__main__":
     plac.call(main)
 
 import os.path
+import csv
 import json
 import cPickle as pickle
 import numpy
@@ -39,6 +40,9 @@ def write_category(root_path, name, category):
 
     with open(os.path.join(data_path, "membership.json"), "w") as output_file:
         json.dump(category.model._tclass_res_LN.T.tolist(), output_file)
+
+    with open(os.path.join(data_path, "projection.json"), "w") as output_file:
+        json.dump(category.projection_N2.tolist(), output_file)
 
     logger.info("wrote %s files to %s", name, data_path)
 

@@ -11,7 +11,9 @@ import os.path
 import json
 import cPickle as pickle
 import numpy
-import scikits.learn.decomposition.pca
+import rpy2.robjects
+import rpy2.robjects.packages
+import rpy2.robjects.numpy2ri
 import cargo
 import borg
 
@@ -89,17 +91,18 @@ class CategoryData(object):
                 })
 
         # generate cluster projection
-        #print self.model._tclass_res_LN.T
-
         #self.similarity_NN = numpy.dot(self.model._tclass_res_LN.T, self.model._tclass_res_LN)
-        #self.similarity_NN = numpy.empty((N, N))
+        self.similarity_NN = numpy.empty((N, N))
 
-        #for m in xrange(N):
-            #for n in xrange(N):
+        for m in xrange(N):
+            for n in xrange(N):
+                rm = self.model._tclass_res_LN[:, m]
+                rn = self.model._tclass_res_LN[:, n]
+
+                self.similarity_NN[m, n] = numpy.sum(rm * numpy.log(rm / rn))
                 #self.similarity_NN[m, n] = S - numpy.sum(numpy.abs(successes[m] - successes[n]))
 
-        #kpca = scikits.learn.decomposition.pca.KernelPCA(n_components = 2, kernel = "precomputed")
-        #self.projected_N2 = kpca.fit_transform(self.similarity_NN / S)
+        self.projection_N2 = numpy.array(rpy2.robjects.r["cmdscale"](1.0 - self.similarity_NN))
 
         return self
 

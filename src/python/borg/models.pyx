@@ -507,7 +507,7 @@ class BilevelMultinomialModel(object):
         # fit the task mixture classes
         logger.info("fitting task classes")
 
-        L = 16
+        L = 15
         (self._tclass_LSK, self._tclass_weights_L, self._tclass_res_LN, _) = \
             fit_multinomial_outer_mixture(
                 rclass_res,
