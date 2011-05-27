@@ -96,10 +96,10 @@ class CategoryData(object):
 
         for m in xrange(N):
             for n in xrange(N):
-                rm = self.model._tclass_res_LN[:, m]
-                rn = self.model._tclass_res_LN[:, n]
+                rm_SK = numpy.sum(self.model._tclass_res_LN[:, m][:, None, None] * self.model._tclass_LSK, axis = 0)
+                rn_SK = numpy.sum(self.model._tclass_res_LN[:, n][:, None, None] * self.model._tclass_LSK, axis = 0)
 
-                self.similarity_NN[m, n] = numpy.sum(rm * numpy.log(rm / rn))
+                self.similarity_NN[m, n] = numpy.sum(rm_SK * numpy.log(rm_SK / rn_SK))
                 #self.similarity_NN[m, n] = S - numpy.sum(numpy.abs(successes[m] - successes[n]))
 
         self.projection_N2 = numpy.array(rpy2.robjects.r["cmdscale"](1.0 - self.similarity_NN))

@@ -1,0 +1,12 @@
+def build(context):
+    context.install_files(
+        "${PREFIX}/lib/borg/visual/templates/src.js",
+        [
+            "general.js",
+            "interface.js",
+            "views.js"
+            ]
+        )
+
+    context.recurse("views")
+

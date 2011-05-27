@@ -91,7 +91,7 @@ def main(out_path, fit_path):
         template = environment.get_template(template_name)
 
         with open(os.path.join(out_path, output_name), "w") as output_file:
-            output_file.write(template.render(**kwargs))
+            output_file.write(template.render(**kwargs).encode("utf-8"))
 
     write_rendered("index.html", "index.html", base_url = fit.setup["base_url"])
     write_rendered("borgview.js", "borgview.js", base_url = fit.setup["base_url"])

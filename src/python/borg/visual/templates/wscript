@@ -8,3 +8,5 @@ def build(context):
             ]
         )
 
+    context.recurse("src.js")
+

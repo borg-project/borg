@@ -1,0 +1,9 @@
+def build(context):
+    context.install_files(
+        "${PREFIX}/lib/borg/visual/templates/src.js/views",
+        [
+            "cluster.js",
+            "table.js",
+            ]
+        )
+

@@ -160,6 +160,14 @@ aside > footer {
 
 #cluster-view { cursor: crosshair; }
 
+#cluster-view-border {
+    fill-opacity: 0.0;
+    stroke-width: 1;
+    stroke-opacity: 0.5;
+    stroke-dasharray: 5, 5;
+    pointer-events: none;
+}
+
 #density-plot-area {
     position: absolute;
     overflow: hidden;
@@ -169,11 +177,18 @@ aside > footer {
     bottom: 0px;
 }
 
-.instance-point { fill-opacity: 0.5; }
+.instance-point {
+    stroke: black;
+    stroke-opacity: 0.5;
+    stroke-width: 3;
+    fill: black;
+    fill-opacity: 0.5;
+}
 
-.histogram-bar {
-    stroke: white;
-    stroke-width: 1;
+.instance-point.highlighted {
+    stroke: blue;
+    fill: blue;
+    stroke-opacity: 0.8;
 }
 
 #density-select { width: 160px; }
@@ -182,10 +197,21 @@ aside > footer {
     fill-opacity: 0.1;
     stroke-width: 1;
     stroke-opacity: 0.5;
-    stroke-dasharray: 5,5;
+    stroke-dasharray: 5, 5;
+    pointer-events: stroke;
 }
 
-.selection-region.highlighted { stroke-opacity: 1.0; }
+.selection-region.highlighted {
+    stroke-opacity: 1.0;
+    stroke-dasharray: none;
+    cursor: move;
+}
+
+g.series { fill-opacity: 0.5; }
+
+g.series > rect { stroke-width: 0; }
+
+/*g.highlighted { fill-opacity: 1.0 !important; }*/
 
 #selections-list > li { margin-left: 1px; }
 
@@ -207,5 +233,12 @@ aside > footer {
     stroke: black;
     stroke-opacity: 0.1;
     stroke-width: 8;
+}
+
+.tick,
+.tick-line {
+    stroke: #aaaaaa;
+    stroke-opacity: 0.25;
+    stroke-width: 1;
 }
 
