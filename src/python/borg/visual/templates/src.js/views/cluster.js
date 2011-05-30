@@ -9,7 +9,8 @@ var makeHistogram = function(values, count, left, right, normalize) {
         right: right,
         width: (right - left) / count,
         bins: [],
-        ranges: []
+        ranges: [],
+        values: []
     };
 
     for(var i = 0; i < count; i += 1) {
@@ -18,6 +19,7 @@ var makeHistogram = function(values, count, left, right, normalize) {
             left: i * histogram.width,
             right: (i + 1) * histogram.width
         };
+        histogram.values[i] = [];
     }
 
     values.forEach(function(value) {
@@ -25,7 +27,10 @@ var makeHistogram = function(values, count, left, right, normalize) {
             throw {message: "value out of histogram range"};
         }
 
-        histogram.bins[Math.floor(value / histogram.width)] += 1;
+        var i = Math.floor(value / histogram.width);
+
+        histogram.bins[i] += 1;
+        histogram.values[i].push(value);
     });
 
     // optionally normalize counts to densities
@@ -65,7 +70,11 @@ var newClusterView = function(ui) {
                     if(instances.indexOf(runsOn.instance) >= 0) {
                         runsOn.runs.forEach(function(run) {
                             if(run.solver === solver) {
-                                values.push(run.cost);
+                                values.push({
+                                    run: run,
+                                    instance: runsOn.instance,
+                                    valueOf: function() { return run.cost; }
+                                });
                             }
                         });
                     }
@@ -128,6 +137,16 @@ var newClusterView = function(ui) {
             .remove();
 
         // update histogram bars
+        var getRectData = function(d) {
+            return d.histogram.bins.map(function(value, i) {
+                var points =
+                    d.histogram.values[i].map(function(v) {
+                        return view.instanceNodesByName[v.instance];
+                    });
+
+                return {value: value, range: d.histogram.ranges[i], points: points};
+            });
+        };
         var dSeries =
             d3.select("#density-plot > g:nth-of-type(2)")
                 .selectAll("g.series")
@@ -153,11 +172,7 @@ var newClusterView = function(ui) {
                 });
             })
             .selectAll("rect")
-            .data(function(d) {
-                return d.histogram.bins.map(function(value, i) {
-                    return {value: value, range: d.histogram.ranges[i]};
-                });
-            })
+            .data(getRectData)
             .enter()
             .append("svg:rect")
             .attr("x", function(d) { return xScale(d.range.left); })
@@ -172,9 +187,12 @@ var newClusterView = function(ui) {
                     .attr("y", yScale.range()[0] + 18)
                     .attr("text-anchor", right ? "end" : "start")
                     .text("%.0f--%.0f".format(d.range.left, d.range.right));
+
+                d3.selectAll(d.points).classed("highlighted", true);
             })
             .on("mouseout", function(d) {
                 d3.select("#bar-label").text("");
+                d3.selectAll(d.points).classed("highlighted", false);
             })
             .transition()
             .duration(500)
@@ -184,11 +202,7 @@ var newClusterView = function(ui) {
             .attr("height", function(d) { return yScale(d.value); });
         dSeries
             .selectAll("rect")
-            .data(function(d) {
-                return d.histogram.bins.map(function(value, i) {
-                    return {value: value, range: d.histogram.ranges[i]};
-                });
-            })
+            .data(getRectData)
             .transition()
             .duration(500)
             .attr("y", function(d) {
@@ -212,6 +226,7 @@ var newClusterView = function(ui) {
         });
 
         view.selections = [];
+        view.instanceNodesByName = {};
     });
 
     view.onload(function() {
@@ -312,6 +327,9 @@ var newClusterView = function(ui) {
                 d3.select(this).classed("highlighted", false);
 
                 dtip.text("");
+            })
+            .each(function(d) {
+                view.instanceNodesByName[d.name] = this;
             });
 
         // prepare tooltip
