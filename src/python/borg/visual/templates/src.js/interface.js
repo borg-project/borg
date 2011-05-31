@@ -3,25 +3,49 @@
 //
 
 var viewFactories = [
-    {name: "cluster", text: "Cluster View", build: newClusterView},
-    {name: "table", text: "Table View", build: newTableView},
+    {name: "cluster", text: "Cluster View", build: newClusterView}
+    //{name: "table", text: "Table View", build: newTableView},
 ];
 var ui = {
     view: null,
     viewFactory: viewFactories[0],
     category: null,
-    resources: [{name: "categories", path: "categories.json"}]
+    resourcesRequested: [{name: "categories", path: "categories.json"}],
+    resources: {}
 };
 
 ui.resource = function(name, filename) {
     return {name: name, path: "data/" + this.category.path + "/" + filename};
 };
 
-ui.loaded = function() {
+ui.changeCategory = function(category) {
+    this.category = category;
+
+    this.changeView(this.viewFactory);
+};
+
+ui.changeView = function(factory) {
+    console.log("changing to category " + this.category.name + ", " + factory.name + " view");
+
+    // update our location
+    window.history.pushState(null, null, "ui/" + this.category.path + "/" + factory.name);
+
+    // switch to the new view
+    if(this.view !== null) {
+        this.view.unload();
+    }
+
+    this.viewFactory = factory;
+    this.view = factory.build(this);
+
+    load(this.view);
+};
+
+$(ui).bind("resources-loaded", function() {
     // enable change-category links
     d3.select("#change-data > nav")
         .selectAll("a")
-        .data(this.categories)
+        .data(this.resources.categories)
         .enter()
         .append("a")
         .attr("href", "")
@@ -51,34 +75,6 @@ ui.loaded = function() {
         });
 
     // get the ball rolling
-    this.changeCategory(this.categories[0]);
-};
-
-ui.changeCategory = function(category) {
-    this.category = category;
-
-    this.changeView(this.viewFactory);
-};
-
-ui.changeView = function(factory) {
-    console.log("changing to category " + this.category.name + ", " + factory.name + " view");
-
-    // update our location
-    window.history.pushState(null, null, "ui/" + this.category.path + "/" + factory.name);
-
-    // prepare to unload old view
-    var callback = undefined;
-
-    if(this.view !== null) {
-        var old = this.view;
-
-        callback = function() { old.unload(); };
-    }
-
-    // switch to the new view
-    this.viewFactory = factory;
-    this.view = factory.build(this);
-
-    load(this.view, callback);
-};
+    this.changeCategory(this.resources.categories[0]);
+});
 

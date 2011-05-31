@@ -2,18 +2,10 @@
 // VIEW BASE
 //
 
-var newView = function(resources) {
+var newView = function(requests) {
     return {
-        onload: function(handler) {
-            this.loadHandlers.push(handler);
-        },
-        loaded: function() {
-            for(var i = 0; i < this.loadHandlers.length; i += 1) {
-                this.loadHandlers[i].call(this);
-            }
-        },
-        resources: resources,
-        loadHandlers: []
+        resourcesRequested: requests,
+        resources: {}
     };
 };
 

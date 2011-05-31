@@ -15,10 +15,7 @@ var makeHistogram = function(values, count, left, right, normalize) {
 
     for(var i = 0; i < count; i += 1) {
         histogram.bins[i] = 0;
-        histogram.ranges[i] = {
-            left: i * histogram.width,
-            right: (i + 1) * histogram.width
-        };
+        histogram.ranges[i] = { left: i * histogram.width, right: (i + 1) * histogram.width };
         histogram.values[i] = [];
     }
 
@@ -47,203 +44,60 @@ var makeHistogram = function(values, count, left, right, normalize) {
 };
 
 var newClusterView = function(ui) {
-    var view = newView([
-        ui.resource("runs", "runs.json"),
-        ui.resource("solvers", "solvers.json"),
-        ui.resource("instances", "instances.json"),
-        ui.resource("membership", "membership.json"),
-        ui.resource("projection", "projection.json"),
-    ]);
-
-    view.updatePlot = function() {
-        // recompute histograms
-        var solver = $("#density-select").val();
-        var series = [];
-        var nbins = 40;
-
-        this.selections.forEach(function(selection) {
-            if(selection.visible) {
-                var instances = selection.instances();
-                var values = [];
-
-                view.runs.forEach(function(runsOn) {
-                    if(instances.indexOf(runsOn.instance) >= 0) {
-                        runsOn.runs.forEach(function(run) {
-                            if(run.solver === solver) {
-                                values.push({
-                                    run: run,
-                                    instance: runsOn.instance,
-                                    valueOf: function() { return run.cost; }
-                                });
-                            }
-                        });
-                    }
-                });
-
-                series.push({
-                    selection: selection,
-                    histogram: makeHistogram(values, nbins, 0, view.maxCost, true)
-                });
-            }
-        });
-
-        // update ticks and tick lines
-        var $densityPlot = $("#density-plot");
-        var dticksGroup = d3.select("#density-plot > g:nth-of-type(1)");
-        var maxBin = d3.max(series.map(function(d) { return d3.max(d.histogram.bins); }));
-        var xScale = d3.scale.linear().domain([0, view.maxCost]).rangeRound([0, $densityPlot.innerWidth() - 14]);
-        var yScale = d3.scale.linear().domain([0, maxBin]).rangeRound([18, $densityPlot.innerHeight()]);
-        var xTicks = [];
-
-        for(var i = 0; i < nbins + 1; i += 1) {
-            xTicks[i] = i * (view.maxCost / nbins);
-        }
-
-        var dxticks = dticksGroup.selectAll(".tick").data(xTicks);
-        var dyticks = dticksGroup.selectAll(".tick-line").data(yScale.ticks(8));
-
-        dxticks
-            .enter()
-            .append("svg:line")
-            .classed("tick", true)
-            .attr("x1", function(d) { return xScale(d) + 0.5; })
-            .attr("y1", yScale(0))
-            .attr("x2", function(d) { return xScale(d) + 0.5; })
-            .attr("y2", yScale(0) + 10);
-
-        dyticks
-            .enter()
-            .append("svg:line")
-            .classed("tick-line", true)
-            .attr("x1", xScale.range()[0])
-            .attr("y1", yScale.range()[1])
-            .attr("x2", xScale.range()[1])
-            .attr("y2", yScale.range()[1])
-            .transition()
-            .duration(500)
-            .attr("y1", function(d) { return yScale(d) + 0.5; })
-            .attr("y2", function(d) { return yScale(d) + 0.5; });
-        dyticks
-            .transition()
-            .duration(500)
-            .attr("y1", function(d) { return yScale(d) + 0.5; })
-            .attr("y2", function(d) { return yScale(d) + 0.5; });
-        dyticks
-            .exit()
-            .transition()
-            .duration(500)
-            .attr("y1", yScale.range()[1])
-            .attr("y2", yScale.range()[1])
-            .remove();
-
-        // update histogram bars
-        var getRectData = function(d) {
-            return d.histogram.bins.map(function(value, i) {
-                var points =
-                    d.histogram.values[i].map(function(v) {
-                        return view.instanceNodesByName[v.instance];
-                    });
-
-                return {value: value, range: d.histogram.ranges[i], points: points};
-            });
-        };
-        var dSeries =
-            d3.select("#density-plot > g:nth-of-type(2)")
-                .selectAll("g.series")
-                .data(series, function(d) { return d.selection.number; });
-
-        dSeries
-            .enter()
-            .append("svg:g")
-            .classed("series", true)
-            .style("fill", function(d) {
-                if(d.selection === null) {
-                    return "#aaaaaa";
-                }
-                else {
-                    return d.selection.color();
-                }
-            })
-            .each(function(d) {
-                var dself = d3.select(this);
-
-                $(d.selection).bind("highlight", function(e, state) {
-                    dself.classed("highlighted", state);
-                });
-            })
-            .selectAll("rect")
-            .data(getRectData)
-            .enter()
-            .append("svg:rect")
-            .attr("x", function(d) { return xScale(d.range.left); })
-            .attr("y", function(d) { return yScale.range()[1]; })
-            .attr("width", function(d) { return xScale(d.range.right) - xScale(d.range.left); })
-            .attr("height", 0)
-            .on("mouseover", function(d) {
-                var right = d3.select(this).attr("x") > $densityPlot.innerWidth() / 2;
-
-                d3.select("#bar-label")
-                    .attr("x", xScale(right ? d.range.right : d.range.left))
-                    .attr("y", yScale.range()[0] + 18)
-                    .attr("text-anchor", right ? "end" : "start")
-                    .text("%.0f--%.0f".format(d.range.left, d.range.right));
-
-                d3.selectAll(d.points).classed("highlighted", true);
-            })
-            .on("mouseout", function(d) {
-                d3.select("#bar-label").text("");
-                d3.selectAll(d.points).classed("highlighted", false);
-            })
-            .transition()
-            .duration(500)
-            .attr("y", function(d) {
-                return yScale.range()[1] + yScale.range()[0] - yScale(d.value);
-            })
-            .attr("height", function(d) { return yScale(d.value); });
-        dSeries
-            .selectAll("rect")
-            .data(getRectData)
-            .transition()
-            .duration(500)
-            .attr("y", function(d) {
-                return yScale.range()[1] + yScale.range()[0] - yScale(d.value);
-            })
-            .attr("height", function(d) { return yScale(d.value); });
-        dSeries
-            .exit()
-            .transition()
-            .duration(500)
-            .remove()
-            .selectAll("rect")
-            .attr("y", function(d) { return yScale.range()[1]; })
-            .attr("height", 0);
+    var view = {
+        resourcesRequested: [
+            ui.resource("runs", "runs.json"),
+            ui.resource("solvers", "solvers.json"),
+            ui.resource("instances", "instances.json"),
+            ui.resource("membership", "membership.json"),
+            ui.resource("projection", "projection.json")
+        ],
+        resources: {}
     };
+    var $view = $(view);
 
-    view.onload(function() {
+    $view.bind("resources-loaded", function() {
         // basic properties
+        view.runs = view.resources.runs;
+        view.solvers = view.resources.solvers;
+        //view.instances = view.resources.instances;
+        view.membership = view.resources.membership;
+        view.projection = view.resources.projection;
+
         view.maxCost = d3.max(view.runs, function(d) {
             return d3.max(d.runs, function(e) { return e.cost; });
         });
 
+        view.instancesByName = {};
+        view.instances = view.resources.instances.map(function(name) {
+            var instance = {name: name, bars: {}};
+
+            view.instancesByName[name] = instance;
+
+            return instance;
+        });
+
+        view.resources.runs.forEach(function(runsOn) {
+            view.instancesByName[runsOn.instance].runs = runsOn.runs;
+        });
+
         view.selections = [];
-        view.instanceNodesByName = {};
     });
 
-    view.onload(function() {
+    $view.bind("resources-loaded", function() {
         // compute instance node positions
         var nodes = [];
         var xDomain = [null, null];
         var yDomain = [null, null];
 
-        for(var i = 0; i < view.instances.length; i += 1) {
+        view.instances.forEach(function(instance, i) {
             var node = {
-                x: this.projection[i][0],
-                y: this.projection[i][1],
-                name: this.instances[i],
+                x: view.projection[i][0],
+                y: view.projection[i][1],
+                instance: view.instances[i],
                 dominant: 0
             };
-            var belongs = this.membership[i];
-            var clusters = belongs.length;
+            var belongs = view.membership[i];
 
             for(var j = 0; j < belongs.length; j += 1) {
                 if(belongs[j] > belongs[node.dominant]) {
@@ -257,7 +111,7 @@ var newClusterView = function(ui) {
             if(yDomain[1] === null || node.y > yDomain[1]) { yDomain[1] = node.y; }
 
             nodes[i] = node;
-        }
+        });
 
         // prepare display area
         var markup = [
@@ -321,16 +175,14 @@ var newClusterView = function(ui) {
                     .attr("x", xScale(d.x) + (right ? -12.5 : 12.5))
                     .attr("y", yScale(d.y) + 0.5)
                     .style("text-anchor", right ? "end" : "start")
-                    .text(d.name);
+                    .text(d.instance.name);
             })
             .on("mouseout", function() {
                 d3.select(this).classed("highlighted", false);
 
                 dtip.text("");
             })
-            .each(function(d) {
-                view.instanceNodesByName[d.name] = this;
-            });
+            .each(function(d) { d.instance.node = this; });
 
         // prepare tooltip
         var dglow =
@@ -366,7 +218,7 @@ var newClusterView = function(ui) {
                 .style("font-weight", "bold");
     });
 
-    view.onload(function() {
+    $view.bind("resources-loaded", function() {
         // build the configuration controls
         $('<p>Histogrammed:<select id="density-select"></select></p>').appendTo("#configuration-section > div");
 
@@ -383,7 +235,7 @@ var newClusterView = function(ui) {
             .change(function(event) { $(view).trigger("selections-changed"); });
     });
 
-    view.onload(function() {
+    $view.bind("resources-loaded", function() {
         // mise en place
         var colors = d3.scale.category10();
         var count = 0;
@@ -523,7 +375,7 @@ var newClusterView = function(ui) {
                         selected = selected.filter(inside);
                     }
 
-                    return selected[0].map(function(d) { return d.__data__.name; });
+                    return selected[0].map(function(d) { return d.__data__.instance; });
                 },
                 p0: point,
                 number: count,
@@ -595,7 +447,7 @@ var newClusterView = function(ui) {
             });
     });
 
-    view.onload(function() {
+    $view.bind("resources-loaded", function() {
         // prepare for plotting
         var dPlot =
             d3.select("body")
@@ -631,6 +483,7 @@ var newClusterView = function(ui) {
         dlabelsGroup
             .append("svg:text")
             .attr("id", "bar-label")
+            .attr("class", "borg-tooltip")
             .attr("filter", "url(#soft-glow)")
             .style("font-weight", "bold")
             .text("");
@@ -638,7 +491,7 @@ var newClusterView = function(ui) {
         $(view).bind("selections-changed", function() { view.updatePlot(); });
     });
 
-    view.onload(function() {
+    $view.bind("resources-loaded", function() {
         // add projection area outline
         var dclusterView = d3.select("#cluster-view");
         var $clusterView = $(dclusterView.node());
@@ -660,6 +513,191 @@ var newClusterView = function(ui) {
         $("#display").empty();
         $("#density-plot-area").remove();
         $("#configuration-section > div").empty();
+    };
+
+    view.updatePlot = function() {
+        // recompute histograms
+        var solver = $("#density-select").val();
+        var series = [];
+        var nbins = 40;
+
+        this.selections.forEach(function(selection) {
+            if(selection.visible) {
+                var instances = selection.instances();
+                var values = [];
+
+                instances.forEach(function(instance) {
+                    instance.runs.forEach(function(run) {
+                        if(run.solver === solver) {
+                            values.push({
+                                run: run,
+                                instance: instance,
+                                valueOf: function() { return run.cost; }
+                            });
+                        }
+                    });
+                });
+
+                series.push({
+                    selection: selection,
+                    histogram: makeHistogram(values, nbins, 0, view.maxCost, true)
+                });
+            }
+        });
+
+        // update ticks and tick lines
+        var $densityPlot = $("#density-plot");
+        var dticksGroup = d3.select("#density-plot > g:nth-of-type(1)");
+        var maxBin = d3.max(series.map(function(d) { return d3.max(d.histogram.bins); }));
+        var xScale = d3.scale.linear().domain([0, view.maxCost]).rangeRound([0, $densityPlot.innerWidth() - 14]);
+        var yScale = d3.scale.linear().domain([0, maxBin]).rangeRound([18, $densityPlot.innerHeight()]);
+        var xTicks = [];
+
+        for(var i = 0; i < nbins + 1; i += 1) {
+            xTicks[i] = i * (view.maxCost / nbins);
+        }
+
+        var dxticks = dticksGroup.selectAll(".tick").data(xTicks);
+        var dyticks = dticksGroup.selectAll(".tick-line").data(yScale.ticks(8));
+
+        dxticks
+            .enter()
+            .append("svg:line")
+            .classed("tick", true)
+            .attr("x1", function(d) { return xScale(d) + 0.5; })
+            .attr("y1", yScale(0))
+            .attr("x2", function(d) { return xScale(d) + 0.5; })
+            .attr("y2", yScale(0) + 10);
+
+        dyticks
+            .enter()
+            .append("svg:line")
+            .classed("tick-line", true)
+            .attr("x1", xScale.range()[0])
+            .attr("y1", yScale.range()[1])
+            .attr("x2", xScale.range()[1])
+            .attr("y2", yScale.range()[1])
+            .transition()
+            .duration(500)
+            .attr("y1", function(d) { return yScale(d) + 0.5; })
+            .attr("y2", function(d) { return yScale(d) + 0.5; });
+        dyticks
+            .transition()
+            .duration(500)
+            .attr("y1", function(d) { return yScale(d) + 0.5; })
+            .attr("y2", function(d) { return yScale(d) + 0.5; });
+        dyticks
+            .exit()
+            .transition()
+            .duration(500)
+            .attr("y1", yScale.range()[1])
+            .attr("y2", yScale.range()[1])
+            .remove();
+
+        // update histogram bars
+        var getRectData = function(d) {
+            return d.histogram.bins.map(function(density, i) {
+                return {
+                    density: density,
+                    range: d.histogram.ranges[i],
+                    values: d.histogram.values[i],
+                    points: d.histogram.values[i].map(function(v) { return v.instance.node; })
+                };
+            });
+        };
+        var dSeries =
+            d3.select("#density-plot > g:nth-of-type(2)")
+                .selectAll("g.series")
+                .data(series, function(d) { return d.selection.number; });
+
+        dSeries
+            .enter()
+            .append("svg:g")
+            .classed("series", true)
+            .style("fill", function(d) {
+                if(d.selection === null) {
+                    return "#aaaaaa";
+                }
+                else {
+                    return d.selection.color();
+                }
+            })
+            .each(function(d) {
+                var dself = d3.select(this);
+
+                $(d.selection).bind("highlight", function(e, state) {
+                    dself.classed("highlighted", state);
+                });
+            })
+            .selectAll("rect")
+            .data(getRectData)
+            .enter()
+            .append("svg:rect")
+            .attr("x", function(d) { return xScale(d.range.left); })
+            .attr("y", function(d) { return yScale.range()[1]; })
+            .attr("width", function(d) { return xScale(d.range.right) - xScale(d.range.left); })
+            .attr("height", 0)
+            .each(function(d) {
+                // prepare event handlers
+                var dthis = d3.select(this);
+                var dlabel = d3.select("#bar-label");
+                var dpoints = d3.selectAll(d.points);
+
+                d.highlight = function() {
+                    var right = dthis.attr("x") > $densityPlot.innerWidth() / 2;
+
+                    dthis.classed("highlighted", true);
+                    dpoints.classed("highlighted", true);
+
+                    dlabel
+                        .attr("x", xScale(right ? d.range.right : d.range.left))
+                        .attr("y", yScale.range()[0] + 18)
+                        .attr("text-anchor", right ? "end" : "start")
+                        .text("%.0f--%.0f".format(d.range.left, d.range.right));
+                };
+                d.unhighlight = function() {
+                    dthis.classed("highlighted", false);
+                    dpoints.classed("highlighted", false);
+
+                    dlabel.text("");
+                };
+
+                // and bind them
+                $(this)
+                    .bind("mouseover", d.highlight)
+                    .bind("mouseout", d.unhighlight);
+                $(d.points)
+                    .bind("mouseover", d.highlight)
+                    .bind("mouseout", d.unhighlight);
+            })
+            .transition()
+            .duration(500)
+            .attr("y", function(d) {
+                return yScale.range()[1] + yScale.range()[0] - yScale(d.density);
+            })
+            .attr("height", function(d) { return yScale(d.density); });
+        dSeries
+            .selectAll("rect")
+            .data(getRectData)
+            .transition()
+            .duration(500)
+            .attr("y", function(d) {
+                return yScale.range()[1] + yScale.range()[0] - yScale(d.density);
+            })
+            .attr("height", function(d) { return yScale(d.density); });
+        dSeries
+            .exit()
+            .each(function(d) {
+                $(d.points)
+                    .unbind("mouseover", d.pointMouseOver)
+                    .unbind("mouseout", d.pointMouseOut);
+            })
+            .transition()
+            .duration(500)
+            .remove()
+            .selectAll("rect")
+            .attr("y", function(d) { return yScale.range()[1]; })
+            .attr("height", 0);
     };
 
     return view;

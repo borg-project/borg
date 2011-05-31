@@ -211,6 +211,8 @@ g.series { fill-opacity: 0.5; }
 
 g.series > rect { stroke-width: 0; }
 
+g.series > rect.highlighted { fill: black; }
+
 /*g.highlighted { fill-opacity: 1.0 !important; }*/
 
 #selections-list > li { margin-left: 1px; }
@@ -241,4 +243,6 @@ g.series > rect { stroke-width: 0; }
     stroke-opacity: 0.25;
     stroke-width: 1;
 }
+
+.borg-tooltip { pointer-events: none; }
 

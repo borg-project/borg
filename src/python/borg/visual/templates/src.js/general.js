@@ -8,30 +8,26 @@ String.prototype.format = function() {
     return sprintf.apply(null, catted.concat.apply(catted, arguments));
 };
 
-var load = function(loadable, callback) {
-    var completed = 0;
-    var makeHandler = function(request) {
-        return function(fetched) {
-            loadable[request.name] = fetched;
+var load = function(loadable) {
+    var remaining = loadable.resourcesRequested.length;
+    var $loadable = $(loadable);
 
-            completed += 1;
+    $loadable.bind("resource-loaded", function(event, request, resource) {
+        loadable.resources[request.name] = resource;
 
-            if(completed == loadable.resources.length) {
-                console.log("finished loading " + completed + " resource(s)");
+        remaining -= 1;
 
-                if(callback !== undefined) {
-                    callback();
-                }
+        if(remaining === 0) {
+            console.log("finished loading %s resource(s)".format(loadable.resourcesRequested.length));
 
-                loadable.loaded();
-            }
-        };
-    };
+            $loadable.trigger("resources-loaded");
+        }
+    });
 
-    for(var i = 0; i < loadable.resources.length; i += 1) {
-        var request = loadable.resources[i];
-
-        d3.json(request.path, makeHandler(request));
-    }
+    loadable.resourcesRequested.forEach(function(request) {
+        d3.json(request.path, function(resource) {
+            $loadable.trigger("resource-loaded", [request, resource]);
+        });
+    });
 };
 
