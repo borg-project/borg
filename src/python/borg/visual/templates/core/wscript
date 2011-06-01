@@ -4,6 +4,7 @@ def build(context):
         [
             "ui.js",
             "list.js",
+            "bar_chart.js",
             ]
         )
 

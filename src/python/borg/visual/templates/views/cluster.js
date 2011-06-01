@@ -197,7 +197,7 @@ bv.views.cluster.prepareSelections = function() {
 
     // the current selection, if any
     var selection = null;
-    var count = 1;
+    var count = 0;
     var finished = function() {
         if(selection !== null) {
             $(this_.selections).trigger("changed");
@@ -342,7 +342,7 @@ bv.views.cluster.updateSelections = function() {
 
 bv.views.cluster.preparePlot = function() {
     this.nodes.configuration = $("#configuration-section > div").get(0);
-    this.plot = this.plots.cost.create(this, this.nodes.configuration);
+    this.plot = this.plots.success.create(this, this.nodes.configuration);
 };
 
 bv.views.cluster.destroy = function() {
@@ -352,5 +352,6 @@ bv.views.cluster.destroy = function() {
 };
 
 {% include "views/cluster/selection.js" %}
-{% include "views/cluster/costPlot.js" %}
+{% include "views/cluster/cost_plot.js" %}
+{% include "views/cluster/success_plot.js" %}
 

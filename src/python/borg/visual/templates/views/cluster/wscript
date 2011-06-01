@@ -3,7 +3,8 @@ def build(context):
         "${PREFIX}/lib/borg/visual/templates/views/cluster",
         [
             "selection.js",
-            "costPlot.js",
+            "cost_plot.js",
+            "success_plot.js",
             ]
         )
 
