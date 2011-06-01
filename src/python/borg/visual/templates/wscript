@@ -8,5 +8,6 @@ def build(context):
             ]
         )
 
-    context.recurse("src.js")
+    context.recurse("core")
+    context.recurse("views")
 

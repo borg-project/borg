@@ -244,5 +244,9 @@ g.series > rect.highlighted { fill: black; }
     stroke-width: 1;
 }
 
-.borg-tooltip { pointer-events: none; }
+.instance-label {
+    fill: blue;
+    font-weight: bold;
+    pointer-events: none;
+}
 

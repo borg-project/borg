@@ -2,12 +2,42 @@
 
 $(function() {
 
-{% include "src.js/general.js" %}
-{#{% include "src.js/table.js" %}#}
-{% include "src.js/cluster.js" %}
-{% include "src.js/interface.js" %}
+String.prototype.format = function() {
+    var catted = [this];
 
-load(ui);
+    return sprintf.apply(null, catted.concat.apply(catted, arguments));
+};
+
+var bv = {
+    views: {}
+};
+
+bv.load = function(loadable) {
+    var remaining = loadable.resourcesRequested.length;
+    var $loadable = $(loadable);
+
+    $loadable.bind("resource-loaded", function(event, request, resource) {
+        loadable.resources[request.name] = resource;
+
+        remaining -= 1;
+
+        if(remaining === 0) {
+            console.log("finished loading %s resource(s)".format(loadable.resourcesRequested.length));
+
+            $loadable.trigger("resources-loaded");
+        }
+    });
+
+    loadable.resourcesRequested.forEach(function(request) {
+        d3.json(request.path, function(resource) {
+            $loadable.trigger("resource-loaded", [request, resource]);
+        });
+    });
+};
+
+{% include "views/cluster.js" %}
+{% include "core/list.js" %}
+{% include "core/ui.js" %}
 
 });
 

@@ -1,0 +1,9 @@
+def build(context):
+    context.install_files(
+        "${PREFIX}/lib/borg/visual/templates/views/cluster",
+        [
+            "selection.js",
+            "costPlot.js",
+            ]
+        )
+
