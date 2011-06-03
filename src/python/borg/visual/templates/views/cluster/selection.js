@@ -4,7 +4,8 @@
 
 bv.views.cluster.selection = {
     colors: d3.scale.category10(),
-    visible: true
+    visible: true,
+    ready: false
 };
 
 bv.views.cluster.selection.create = function(view, point) {
@@ -64,8 +65,8 @@ bv.views.cluster.selection.instances = function() {
         var this_ = this;
 
         return this.view.instances.filter(function(instance) {
-            var cx = instance.node.x.animVal.value;
-            var cy = instance.node.y.animVal.value;
+            var cx = instance.node.cx.animVal.value;
+            var cy = instance.node.cy.animVal.value;
 
             return true &&
                 cx >= this_.p1.x && cx <= this_.p2.x &&

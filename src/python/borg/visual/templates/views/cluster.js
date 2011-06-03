@@ -21,9 +21,7 @@ bv.views.cluster.create = function() {
     view.resources = {};
     view.selections = bv.list.create();
 
-    $(view).bind("resources-loaded", function() {
-        view.initialize();
-    });
+    $(view).bind("resources-loaded", function() { view.initialize(); });
 
     bv.load(view);
 
@@ -63,25 +61,9 @@ bv.views.cluster.initialize = function() {
     });
 
     // miscellaneous data
-    this.nodes = {};
-    this.shapePaths = [
-        "M 5 5 V -5 H -5 V 5 Z", // square
-        "M 0 -%1$s L %1$s 0 L 0 %1$s L -%1$s 0 Z".format(Math.sqrt(50)), // diamond
-        "M 0 -7 L 0 7 M -7 0 L 7 0", // cross
-        "M 5 -5 L -5 5 M -5 -5 L 5 5", // tilted cross
-        "M 0 0 L 10 0 L 0 -10 Z", // bottom-left right triangle
-        "M 0 0 L -10 0 L 0 -10 Z", // bottom-right right triangle
-        "M 0 0 L -10 0 L 0 10 Z", // top-right right triangle
-        "M 0 0 L 10 0 L 0 10 Z", // top-left right triangle
-        "M -5 0 L 5 0 L 0 -%s Z".format(Math.sqrt(75)), // upward equilateral triangle
-        "M -5 0 L 5 0 L 0 %s Z".format(Math.sqrt(75)), // downward equilateral triangle
-        "M 0 -5 L 0 5 L %s 0 Z".format(Math.sqrt(75)), // rightward equilateral triangle
-        "M 0 -5 L 0 5 L -%s 0 Z".format(Math.sqrt(75)), // leftward equilateral triangle
-        "M -7 0 L 7 0 M 0 0 L 0 9", // downward tick
-        "M -7 0 L 7 0 M 0 0 L 0 -9", // upward tick
-        "M 0 -7 L 0 7 M 0 0 L 9 0", // rightward tick
-        "M 0 -7 L 0 7 M 0 0 L -9 0" // leftward tick
-    ];
+    this.nodes = {
+        configuration: $("#configuration-section").get(0)
+    };
 
     // start things moving
     this.prepareProjection();
@@ -91,41 +73,35 @@ bv.views.cluster.initialize = function() {
 
 bv.views.cluster.prepareProjection = function() {
     // prepare projection area
-    var $projection = $('<svg id="cluster-view"></svg>').appendTo("#display");
+    var markup = [
+        '<section id="bv-projection-container">',
+        '<div id="bv-projection-title">Problem Instances (MDS Projection)</div>',
+        '<svg></svg>',
+        '</section>'
+    ];
+    var $container = $(markup.join("\n")).appendTo("body");
+    var $projection = $container.children("svg");
     var dprojection = d3.select($projection.get(0));
-    var ddefs = dprojection.append("svg:defs");
 
-    dprojection
-        .append("svg:rect")
-        .attr("id", "cluster-view-border")
-        .attr("x", 1)
-        .attr("y", 1)
-        .attr("height", $projection.innerHeight() - 2)
-        .attr("width", $projection.innerWidth() - 2)
-        .style("stroke", this.selection.colors.range()[0]);
-
-    // generate node shapes
-    ddefs
-        .selectAll("path")
-        .data(this.shapePaths)
-        .enter()
-        .append("svg:path")
-        .attr("id", function(d, i) { return "node-shape-%s".format(i); })
-        .attr("d", function(d) { return d; });
-
-    // initialize projection
+    this.nodes.container = $container.get(0);
     this.nodes.projection = dprojection.node();
+    this.nodes.projectionBorder =
+        dprojection
+            .append("svg:rect")
+            .attr("id", "bv-projection-border")
+            .attr("x", 1)
+            .attr("y", 1)
+            .attr("height", $projection.innerHeight() - 2)
+            .attr("width", $projection.innerWidth() - 2)
+            .style("stroke", this.selection.colors.range()[0])
+            .node();
 
     this.updateProjection();
 };
 
 bv.views.cluster.updateProjection = function() {
-    // mise en place
-    var this_ = this;
-    var dprojection = d3.select(this.nodes.projection);
-    var $projection = $(this.nodes.projection);
-
     // prepare scales
+    var $projection = $(this.nodes.projection);
     var xScale =
         d3.scale.linear()
             .domain([
@@ -143,21 +119,18 @@ bv.views.cluster.updateProjection = function() {
 
     // add instance nodes
     var denter =
-        dprojection
+        d3.select(this.nodes.projection)
             .selectAll(".instance-point")
             .data(this.instances)
             .enter();
+    var dpoints = denter.append("svg:g");
 
-    denter
-        .append("svg:use")
-        .attr("xlink:href", function(d) {
-            return "#node-shape-%s".format(d.dominant % this_.shapePaths.length);
-        })
+    dpoints
+        .append("svg:circle")
         .attr("class", "instance-point")
-        .attr("x", function(d) { return xScale(d.x) + 0.5; })
-        .attr("y", function(d) { return yScale(d.y) + 0.5; })
-        .attr("height", 10)
-        .attr("width", 10)
+        .attr("cx", function(d) { return xScale(d.x) + 0.5; })
+        .attr("cy", function(d) { return yScale(d.y) + 0.5; })
+        .attr("r", 10)
         .on("mouseover", function(d) {
             d3.select(this).classed("highlighted", true);
             d3.select(d.label).attr("display", "block");
@@ -168,55 +141,75 @@ bv.views.cluster.updateProjection = function() {
         })
         .each(function(d) {
             d.node = this;
+            d.rightSide = d.node.cx.animVal.value > $projection.innerWidth() / 2;
         });
-
-    denter
+    dpoints
         .append("svg:text")
-        .classed("instance-label", true)
-        .each(function(d) {
-            d.label = this;
+        .classed("bv-instance-number", true)
+        .attr("x", function(d) { return d.node.cx.animVal.value; })
+        .attr("y", function(d) { return d.node.cy.animVal.value; })
+        .attr("dy", "0.5ex")
+        .text(function(d) { return d.dominant; });
 
-            var right = d3.select(d.node).attr("x") > $projection.innerWidth() / 2;
+    // add instance node labels
+    var dlabels =
+        denter
+            .append("svg:g")
+            .classed("instance-label", true)
+            .attr("display", "none")
+            .each(function(d) { d.label = this; });
 
-            d3.select(this)
-                .attr("x", xScale(d.x) + (right ? -12.5 : 12.5))
-                .attr("y", yScale(d.y) + 0.5)
-                .attr("display", "none")
-                .style("text-anchor", right ? "end" : "start")
-                .text(d.name);
-        });
+    dlabels
+        .append("svg:text")
+        .attr("x", function(d) { return d.node.cx.animVal.value + (d.rightSide ? -12.5 : 12.5); })
+        .attr("y", function(d) { return d.node.cy.animVal.value + 0.5; })
+        .style("text-anchor", function(d) { return d.rightSide ? "end" : "start"; })
+        .text(function(d) { return d.name; })
+        .each(function(d) { return d.labelText = this; });
+    dlabels
+        .insert("svg:rect", "text")
+        .attr("x", function(d) { return d.labelText.getBBox().x - 2; })
+        .attr("y", function(d) { return d.labelText.getBBox().y - 2; })
+        .attr("height", function(d) { return d.labelText.getBBox().height + 4; })
+        .attr("width", function(d) { return d.labelText.getBBox().width + 4; });
 };
 
 bv.views.cluster.prepareSelections = function() {
     // prepare the selection list
     var this_ = this;
 
-    $("<p>Selections:</p>")
-        .appendTo("#configuration-section > div")
-        .append('<ul id="selections-list"></ul>');
+    this.nodes.selectionsDiv =
+        $("<p>Selections:</p>")
+            .appendTo(this.nodes.configuration)
+            .append('<ul id="selections-list"></ul>')
+            .get(0);
 
     // the current selection, if any
     var selection = null;
     var count = 0;
     var finished = function() {
         if(selection !== null) {
-            $(this_.selections).trigger("changed");
+            selection.ready = true;
 
             selection = null;
+
+            $(this_.selections).trigger("changed");
         }
     };
 
-    $("#cluster-view")
+    $(this.nodes.projection)
         .mousedown(function(event) {
-            if(selection === null) {
-                selection = this_.selection.create(this_, {x: event.layerX, y: event.layerY});
-            }
-            else {
-                finished();
+            if(event.which == 1) {
+                if(selection === null) {
+                    selection = this_.selection.create(this_, {x: event.layerX, y: event.layerY});
+                }
+                else {
+                    finished();
+                }
             }
         })
         .mousemove(function(event) {
-            if(selection !== null) {
+            if(event.which == 1 && selection !== null) {
                 selection.update({x: event.layerX, y: event.layerY});
 
                 if(selection.number === undefined && selection.area() >= 25) {
@@ -227,7 +220,9 @@ bv.views.cluster.prepareSelections = function() {
             }
         })
         .mouseup(function(event) {
-            finished();
+            if(event.which == 1) {
+                finished();
+            }
         });
 
     // update on changes
@@ -235,6 +230,12 @@ bv.views.cluster.prepareSelections = function() {
 
     // add the initial "everything" selection
     var everything = this.selection.create(this).reify(0, "All Instances");
+
+    everything.ready = true;
+
+    $(everything).bind("highlighted", function(event, state) {
+        d3.select(this_.nodes.projectionBorder).classed("highlighted", state);
+    });
 
     this.selections.add(everything);
 };
@@ -279,23 +280,28 @@ bv.views.cluster.updateSelections = function() {
 
             $(this_.selections).trigger("changed");
         });
-
     added
         .append("span")
         .filter(function(d) { return d.number > 0; })
         .attr("title", "Remove")
         .attr("class", "ui-icon ui-icon-close")
         .on("click", function(d) { this_.selections.remove(d); });
-
     added
         .append("span")
+        .classed("bv-selection-name", true)
+        .style("color", function(d) { return d.color; })
         .html(function(d) { return d.titleMarkup; })
-        .style("color", function(d) { return d.color; });
+        .on("click", function(d) {
+            var instances = d.instances().map(function(v) { return v.name; });
+            var state = bv.ui.state.withView(bv.views.table, {instances: instances});
+
+            bv.ui.change(state);
+        });
 
     // update selection rectangles
     var visible = this.selections.get().filter(function(d) { return d.visible && d.p2 !== undefined; });
     var dboxes =
-        d3.select("#cluster-view")
+        d3.select(this.nodes.projection)
             .selectAll(".selection-region")
             .data(visible, function(d) { return d.number; });
 
@@ -329,7 +335,6 @@ bv.views.cluster.updateSelections = function() {
                 .bind("highlighted", this.highlighted)
                 .bind("moved", this.moved);
         });
-
     dboxes
         .exit()
         .each(function(d) {
@@ -341,14 +346,64 @@ bv.views.cluster.updateSelections = function() {
 };
 
 bv.views.cluster.preparePlot = function() {
-    this.nodes.configuration = $("#configuration-section > div").get(0);
-    this.plot = this.plots.success.create(this, this.nodes.configuration);
+    // mise en place
+    var this_ = this;
+
+    // set up DOM
+    this.nodes.pickSelect =
+        $('<p>Chart:<select></select></p>')
+            .appendTo(this.nodes.configuration)
+            .find("select")
+            .attr("id", "bv-cluster-chart-select")
+            .get(0);
+    this.nodes.plotControlsDiv =
+        $("<div></div>")
+            .appendTo(this.nodes.configuration)
+            .get(0);
+    this.nodes.chartDiv =
+        d3.select("body")
+            .append("div")
+            .attr("id", "bv-chart-container")
+            .node();
+    this.nodes.chartSVG =
+        d3.select(this.nodes.chartDiv)
+            .append("svg:svg")
+            .node();
+
+    // plot selection
+    d3.select(this.nodes.pickSelect)
+        .selectAll("option")
+        .data(Object.keys(this.plots))
+        .enter()
+        .append("option")
+        .sort(function(d) { return this_.plots[d].order; })
+        .attr("value", function(d) { return d; })
+        .text(function(d) { return this_.plots[d].title; });
+
+    $(this.nodes.pickSelect)
+        .selectmenu({style: "dropdown"})
+        .change(function(event) {
+            if(this_.plot) {
+                this_.plot.destroy();
+            }
+
+            var plotNodes = {
+                controlsDiv: this_.nodes.plotControlsDiv,
+                chartSVG: this_.nodes.chartSVG
+            };
+            var plotType = this_.plots[$(this).val()];
+
+            this_.plot = plotType.create(this_, plotNodes);
+        })
+        .trigger("change");
 };
 
 bv.views.cluster.destroy = function() {
-    $("#display").empty();
-    $("#density-plot-area").remove();
-    $("#configuration-section > div").empty();
+    this.plot.destroy();
+
+    $(this.nodes.configuration).empty();
+    $(this.nodes.container).remove();
+    $(this.nodes.chartDiv).remove();
 };
 
 {% include "views/cluster/selection.js" %}

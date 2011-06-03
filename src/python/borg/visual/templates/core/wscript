@@ -2,9 +2,10 @@ def build(context):
     context.install_files(
         "${PREFIX}/lib/borg/visual/templates/core",
         [
-            "ui.js",
-            "list.js",
             "bar_chart.js",
+            "list.js",
+            "state.js",
+            "ui.js",
             ]
         )
 

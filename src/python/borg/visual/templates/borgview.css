@@ -8,6 +8,11 @@ html {
     line-height: 20px;
     background-color: white;
     color: black;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -o-user-select: none;
+    user-select: none;
 }
 
 body {
@@ -16,21 +21,13 @@ body {
     height: 100%;
 }
 
-h1 {
-    font-weight: bold;
-}
+h1 { font-weight: bold; }
 
-select {
-    width: 200px;
-}
+select { width: 180px; }
 
-p {
-    margin-bottom: 20px;
-}
+p { margin-bottom: 20px; }
 
-nav a {
-    display: block;
-}
+nav a { display: block; }
 
 /*
  * JQUERY UI CUSTOMIZATION
@@ -62,9 +59,7 @@ aside {
     box-shadow: 0px 0px 20px #AAA;
 }
 
-aside > section {
-    margin-bottom: 20px;
-}
+aside > section { margin-bottom: 20px; }
 
 aside > footer {
     position: fixed;
@@ -76,13 +71,9 @@ aside > footer {
  * RUNS TABLE
  */
 
-#runs-table {
-    position: absolute;
-    /*top: 20px;*/
-    /*left: 220px;*/
-}
+#bv-runs-table { display: inline-block; }
 
-#runs-table > header {
+#bv-runs-table-header {
     background-color: rgba(255, 255, 255, 0.9);
     position: relative;
     padding-top: 4px;
@@ -103,10 +94,6 @@ aside > footer {
     font-weight: bold;
     white-space: nowrap;
 }
-
-/*
- * OTHER RULES
- */
 
 #runs-list .ui-selecting {
     background: #FECA40;
@@ -148,7 +135,7 @@ aside > footer {
  * CLUSTER VIEW
  */
 
-#display {
+#bv-projection-container {
     position: absolute;
     top: 20px;
     left: 240px;
@@ -156,11 +143,17 @@ aside > footer {
     bottom: 220px;
     width: auto;
     height: auto;
+    cursor: crosshair;
 }
 
-#cluster-view { cursor: crosshair; }
+#bv-projection-title {
+    font-weight: bold;
+    position: absolute;
+    top: 4px;
+    left: 8px;
+}
 
-#cluster-view-border {
+#bv-projection-border {
     fill-opacity: 0.0;
     stroke-width: 1;
     stroke-opacity: 0.5;
@@ -168,14 +161,7 @@ aside > footer {
     pointer-events: none;
 }
 
-#density-plot-area {
-    position: absolute;
-    overflow: hidden;
-    height: 200px;
-    left: 240px;
-    right: 20px;
-    bottom: 0px;
-}
+#bv-projection-border.highlighted { stroke-opacity: 1.0; }
 
 .instance-point {
     stroke: black;
@@ -185,13 +171,31 @@ aside > footer {
     fill-opacity: 0.5;
 }
 
+.bv-instance-number {
+    fill: white;
+    opacity: 0.6;
+    text-anchor: middle;
+    font-weight: bold;
+    pointer-events: none;
+}
+
 .instance-point.highlighted {
-    stroke: blue;
-    fill: blue;
+    stroke: #6666ff;
+    fill: #6666ff;
     stroke-opacity: 0.8;
 }
 
-#density-select { width: 160px; }
+.instance-label { pointer-events: none; }
+
+.instance-label > text {
+    fill: #6666ff;
+    font-weight: bold;
+}
+
+.instance-label > rect {
+    fill: white;
+    fill-opacity: 0.75;
+}
 
 .selection-region {
     fill-opacity: 0.1;
@@ -207,9 +211,20 @@ aside > footer {
     cursor: move;
 }
 
+#bv-chart-container {
+    position: absolute;
+    overflow: hidden;
+    height: 200px;
+    left: 240px;
+    right: 20px;
+    bottom: 0px;
+}
+
 g.series { fill-opacity: 0.5; }
 
-g.series > rect { stroke-width: 0; }
+g.series > rect {
+    stroke-width: 1;
+}
 
 g.series > rect.highlighted { fill: black; }
 
@@ -231,10 +246,10 @@ g.series > rect.highlighted { fill: black; }
 
 #selections-list > li > .ui-icon:hover { outline: 1px #aaaaaa solid; }
 
-.cluster-arrow {
-    stroke: black;
-    stroke-opacity: 0.1;
-    stroke-width: 8;
+.bv-selection-name:hover {
+    border-bottom: 1px dotted #000000;
+    cursor: pointer;
+    /* XXX selection names should be anchors */
 }
 
 .tick,
@@ -242,11 +257,5 @@ g.series > rect.highlighted { fill: black; }
     stroke: #aaaaaa;
     stroke-opacity: 0.25;
     stroke-width: 1;
-}
-
-.instance-label {
-    fill: blue;
-    font-weight: bold;
-    pointer-events: none;
 }
 

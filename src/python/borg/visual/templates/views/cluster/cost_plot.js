@@ -2,17 +2,16 @@
 // CLUSTER VIEW COST PLOT
 //
 
-//var maxBar = d3.max(allSeries, function(d) { return d3.max(d.bars, function(b) { return b.height; }); });
+bv.views.cluster.plots.cost = {
+    title: "Runtime Dist.",
+    order: 1
+};
 
-bv.views.cluster.plots.cost = {};
-
-bv.views.cluster.plots.cost.create = function(view, controlsNode) {
+bv.views.cluster.plots.cost.create = function(view, nodes) {
     var plot = Object.create(bv.views.cluster.plots.cost);
 
     plot.view = view;
-    plot.nodes = {
-        controls: controlsNode
-    };
+    plot.nodes = nodes;
     plot.solver = view.resources.solvers[0];
     plot.maxCost = d3.max(view.resources.runs, function(d) {
         return d3.max(d.runs, function(e) { return e.cost; });
@@ -27,15 +26,13 @@ bv.views.cluster.plots.cost.initialize = function() {
     var $this = $(this);
 
     // control elements
-    this.nodes.density =
-        $('<p>Histogrammed:</p>')
-            .appendTo(this.nodes.controls)
-            .append("<select></select>")
-            .children()
-            .attr("id", "density-select")
+    this.nodes.solverSelect =
+        $('<p>Solver:<select id="bv-plot-solver-select"></select></p>')
+            .appendTo(this.nodes.controlsDiv)
+            .children("select")
             .get(0);
 
-    d3.select(this.nodes.density)
+    d3.select(this.nodes.solverSelect)
         .selectAll("option")
         .data(this.view.resources.solvers)
         .enter()
@@ -43,26 +40,19 @@ bv.views.cluster.plots.cost.initialize = function() {
         .attr("value", function(d) { return d; })
         .text(function(d) { return d; });
 
-    $(this.nodes.density)
-        .selectmenu({ style: "dropdown" })
+    $(this.nodes.solverSelect)
+        .selectmenu({style: "dropdown"})
         .change(function(event) {
-            this_.solver = $(this_.nodes.density).val(); 
+            this_.solver = $(this).val(); 
 
             this_.update();
         });
 
     // prepare for plotting
-    var dplot =
-        d3.select("body")
-            .append("div")
-            .attr("id", "density-plot-area")
-            .append("svg:svg")
-            .attr("id", "density-plot");
-
     this.chart = 
         bv.barChart.create(
-            {chart: dplot.node()},
-            {x_axis: "Time to Solution (CPU s) -->", y_axis: "Fraction of Runs -->"},
+            {chartSVG: this.nodes.chartSVG},
+            {x_axis: "Time to Solution (CPU s)", y_axis: "Fraction of Runs"},
             40
         );
 
@@ -123,10 +113,11 @@ bv.views.cluster.plots.cost.update = function() {
     var this_ = this;
     var xDomain = [0, this.maxCost];
     var yDomain = [0, 0];
+    var xLabels = [];
     var allSeries = [];
 
     this.view.selections.get().forEach(function(selection) {
-        if(selection.visible) {
+        if(selection.visible && selection.ready) {
             var values = [];
 
             selection.instances().forEach(function(instance) {
@@ -143,6 +134,12 @@ bv.views.cluster.plots.cost.update = function() {
 
             var histogram = this_.digitize(values, this_.chart.nbars, 0, this_.maxCost, true);
 
+            if(xLabels.length === 0) {
+                histogram.ranges.forEach(function(range) {
+                    xLabels.push("%.0f--%.0f".format(range.left, range.right));
+                });
+            }
+
             allSeries.push({
                 id: selection.number,
                 color: selection.color,
@@ -151,21 +148,36 @@ bv.views.cluster.plots.cost.update = function() {
                         yDomain[1] = density;
                     }
 
-                    return {
+                    var points = histogram.values[i].map(function(v) { return v.instance.node; });
+
+                    var bar = {
                         height: density,
                         left: histogram.ranges[i].left,
                         right: histogram.ranges[i].right,
-                        proxy: null // XXX
+                        associated: points
                     };
+
+                    $(bar)
+                        .bind("highlighted", function() {
+                            d3.selectAll(points).classed("highlighted", true);
+                        })
+                        .bind("unhighlighted", function() {
+                            d3.selectAll(points).classed("highlighted", false);
+                        });
+
+                    return bar;
                 })
             });
         }
     });
 
-    this.chart.update(allSeries, xDomain, yDomain);
+    this.chart.update(allSeries, xDomain, yDomain, xLabels);
 };
 
 bv.views.cluster.plots.cost.destroy = function() {
     $(this.view.selections).unbind("changed", this.update);
+    $(this.nodes.controlsDiv).empty();
+
+    this.chart.destroy();
 };
 

@@ -16,77 +16,63 @@ bv.barChart.create = function(nodes, labels, nbars) {
 
 bv.barChart.initialize = function() {
     // prepare for plotting
-    var d3chart = d3.select(this.nodes.chart);
+    var d3chart = d3.select(this.nodes.chartSVG);
 
     this.nodes.ticksGroup = d3chart.append("svg:g").node();
     this.nodes.barsGroup = d3chart.append("svg:g").node();
+    this.nodes.yLabelsGroup = d3chart.append("svg:g").node();
 
-    // add axes labels
-    var d3labels = d3chart.append("svg:g");
+    // add labels to axes
+    this.nodes.xLabel =
+        d3chart
+            .append("svg:text")
+            .attr("x", 50)
+            .attr("y", 2)
+            .attr("dy", "1em")
+            .style("font-weight", "bold")
+            .text(this.labels.x_axis)
+            .node();
 
-    d3labels
-        .append("svg:text")
-        .attr("x", 4)
-        .attr("y", 2)
-        .attr("dy", "1em")
-        .text(this.labels.x_axis);
-    d3labels
+    d3chart
         .append("svg:g")
         .attr(
             "transform",
-            "translate(%s, %s) rotate(90)".format(
-                $(this.nodes.chart).innerWidth() - 10,
-                20
+            "translate(%s, %s) rotate(-90)".format(
+                14,
+                $(this.nodes.chartSVG).innerHeight() - 4
             )
         )
         .append("svg:text")
+        .style("font-weight", "bold")
         .text(this.labels.y_axis);
 
     return this;
 };
 
-bv.barChart.update = function(allSeries, xDomain, yDomain) {
+bv.barChart.update = function(allSeries, xDomain, yDomain, xLabels) {
     // prepare scales
-    var $chart = $(this.nodes.chart);
-    var xScale = d3.scale.linear().domain(xDomain).rangeRound([0, $chart.innerWidth() - 14]);
-    var yScale = d3.scale.linear().domain(yDomain).rangeRound([18, $chart.innerHeight()]);
+    var $chartSVG = $(this.nodes.chartSVG);
+    var xScale = d3.scale.linear().domain(xDomain).rangeRound([52, $chartSVG.innerWidth()]);
+    var yScale = d3.scale.linear().domain(yDomain).rangeRound([$chartSVG.innerHeight(), 18]);
 
     // update
     this.updateTicks(xScale, yScale);
-    this.updateBars(allSeries, xScale, yScale);
+    this.updateBars(allSeries, xScale, yScale, xLabels);
 };
 
 bv.barChart.updateTicks = function(xScale, yScale) {
-    // x-axis ticks
-    var xTicks = [];
-
-    for(var i = 0; i < this.nbars + 1; i += 1) {
-        xTicks[i] = i * (xScale.domain()[1] - xScale.domain()[0]) / this.nbars;
-    }
-
-    var d3ticksGroup = d3.select(this.nodes.ticksGroup);
-    var d3xTicks = d3ticksGroup.selectAll(".tick").data(xTicks);
-
-    d3xTicks
-        .enter()
-        .append("svg:line")
-        .classed("tick", true)
-        .attr("x1", function(d) { return xScale(d) + 0.5; })
-        .attr("y1", yScale.range()[0])
-        .attr("x2", function(d) { return xScale(d) + 0.5; })
-        .attr("y2", yScale.range()[0] + 10);
-
     // y-axis ticks
-    var d3yTicks = d3ticksGroup.selectAll(".tick-line").data(yScale.ticks(8));
+    var yTicks = yScale.ticks(8);
+    var d3yTicks = d3.select(this.nodes.ticksGroup).selectAll(".tick-line").data(yTicks);
 
     d3yTicks
         .enter()
         .append("svg:line")
         .classed("tick-line", true)
-        .attr("x1", xScale.range()[0])
-        .attr("y1", yScale.range()[1])
+        .attr("x1", xScale.range()[0] - 30)
+        .attr("y1", yScale.range()[0])
         .attr("x2", xScale.range()[1])
-        .attr("y2", yScale.range()[1])
+        .attr("y2", yScale.range()[0])
         .transition()
         .duration(500)
         .attr("y1", function(d) { return yScale(d) + 0.5; })
@@ -100,12 +86,40 @@ bv.barChart.updateTicks = function(xScale, yScale) {
         .exit()
         .transition()
         .duration(500)
-        .attr("y1", yScale.range()[1])
-        .attr("y2", yScale.range()[1])
+        .attr("y1", yScale.range()[0])
+        .attr("y2", yScale.range()[0])
+        .remove();
+
+    // y-axis labels
+    var d3yLabels =
+        d3.select(this.nodes.yLabelsGroup)
+            .selectAll("text")
+            .data(yTicks);
+
+    d3yLabels
+        .enter()
+        .append("svg:text")
+        .attr("x", xScale.range()[0] - 4)
+        .attr("y", yScale.range()[0] + 20)
+        .style("text-anchor", "end")
+        .text(function(d) { return "%.2f".format(d); })
+        .transition()
+        .duration(500)
+        .attr("y", function(d) { return yScale(d) - 1; });
+    d3yLabels
+        .transition()
+        .duration(500)
+        .attr("y", function(d) { return yScale(d) - 1; })
+        .text(function(d) { return "%.2f".format(d); });
+    d3yLabels
+        .exit()
+        .transition()
+        .duration(500)
+        .attr("y", yScale.range()[0] + 20)
         .remove();
 };
 
-bv.barChart.updateBars = function(allSeries, xScale, yScale) {
+bv.barChart.updateBars = function(allSeries, xScale, yScale, xLabels) {
     // mise en place
     var this_ = this;
 
@@ -120,87 +134,102 @@ bv.barChart.updateBars = function(allSeries, xScale, yScale) {
         .append("svg:g")
         .classed("series", true)
         .style("fill", function(d) { return d.color; })
-        .each(function(d) {
-            var d3this = d3.select(this);
-
-            $(d.proxy).bind("highlight", function(e, state) {
-                d3this.classed("highlighted", state);
-            });
-        })
+        .style("stroke", function(d) { return d.color; })
         .selectAll()
         .data(function(d) { return d.bars; })
         .enter()
         .append("svg:rect")
-        .attr("x", function(d) { return xScale(d.left); })
-        .attr("y", function(d) { return yScale.range()[1]; })
-        .attr("width", function(d) { return xScale(d.right) - xScale(d.left); })
+        .attr("x", function(d) { return xScale(d.left) - 0.5; })
+        .attr("y", function(d) { return yScale.range()[0]; })
+        .attr("width", function(d) { return xScale(d.right) - xScale(d.left) - 2; })
         .attr("height", 0)
-        //.each(function(d) {
-            //// prepare event handlers
-            //var dthis = d3.select(this);
-            //var dlabel = d3.select("#bar-label");
-            //var dpoints = d3.selectAll(d.points);
+        .each(function(d, i) {
+            // prepare event handlers
+            var bar = this;
+            var dxLabel = d3.select(this_.nodes.xLabel);
 
-            //d.highlight = function() {
-                //var right = dthis.attr("x") > $densityPlot.innerWidth() / 2;
+            this.highlight = function() {
+                d3.select(bar).classed("highlighted", true);
 
-                //dthis.classed("highlighted", true);
-                //dpoints.classed("highlighted", true);
+                dxLabel.text("%s: %s".format(this_.labels.x_axis, xLabels[i]));
 
-                //dlabel
-                    //.attr("x", xScale(right ? d.range.right : d.range.left))
-                    //.attr("y", yScale.range()[0] + 18)
-                    //.attr("text-anchor", right ? "end" : "start")
-                    //.text("%.0f--%.0f".format(d.range.left, d.range.right));
-            //};
-            //d.unhighlight = function() {
-                //dthis.classed("highlighted", false);
-                //dpoints.classed("highlighted", false);
+                $(bar.__data__).trigger("highlighted");
+            };
+            this.unhighlight = function() {
+                d3.select(bar).classed("highlighted", false);
 
-                //dlabel.text("");
-            //};
+                dxLabel.text(this_.labels.x_axis);
 
-            //// and bind them
-            //$(this)
-                //.bind("mouseover", d.highlight)
-                //.bind("mouseout", d.unhighlight);
-            //$(d.points)
-                //.bind("mouseover", d.highlight)
-                //.bind("mouseout", d.unhighlight);
-        //})
+                $(bar.__data__).trigger("unhighlighted");
+            };
+            this.reassociate = function(associated) {
+                if(this.deassociate !== undefined) {
+                    this.deassociate();
+                }
+
+                this.deassociate = function() {
+                    $(associated)
+                        .unbind("mouseover", this.highlight)
+                        .unbind("mouseout", this.unhighlight);
+                };
+
+                $(associated)
+                    .bind("mouseover", this.highlight)
+                    .bind("mouseout", this.unhighlight);
+            };
+
+            // and bind them
+            $(this)
+                .bind("mouseover", this.highlight)
+                .bind("mouseout", this.unhighlight);
+
+            this.reassociate(d.associated);
+        })
         .transition()
         .duration(500)
-        .attr("y", function(d) {
-            return yScale.range()[1] + yScale.range()[0] - yScale(d.height);
-        })
-        .attr("height", function(d) { return yScale(d.height); });
+        .attr("y", function(d) { return yScale(d.height) + 0.5; })
+        .attr("height", function(d) { return yScale.range()[0] - yScale(d.height); });
     d3allSeries
         .selectAll("rect")
         .data(function(d) { return d.bars; })
+        .each(function(d) { this.reassociate(d.associated); })
         .transition()
         .duration(500)
-        .attr("y", function(d) {
-            return yScale.range()[1] + yScale.range()[0] - yScale(d.height);
-        })
-        .attr("height", function(d) { return yScale(d.height); });
+        .attr("y", function(d) { return yScale(d.height) + 0.5; })
+        .attr("height", function(d) { return yScale.range()[0] - yScale(d.height); });
     d3allSeries
         .exit()
-        //.each(function(d) {
-            //$(d.points)
-                //.unbind("mouseover", d.highlight)
-                //.unbind("mouseout", d.unhighlight);
-        //})
+        .selectAll("rect")
+        .each(function(d) { this.deassociate(); });
+    d3allSeries
+        .exit()
         .transition()
         .duration(500)
         .remove()
         .selectAll("rect")
-        .attr("y", function(d) { return yScale.range()[1]; })
+        .attr("y", function(d) { return yScale.range()[0]; })
         .attr("height", 0);
 
-    // update labels
+    d3.select(this.nodes.barsGroup)
+        .selectAll("g.series")
+        .sort(function(a, b) {
+            var sum = function(x, y) { return x + y; };
+            var height = function(x) { return Math.pow(x.height, 2); };
+
+            var aSum = a.bars.map(height).reduce(sum);
+            var bSum = b.bars.map(height).reduce(sum);
+
+            return d3.descending(aSum, bSum);
+        });
 };
 
 bv.barChart.destroy = function() {
-    // XXX
+    d3.select(this.nodes.barsGroup)
+        .selectAll("g.series")
+        .selectAll("rect")
+        .each(function(d) { this.deassociate(); })
+        .remove();
+
+    $(this.nodes.chartSVG).empty();
 };
 

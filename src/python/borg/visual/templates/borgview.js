@@ -36,7 +36,9 @@ bv.load = function(loadable) {
 };
 
 {% include "views/cluster.js" %}
+{% include "views/table.js" %}
 {% include "core/list.js" %}
+{% include "core/state.js" %}
 {% include "core/bar_chart.js" %}
 {% include "core/ui.js" %}
 

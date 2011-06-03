@@ -2,9 +2,10 @@
 // CLUSTER VIEW SUCCESS PLOT
 //
 
-//var maxBar = d3.max(allSeries, function(d) { return d3.max(d.bars, function(b) { return b.height; }); });
-
-bv.views.cluster.plots.success = {};
+bv.views.cluster.plots.success = {
+    title: "Success Prob.",
+    order: 0
+};
 
 bv.views.cluster.plots.success.create = function(view, nodes) {
     var plot = Object.create(bv.views.cluster.plots.success);
@@ -22,16 +23,9 @@ bv.views.cluster.plots.success.initialize = function() {
     var $this = $(this);
 
     // set up DOM
-    var dplot =
-        d3.select("body")
-            .append("div")
-            .attr("id", "density-plot-area")
-            .append("svg:svg")
-            .attr("id", "density-plot");
-
     this.chart = 
         bv.barChart.create(
-            {chart: dplot.node()},
+            {chartSVG: this.nodes.chartSVG},
             {x_axis: "Solver Name", y_axis: "Probability of Success"},
             this.solvers.length
         );
@@ -58,7 +52,7 @@ bv.views.cluster.plots.success.update = function() {
     var allSeries = [];
 
     this.view.selections.get().forEach(function(selection) {
-        if(selection.visible) {
+        if(selection.visible && selection.ready) {
             var successes = this_.solvers.map(function() { return 0; });
             var attempts = this_.solvers.map(function() { return 0; });
 
@@ -87,18 +81,20 @@ bv.views.cluster.plots.success.update = function() {
                     return {
                         height: fraction,
                         left: i,
-                        right: i + 1,
-                        proxy: null // XXX
+                        right: i + 1
                     };
                 })
             });
         }
     });
 
-    this.chart.update(allSeries, xDomain, yDomain);
+    this.chart.update(allSeries, xDomain, yDomain, this.solvers);
 };
 
 bv.views.cluster.plots.success.destroy = function() {
     $(this.view.selections).unbind("changed", this.update);
+    $(this.nodes.controlsDiv).empty();
+
+    this.chart.destroy();
 };
 
