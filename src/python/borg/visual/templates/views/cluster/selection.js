@@ -51,6 +51,17 @@ bv.views.cluster.selection.update = function(q) {
     return this;
 };
 
+bv.views.cluster.selection.translate = function(q) {
+    this.p1.x += q.x;
+    this.p1.y += q.y;
+    this.p2.x += q.x;
+    this.p2.y += q.y;
+
+    $(this).trigger("moved");
+
+    return this;
+};
+
 bv.views.cluster.selection.toggleVisible = function() {
     this.visible = !this.visible;
 

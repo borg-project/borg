@@ -78,11 +78,16 @@ aside > footer {
     position: relative;
     padding-top: 4px;
     padding-bottom: 4px;
+    z-index: 10;
 }
 
-#header-ui-controls {
-    float: right;
+#bv-table-container {
+    position: absolute;
+    top: 20px;
+    left: 240px;
 }
+
+#header-ui-controls { float: right; }
 
 .solver-name-outer {
     display: inline-block;
@@ -119,9 +124,15 @@ aside > footer {
 }
 
 .instance-run {
+    position: relative;
     display: inline-block;
     width: 25px;
     height: 25px;
+}
+
+.instance-run.highlighted {
+    outline: 3px solid rgba(102, 102, 255, 0.75);
+    z-index: 4;
 }
 
 .instance-title {
@@ -129,6 +140,17 @@ aside > footer {
     float: right;
     font-weight: bold;
     line-height: 25px;
+}
+
+.cell-label {
+    position: relative;
+    float: left;
+    left: 30px;
+    background: rgba(255, 255, 255, 0.75);
+    font-weight: bold;
+    color: #6666ff;
+    z-index: 6;
+    white-space: nowrap;
 }
 
 /*
@@ -227,8 +249,6 @@ g.series > rect {
 }
 
 g.series > rect.highlighted { fill: black; }
-
-/*g.highlighted { fill-opacity: 1.0 !important; }*/
 
 #selections-list > li { margin-left: 1px; }
 

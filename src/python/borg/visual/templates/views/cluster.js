@@ -20,6 +20,7 @@ bv.views.cluster.create = function() {
     ];
     view.resources = {};
     view.selections = bv.list.create();
+    view.drag = null;
 
     $(view).bind("resources-loaded", function() { view.initialize(); });
 
@@ -195,21 +196,28 @@ bv.views.cluster.prepareSelections = function() {
 
             $(this_.selections).trigger("changed");
         }
+        else if(this_.drag !== null) {
+            this_.drag = null;
+
+            $(this_.selections).trigger("changed");
+        }
     };
 
     $(this.nodes.projection)
         .mousedown(function(event) {
-            if(event.which == 1) {
-                if(selection === null) {
-                    selection = this_.selection.create(this_, {x: event.layerX, y: event.layerY});
-                }
-                else {
-                    finished();
+            if(event.which === 1) {
+                if(this_.drag === null) {
+                    if(selection === null) {
+                        selection = this_.selection.create(this_, {x: event.layerX, y: event.layerY});
+                    }
+                    else {
+                        finished();
+                    }
                 }
             }
         })
         .mousemove(function(event) {
-            if(event.which == 1 && selection !== null) {
+            if(selection !== null) {
                 selection.update({x: event.layerX, y: event.layerY});
 
                 if(selection.number === undefined && selection.area() >= 25) {
@@ -218,9 +226,20 @@ bv.views.cluster.prepareSelections = function() {
                     this_.selections.add(selection);
                 }
             }
+            else if(this_.drag !== null) {
+                var q = {
+                    x: event.layerX - this_.drag.startX,
+                    y: event.layerY - this_.drag.startY
+                };
+
+                this_.drag.startX = event.layerX;
+                this_.drag.startY = event.layerY;
+
+                this_.drag.selection.translate(q);
+            }
         })
         .mouseup(function(event) {
-            if(event.which == 1) {
+            if(event.which === 1) {
                 finished();
             }
         });
@@ -315,8 +334,19 @@ bv.views.cluster.updateSelections = function() {
         .attr("width", function(d) { return d.p2.x - d.p1.x; })
         .style("fill", function(d) { return d.color; })
         .style("stroke", function(d) { return d.color; })
-        .on("mouseover", function(d) { $(d).trigger("highlighted", [true]); })
-        .on("mouseout", function(d) { $(d).trigger("highlighted", [false]); })
+        .on("mouseover", function(d) {
+            $(d).trigger("highlighted", [true]);
+        })
+        .on("mouseout", function(d) {
+            $(d).trigger("highlighted", [false]);
+        })
+        .on("mousedown", function(d) {
+            this_.drag = {
+                selection: d,
+                startX: d3.event.layerX,
+                startY: d3.event.layerY
+            };
+        })
         .each(function(d) {
             var dthis = d3.select(this);
 

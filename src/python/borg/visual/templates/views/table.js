@@ -14,7 +14,7 @@ bv.views.table.create = function(options) {
         bv.ui.request("runs", "runs.json"),
         bv.ui.request("solvers", "solvers.json"),
         bv.ui.request("instances", "instances.json"),
-        bv.ui.request("similarity", "similarity.json")
+        bv.ui.request("membership", "membership.json"),
     ];
     view.options = options === undefined ? {} : options;
     view.resources = {};
@@ -31,9 +31,7 @@ bv.views.table.initialize = function() {
     // compute run costs
     if(this.options.instances !== undefined) {
         var subset = this.options.instances;
-        var inSubset = function(r) {
-            return subset.indexOf(r.instance) >= 0;
-        };
+        var inSubset = function(r) { return subset.indexOf(r.instance) >= 0; };
 
         this.runs = this.resources.runs.filter(inSubset);
     }
@@ -41,9 +39,27 @@ bv.views.table.initialize = function() {
         this.runs = this.resources.runs;
     }
 
+    // compute instance information
+    var this_ = this;
+    var dominance = {};
+
+    this.resources.instances.forEach(function(name, i) {
+        var membership = this_.resources.membership[i];
+        var dominant = 0;
+
+        for(var j = 0; j < membership.length; j += 1) {
+            if(membership[j] > membership[dominant]) {
+                dominant = j;
+            }
+        }
+
+        dominance[name] = dominant;
+    });
+
     this.runs.forEach(function(runsOn) {
         runsOn.totalCost = runsOn.runs.reduce(function(a, b) { return a + b.cost; }, 0);
         runsOn.maxCost = d3.max(runsOn.runs, function(d) { return d.cost; });
+        runsOn.dominant = dominance[runsOn.instance];
     });
 
     this.maxCost = d3.max(this.runs, function(r) { return r.maxCost; });
@@ -51,35 +67,32 @@ bv.views.table.initialize = function() {
     // get things moving
     this.prepareTable();
     this.prepareHeader();
+    this.prepareControls();
 };
 
 bv.views.table.prepareTable = function() {
     // set up the DOM
     var markup = [
+        '<section id="bv-table-container">',
         '<div id="bv-runs-table">',
         '<header id="bv-runs-table-header">',
-        //'    <div id="header-ui-controls">',
-        //'        <!--<label for="row-order-select">Order Rows By:</label>-->',
-        //'        <select id="row-order-select">',
-        //'            <option value="byName">Sort by Name</option>',
-        //'            <option value="byTotalCost">Sort by Total Cost</option>',
-        //'            <option value="bySimilarity">Sort by Similarity</option>',
-        //'        </select>',
-        //'    </div>',
         '</header>',
         '<ul id="runs-list"></ul>',
         '<div id="row-interface">',
         '    <button class="raise-button">Raise</button>',
         '</div>',
-        '</div>'
+        '</div>',
+        '</section>'
     ];
-    var $markup = $(markup.join("\n")).appendTo("#display");
+    var $markup = $(markup.join("\n")).appendTo("body");
 
+    this.nodes.container = $markup.get(0);
     this.nodes.table = $("#bv-runs-table").get(0);
     this.nodes.header = $("#bv-runs-table-header").get(0);
     this.nodes.runsList = $("#runs-list").get(0);
 
     // render runs table
+    var this_ = this;
     var d3runsRows = 
         d3.select(this.nodes.runsList)
             .selectAll()
@@ -92,12 +105,9 @@ bv.views.table.prepareTable = function() {
     var cColor = d3.interpolateRgb("rgb(237, 248, 177)", "rgb(44, 127, 184)");
 
     d3runsRows
-        .selectAll()
-        .data(function(d) { return [d.instance]; })
-        .enter()
         .append("div")
         .classed("instance-title", true)
-        .text(function(d) { return d; });
+        .text(function(d) { return "%s (#%s)".format(d.instance, d.dominant); });
 
     d3runsRows
         .selectAll()
@@ -105,10 +115,23 @@ bv.views.table.prepareTable = function() {
         .enter()
         .append("div")
         .classed("instance-run", true)
-        .attr("title", function(d) { return d.cost; })
         .style("background-color", function(d) {
             return d.answer !== null ? cColor(cScale(d.cost)) : "black";
-        });
+        })
+        .on("mouseover", function(d) {
+            d3.select(this)
+                .classed("highlighted", true)
+                .append("div")
+                .classed("cell-label", true)
+                .text(function(d) { return "%.0f s".format(d.cost); });
+        })
+        .on("mouseout", function(d) {
+            d3.select(this)
+                .classed("highlighted", false)
+                .select(".cell-label")
+                .remove();
+        })
+        .each(function(d) { d.cell = this; });
 };
 
 bv.views.table.prepareHeader = function() {
@@ -171,83 +194,56 @@ bv.views.table.prepareHeader = function() {
         "-o-transform": "rotate(90deg)",
         "transform": "rotate(90deg)"
     });
-
-    //// set up overall UI
-    //$("#row-order-select")
-        //.selectmenu({ style: "dropdown" })
-        //.change(function(event, ui) {
-            //view.reorder(sorts[$(this).val()]);
-        //});
-
-    //// set up row interface UI
-    //$("button.raise-button")
-        //.button({
-            //icons: { primary: "ui-icon-arrowthickstop-1-n" },
-            //text: false
-        //})
-        //.click(function() {
-            //$("li.ui-selected")
-                //.detach()
-                //.prependTo("#runs-list");
-
-            //view.reorder(view.sort);
-        //});
-
-    //// handle row-click events
-    //$("body") // XXX correctly remove this handler on unload
-        //.click(function() {
-            //$("li.ui-selected").removeClass("ui-selected");
-            //$("#row-interface").hide();
-        //});
-    //$("li.instance-runs")
-        //.click(function() {
-            //$(this)
-                //.addClass("ui-selected")
-                //.siblings()
-                //.removeClass("ui-selected");
-
-            //$("#row-interface")
-                //.css({ top: $(this).position().top + $(this).outerHeight() })
-                //.show();
-
-            //event.stopPropagation();
-        //});
-
-    //// by default, sort by instance name
-    //this.reorder(sorts.byName);
 };
 
-//var sorts = {
-    //byName: function(a, b) {
-        //return d3.ascending(a.instance, b.instance);
-    //},
-    //byTotalCost: function(a, b) {
-        //return d3.descending(a.total_cost, b.total_cost);
-    //},
-    //bySimilarity: function(a, b) {
-        //var ai = view.instances.indexOf(a.instance);
-        //var bi = view.instances.indexOf(b.instance);
-        //var ti = view.top_instance_index;
+bv.views.table.prepareControls = function() {
+    // define sort orders
+    var this_ = this;
+    var sorts = {
+        byName: function(a, b) {
+            return d3.ascending(a.instance, b.instance);
+        },
+        byTotalCost: function(a, b) {
+            return d3.descending(a.totalCost, b.totalCost);
+        },
+        byCluster: function(a, b) {
+            return d3.ascending(a.dominant, b.dominant);
+        }
+    };
+    var reorder = function(sort) {
+        d3.select(this_.nodes.runsList)
+            .selectAll(".instance-runs")
+            .sort(sort);
+    };
 
-        //return d3.descending(view.similarity[ti][ai], view.similarity[ti][bi]);
-    //}
-//};
+    // set up controls
+    this.nodes.configuration = $("#configuration-section").get(0);
 
-bv.views.table.reorder = function(sort) {
-    console.log("reordering by " + sort);
+    var markup = [
+        '<p>',
+        '    Row Order:',
+        '    <select>',
+        '        <option value="byName">By Name</option>',
+        '        <option value="byTotalCost">By Total Runtime</option>',
+        '        <option value="byCluster">By Cluster</option>',
+        '    </select>',
+        '</p>'
+    ];
+    var $markup = $(markup.join("\n")).appendTo(this.nodes.configuration);
+    var $orderSelect = $markup.find("select");
 
-    this.sort = sort;
+    $orderSelect
+        .selectmenu({ style: "dropdown" })
+        .change(function(event, ui) {
+            reorder(sorts[$(this).val()]);
+        });
 
-    var runsRows = d3.selectAll("#runs-list .instance-runs");
-
-    this.top_instance_index = this.instances.indexOf(runsRows[0][0].__data__.instance);
-
-    runsRows.sort(sort);
-
-    this.top_instance_index = this.instances.indexOf(runsRows[0][0].__data__.instance);
+    // by default, sort by instance name
+    reorder(sorts.byName);
 };
 
 bv.views.table.destroy = function() {
-    $("#display").empty();
+    $(this.nodes.container).remove();
+    $(this.nodes.configuration).empty();
 };
 
