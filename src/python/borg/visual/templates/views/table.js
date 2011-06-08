@@ -20,11 +20,17 @@ bv.views.table.create = function(options) {
     view.resources = {};
     view.nodes = {};
 
-    $(view).bind("resources-loaded", function() { view.initialize(); });
-
-    bv.load(view);
-
     return view;
+};
+
+bv.views.table.load = function() {
+    var this_ = this;
+
+    $(this).bind("resources-loaded", function() { this_.initialize(); });
+
+    bv.load(this);
+
+    return this;
 };
 
 bv.views.table.initialize = function() {
@@ -59,7 +65,16 @@ bv.views.table.initialize = function() {
     this.runs.forEach(function(runsOn) {
         runsOn.totalCost = runsOn.runs.reduce(function(a, b) { return a + b.cost; }, 0);
         runsOn.maxCost = d3.max(runsOn.runs, function(d) { return d.cost; });
+        runsOn.minCost = d3.min(runsOn.runs, function(d) { return d.cost; });
         runsOn.dominant = dominance[runsOn.instance];
+
+        runsOn.runs.forEach(function(run) {
+            run.winner = run.cost === runsOn.minCost;
+
+            if(runsOn.answer === undefined && run.answer !== null) {
+                runsOn.answer = run.answer;
+            }
+        });
     });
 
     this.maxCost = d3.max(this.runs, function(r) { return r.maxCost; });
@@ -76,6 +91,7 @@ bv.views.table.prepareTable = function() {
         '<section id="bv-table-container">',
         '<div id="bv-runs-table">',
         '<header id="bv-runs-table-header">',
+        '    <div id="bv-instance-name-heading">Instance Name [<span class="sat">S</span>/<span class="unsat">U</span>/?] <span class="sidescript">(Cluster #)</span></div>',
         '</header>',
         '<ul id="runs-list"></ul>',
         '<div id="row-interface">',
@@ -107,7 +123,31 @@ bv.views.table.prepareTable = function() {
     d3runsRows
         .append("div")
         .classed("instance-title", true)
-        .text(function(d) { return "%s (#%s)".format(d.instance, d.dominant); });
+        .each(function(d) {
+
+            if(d.answer === true) {
+                d3.select(this).classed("sat", true);
+            }
+            else if(d.answer === false) {
+                d3.select(this).classed("unsat", true);
+            }
+            else {
+                d3.select(this).classed("unknown", true);
+            }
+        })
+        .style("margin-left", "%spx".format(this.resources.solvers.length * 25 + 20))
+        .html(function(d) {
+            var su = "?";
+
+            if(d.answer === true) {
+                su = "S";
+            }
+            else if(d.answer === false) {
+                su = "U";
+            }
+
+            return '%s <span class="sidescript">(%s)</span>'.format(d.instance, d.dominant);
+        });
 
     d3runsRows
         .selectAll()
@@ -118,6 +158,8 @@ bv.views.table.prepareTable = function() {
         .style("background-color", function(d) {
             return d.answer !== null ? cColor(cScale(d.cost)) : "black";
         })
+        .style("left", function(d, i) { return "%spx".format(i * 25); })
+        .html(function(d) { return d.winner ? '<span class="win-label">*</span>' : ""; })
         .on("mouseover", function(d) {
             d3.select(this)
                 .classed("highlighted", true)
@@ -135,40 +177,6 @@ bv.views.table.prepareTable = function() {
 };
 
 bv.views.table.prepareHeader = function() {
-    // keep the table header in view
-    var $table = $(this.nodes.table);
-    var $header = $(this.nodes.header);
-    var headerTop = $header.offset().top;
-    var overlaid = false;
-
-    $(window).scroll(function() {
-        if($(document).scrollTop() > headerTop) {
-            if(!overlaid) {
-                var tableWidth = $table.outerWidth();
-
-                $table.css("margin-top", $header.outerHeight());
-
-                $header
-                    .css("position", "fixed")
-                    .css("top", headerTop)
-                    .width(tableWidth - 4);
-
-                overlaid = true;
-            }
-        }
-        else {
-            if(overlaid) {
-                $table.css("margin-top", "");
-
-                $header
-                    .css("position", "static")
-                    .css("top", "");
-
-                overlaid = false;
-            }
-        }
-    });
-
     // render column headings
     d3.select(this.nodes.header)
         .selectAll(".solver-name-outer")
@@ -178,14 +186,30 @@ bv.views.table.prepareHeader = function() {
         .attr("class", "solver-name-outer")
         .append("div")
         .attr("class", "solver-name")
-        .text(function(name) { return name; });
+        .text(function(d) {
+            var prefix = "SAT07 reference solver:";
 
+            if(d.indexOf(prefix) >= 0) {
+                return "SAT07:" + d.substr(prefix.length);
+            }
+            else {
+                return d;
+            }
+        });
+
+    var $table = $(this.nodes.table);
+    var $header = $(this.nodes.header);
     var nameWidths =
         $table
             .find("div.solver-name-outer")
             .map(function(i, o) { return $(o).outerWidth(); });
 
-    $header.height(d3.max(nameWidths));
+    $header
+        .height(d3.max(nameWidths))
+        .width($table.innerWidth());
+
+    $table.css("margin-top", $header.outerHeight());
+
     $("div.solver-name-outer").width("25px");
     $("div.solver-name").css({
         "-webkit-transform": "rotate(90deg)",
@@ -217,12 +241,12 @@ bv.views.table.prepareControls = function() {
     };
 
     // set up controls
-    this.nodes.configuration = $("#configuration-section").get(0);
+    this.nodes.configuration = $("#configuration-div").get(0);
 
     var markup = [
         '<p>',
-        '    Row Order:',
-        '    <select>',
+        '    Sort Table Rows:',
+        '    <select id="bv-table-sort-select">',
         '        <option value="byName">By Name</option>',
         '        <option value="byTotalCost">By Total Runtime</option>',
         '        <option value="byCluster">By Cluster</option>',

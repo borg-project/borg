@@ -39,6 +39,7 @@ bv.load = function(loadable) {
 {% include "views/table.js" %}
 {% include "core/list.js" %}
 {% include "core/state.js" %}
+{% include "core/loading.js" %}
 {% include "core/bar_chart.js" %}
 {% include "core/ui.js" %}
 

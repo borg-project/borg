@@ -53,6 +53,7 @@ class CategoryData(object):
         attempts = numpy.zeros((N, S))
         costs = numpy.zeros((N, S))
         successes = numpy.zeros((N, S))
+        answers = numpy.zeros((N, S))
         binned_successes = numpy.zeros((N, S, B))
 
         for (_, instance, answer, cost, _, solver_name, _) in runs:
@@ -63,11 +64,18 @@ class CategoryData(object):
                 attempts[n, s] = 1.0
                 costs[n, s] = cost
 
-                if cost <= max_cost and not answer.startswith("UNKNOWN"):
+                if cost <= max_cost and not (answer.startswith("UNKNOWN") or answer == "SIGNAL"):
                     b = numpy.digitize([cost], budgets)
 
                     successes[n, s] += 1.0
                     binned_successes[n, s, b] += 1.0
+
+                    if answer == "SAT":
+                        answers[n, s] = 1.0
+                    elif answer == "UNSAT":
+                        answers[n, s] = -1.0
+                    else:
+                        raise RuntimeError("unrecognized answer {0}".format(answer))
 
         # fit the model
         self.model = borg.models.BilevelMultinomialModel(binned_successes, attempts)
@@ -79,10 +87,17 @@ class CategoryData(object):
             task_runs_list = []
 
             for s in xrange(S):
+                if answers[n, s] == 0.0:
+                    answer = None
+                elif answers[n, s] == 1.0:
+                    answer = True
+                else:
+                    answer = False
+
                 task_runs_list.append({
                     "solver": self.solvers[s],
                     "cost": costs[n, s],
-                    "answer": True if successes[n, s] else None,
+                    "answer": answer
                     })
 
             self.table.append({

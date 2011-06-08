@@ -10,6 +10,7 @@ bv.ui = {
 bv.ui.initialize = function() {
     // enable change-category links
     var this_ = this;
+    var state = bv.state.initial(this);
 
     d3.select("#change-data > nav")
         .selectAll("a")
@@ -41,7 +42,7 @@ bv.ui.initialize = function() {
         });
 
     // get the ball rolling
-    this.change(bv.state.initial(this));
+    this.change(state);
 };
 
 bv.ui.change = function(state) {
@@ -51,7 +52,17 @@ bv.ui.change = function(state) {
 
     this.state = state;
 
-    this.state.load();
+    d3.selectAll("#change-data > nav > a")
+        .classed("current", function(d) { return d.path === state.category.path; })
+
+    d3.selectAll("#change-view > nav > a")
+        .classed("current", function(d) { return d.description === state.viewFactory.description; })
+
+    this.state.create();
+
+    bv.loading.create(this.state.view);
+
+    this.state.view.load();
 };
 
 bv.ui.request = function(name, filename) {

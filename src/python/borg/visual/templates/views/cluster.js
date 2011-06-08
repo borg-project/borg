@@ -22,11 +22,17 @@ bv.views.cluster.create = function() {
     view.selections = bv.list.create();
     view.drag = null;
 
-    $(view).bind("resources-loaded", function() { view.initialize(); });
-
-    bv.load(view);
-
     return view;
+};
+
+bv.views.cluster.load = function() {
+    var this_ = this;
+
+    $(this).bind("resources-loaded", function() { this_.initialize(); });
+
+    bv.load(this);
+
+    return this;
 };
 
 bv.views.cluster.initialize = function() {
@@ -58,12 +64,22 @@ bv.views.cluster.initialize = function() {
     });
 
     this.resources.runs.forEach(function(runsOn) {
-        instancesByName[runsOn.instance].runs = runsOn.runs;
+        var instance = instancesByName[runsOn.instance];
+
+        instance.runs = runsOn.runs;
+
+        for(var i = 0; i < runsOn.runs.length; i += 1) {
+            if(runsOn.runs[i].answer !== null) {
+                instance.answer = runsOn.runs[i].answer;
+
+                break;
+            }
+        }
     });
 
     // miscellaneous data
     this.nodes = {
-        configuration: $("#configuration-section").get(0)
+        configuration: $("#configuration-div").get(0)
     };
 
     // start things moving
@@ -77,7 +93,11 @@ bv.views.cluster.prepareProjection = function() {
     var markup = [
         '<section id="bv-projection-container">',
         '<div id="bv-projection-title">Problem Instances (MDS Projection)</div>',
-        '<svg></svg>',
+        '<svg>',
+        '<defs>',
+        '<polygon points="0,-%1$s %1$s,0 0,%1$s -%1$s,0" id="bv-symbol-diamond"></polygon>'.format(12),
+        '</defs>',
+        '</svg>',
         '</section>'
     ];
     var $container = $(markup.join("\n")).appendTo("body");
@@ -121,17 +141,46 @@ bv.views.cluster.updateProjection = function() {
     // add instance nodes
     var denter =
         d3.select(this.nodes.projection)
-            .selectAll(".instance-point")
+            .selectAll(".instance-point-g")
             .data(this.instances)
             .enter();
     var dpoints = denter.append("svg:g");
 
     dpoints
+        .filter(function(d) { return d.answer === false; })
+        .append("svg:use")
+        .attr("class", "instance-point")
+        .attr("x", function(d) { return xScale(d.x); })
+        .attr("y", function(d) { return yScale(d.y) + 1; })
+        .attr("xlink:href", "#bv-symbol-diamond")
+        .each(function(d) { d.node = this; });
+    dpoints
+        .filter(function(d) { return d.answer === true; })
         .append("svg:circle")
         .attr("class", "instance-point")
         .attr("cx", function(d) { return xScale(d.x) + 0.5; })
         .attr("cy", function(d) { return yScale(d.y) + 0.5; })
         .attr("r", 10)
+        .each(function(d) { d.node = this; });
+    dpoints
+        .filter(function(d) { return d.answer === undefined; })
+        .append("svg:rect")
+        .attr("class", "instance-point")
+        .attr("x", function(d) { return xScale(d.x) - 9.5; })
+        .attr("y", function(d) { return yScale(d.y) - 9.5; })
+        .attr("height", 20)
+        .attr("width", 20)
+        .each(function(d) { d.node = this; });
+
+    dpoints
+        .selectAll(".instance-point")
+        .each(function(d) {
+            var domain = xScale.domain();
+
+            d.cx = xScale(d.x);
+            d.cy = yScale(d.y);
+            d.rightSide = d.x > domain[0] + (domain[1] - domain[0]) / 2;
+        })
         .on("mouseover", function(d) {
             d3.select(this).classed("highlighted", true);
             d3.select(d.label).attr("display", "block");
@@ -139,16 +188,12 @@ bv.views.cluster.updateProjection = function() {
         .on("mouseout", function(d) {
             d3.select(this).classed("highlighted", false);
             d3.select(d.label).attr("display", "none");
-        })
-        .each(function(d) {
-            d.node = this;
-            d.rightSide = d.node.cx.animVal.value > $projection.innerWidth() / 2;
         });
     dpoints
         .append("svg:text")
         .classed("bv-instance-number", true)
-        .attr("x", function(d) { return d.node.cx.animVal.value; })
-        .attr("y", function(d) { return d.node.cy.animVal.value; })
+        .attr("x", function(d) { return xScale(d.x); })
+        .attr("y", function(d) { return yScale(d.y); })
         .attr("dy", "0.5ex")
         .text(function(d) { return d.dominant; });
 
@@ -162,8 +207,8 @@ bv.views.cluster.updateProjection = function() {
 
     dlabels
         .append("svg:text")
-        .attr("x", function(d) { return d.node.cx.animVal.value + (d.rightSide ? -12.5 : 12.5); })
-        .attr("y", function(d) { return d.node.cy.animVal.value + 0.5; })
+        .attr("x", function(d) { return xScale(d.x) + (d.rightSide ? -12.5 : 12.5); })
+        .attr("y", function(d) { return yScale(d.y) + 0.5; })
         .style("text-anchor", function(d) { return d.rightSide ? "end" : "start"; })
         .text(function(d) { return d.name; })
         .each(function(d) { return d.labelText = this; });
@@ -198,6 +243,8 @@ bv.views.cluster.prepareSelections = function() {
         }
         else if(this_.drag !== null) {
             this_.drag = null;
+
+            selection.drag = false;
 
             $(this_.selections).trigger("changed");
         }
@@ -335,10 +382,14 @@ bv.views.cluster.updateSelections = function() {
         .style("fill", function(d) { return d.color; })
         .style("stroke", function(d) { return d.color; })
         .on("mouseover", function(d) {
-            $(d).trigger("highlighted", [true]);
+            if(d.ready && this_.drag === null) {
+                $(d).trigger("highlighted", [true]);
+            }
         })
         .on("mouseout", function(d) {
-            $(d).trigger("highlighted", [false]);
+            if(this_.drag === null) {
+                $(d).trigger("highlighted", [false]);
+            }
         })
         .on("mousedown", function(d) {
             this_.drag = {

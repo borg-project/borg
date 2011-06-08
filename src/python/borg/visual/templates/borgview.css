@@ -29,6 +29,13 @@ p { margin-bottom: 20px; }
 
 nav a { display: block; }
 
+a.current {
+    color: black;
+    text-decoration: none;
+}
+
+.sidescript { color: #888888; }
+
 /*
  * JQUERY UI CUSTOMIZATION
  */
@@ -41,6 +48,10 @@ nav a { display: block; }
 .ui-selectmenu-status {
     padding-top: 0px;
     line-height: 18px;
+}
+
+.ui-dialog-titlebar-close{
+    display: none;
 }
 
 /*
@@ -75,7 +86,8 @@ aside > footer {
 
 #bv-runs-table-header {
     background-color: rgba(255, 255, 255, 0.9);
-    position: relative;
+    position: fixed;
+    top: 20px;
     padding-top: 4px;
     padding-bottom: 4px;
     z-index: 10;
@@ -87,7 +99,12 @@ aside > footer {
     left: 240px;
 }
 
-#header-ui-controls { float: right; }
+#bv-instance-name-heading {
+    position: absolute;
+    bottom: 0px;
+    right: 0px;
+    font-weight: bold;
+}
 
 .solver-name-outer {
     display: inline-block;
@@ -100,16 +117,6 @@ aside > footer {
     white-space: nowrap;
 }
 
-#runs-list .ui-selecting {
-    background: #FECA40;
-}
-
-#runs-list .ui-selected {
-    outline: #789898 2px solid;
-    background: #F39814;
-    color: white;
-}
-
 #row-interface {
     display: none;
     position: absolute;
@@ -120,27 +127,40 @@ aside > footer {
 .instance-runs {
     display: block;
     height: 25px;
-    padding-right: 4px;
+    position: relative;
 }
 
 .instance-run {
-    position: relative;
-    display: inline-block;
+    position: absolute;
     width: 25px;
     height: 25px;
 }
 
 .instance-run.highlighted {
-    outline: 3px solid rgba(102, 102, 255, 0.75);
-    z-index: 4;
+    outline: 3px rgba(102, 102, 255, 0.75) solid;
+    z-index: 8;
+}
+
+.instance-run > .win-label {
+    line-height: 25px;
+    font-size: 18px;
+    height: 100%;
+    width: 100%;
+    font-weight: bold;
+    position: relative;
+    top: 4px;
+    display: block;
+    text-align: center;
 }
 
 .instance-title {
-    margin-left: 20px;
     float: right;
-    font-weight: bold;
     line-height: 25px;
 }
+
+.sat { color: #97c155; }
+.unsat { color: #c19756; }
+.unknown {}
 
 .cell-label {
     position: relative;
@@ -229,7 +249,6 @@ aside > footer {
 
 .selection-region.highlighted {
     stroke-opacity: 1.0;
-    stroke-dasharray: none;
     cursor: move;
 }
 
@@ -269,7 +288,6 @@ g.series > rect.highlighted { fill: black; }
 .bv-selection-name:hover {
     border-bottom: 1px dotted #000000;
     cursor: pointer;
-    /* XXX selection names should be anchors */
 }
 
 .tick,

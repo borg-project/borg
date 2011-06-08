@@ -205,7 +205,7 @@ bv.barChart.updateBars = function(allSeries, xScale, yScale, xLabels) {
         .exit()
         .transition()
         .duration(500)
-        .remove()
+        .call(function(s) { d3.select(s).remove(); })
         .selectAll("rect")
         .attr("y", function(d) { return yScale.range()[0]; })
         .attr("height", 0);

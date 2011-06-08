@@ -76,12 +76,9 @@ bv.views.cluster.selection.instances = function() {
         var this_ = this;
 
         return this.view.instances.filter(function(instance) {
-            var cx = instance.node.cx.animVal.value;
-            var cy = instance.node.cy.animVal.value;
-
             return true &&
-                cx >= this_.p1.x && cx <= this_.p2.x &&
-                cy >= this_.p1.y && cy <= this_.p2.y;
+                instance.cx >= this_.p1.x && instance.cx <= this_.p2.x &&
+                instance.cy >= this_.p1.y && instance.cy <= this_.p2.y;
         });
     }
 };
