@@ -40,8 +40,13 @@ a.current {
  * JQUERY UI CUSTOMIZATION
  */
 
-.ui-selectmenu {
+.ui-widget {
     font-family: inherit;
+    font-size: inherit;
+}
+
+.ui-selectmenu {
+    /*font-family: inherit;*/
     height: 18px;
 }
 
@@ -50,7 +55,7 @@ a.current {
     line-height: 18px;
 }
 
-.ui-dialog-titlebar-close{
+.very-modal .ui-dialog-titlebar-close {
     display: none;
 }
 
@@ -76,6 +81,13 @@ aside > footer {
     position: fixed;
     left: 20px;
     bottom: 20px;
+    width: inherit;
+}
+
+#bv-help-mark {
+    width: 64px;
+    height: 64px;
+    float: right;
 }
 
 /*

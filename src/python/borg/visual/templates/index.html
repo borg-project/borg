@@ -37,9 +37,63 @@
     </section>
 
     <footer>
-        <img src="images/borg-cube-64.png">
+        <a href="http://nn.cs.utexas.edu/pages/research/borg/" title="the borg project"><img src="images/borg-cube-64.png"></a>
+        <a href="" id="bv-help-anchor" title="Help"><img src="images/help-mark-72.png" id="bv-help-mark"></a>
     </footer>
 </aside>
+
+<section id="bv-help-dialog" title="About">
+<h1>Introduction</h1>
+<p>
+This experimental tool allows interactive visualization and exploration of
+solver performance data. It is intended, in particular, as an aid to
+understanding large-scale solver evaluations on collections of benchmark
+instances in the satisfiability domain. It was developed as part of <a
+href="http://nn.cs.utexas.edu/pages/research/borg/">the borg project</a> at The
+University of Texas at Austin, primarily by <a
+href="http://www.cs.utexas.edu/~bsilvert/">Bryan Silverthorn</a>. A modern
+browser is <em>required</em>, and <a href="http://www.google.com/chrome">Google
+Chrome</a> is strongly recommended.
+</p>
+
+<h1>Overview of functionality</h1>
+<p>
+This tool visualizes the computational cost, and the success or failure, of
+runs made by different solvers on collections of instances of some decision
+problem. The available collections are listed under "Data Set" on the left side
+of this page. It provides two views into these data: the raw data can be
+explored in the "Table View", and a similarity-based projection of all
+instances can be analyzed in the "Cluster View". These views make use of a
+probabilistic model, the same model that underlies the borg portfolio solver,
+to quantify instances' similarity as the KL divergence between their solver
+runtime distributions as predicted by the model.
+</p>
+
+<h1>Details of the table view</h1>
+<p>
+The table view provides a compact representation of the raw data. Each row
+corresponds to a problem instance, each column to a solver, and each cell to a
+run. The color of a cell conveys the length of the run required to solve that
+instance, where black cells denote runs that failed. The "best" run on a given
+instance is marked by an asterisk. The names of satisfiable and unsatisfiable
+instances are colored accordingly, and the cluster number for each instance
+(the number of the model's most-relevant mixture component) provides a coarse
+grouping.
+</p>
+
+<h1>Details of the cluster view</h1>
+<p>
+The cluster view projects the set of problem instances into two dimensions.
+Each point represents a problem instance, and the distance between two points
+corresponds roughly to their similarity. Points are numbered by their dominant
+cluster. Satisfiable instances are represented by a circle, unsatisfiable
+instances by a diamond, and unknown instances by a square. Regions of this
+projection can be selected; the properties of instances in each region are
+included in the bar chart, which presents either the probability of each
+solver's success on a random instance in the regions, or the runtime distribution
+of a particular solver on instances in the regions.
+</p>
+</section>
 
 </body>
 </html>

@@ -14,6 +14,7 @@ bv.loading.create = function(view) {
             modal: true,
             draggable: false,
             closeOnEscape: false,
+            dialogClass: "very-modal",
             minHeight: 100
         })
         .find("#bv-loading-progress")

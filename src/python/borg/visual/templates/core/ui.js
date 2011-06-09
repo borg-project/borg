@@ -8,6 +8,15 @@ bv.ui = {
 };
 
 bv.ui.initialize = function() {
+    // enable help dialog
+    $("#bv-help-dialog").dialog({ width: 700 });
+
+    $("#bv-help-anchor").click(function(event) {
+        event.preventDefault();
+
+        $("#bv-help-dialog").dialog("open");
+    });
+
     // enable change-category links
     var this_ = this;
     var state = bv.state.initial(this);
