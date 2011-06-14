@@ -3,7 +3,7 @@
 //
 
 bv.views.cluster.plots.success = {
-    title: "Success Prob.",
+    title: "Success Probability",
     order: 0
 };
 
@@ -25,8 +25,14 @@ bv.views.cluster.plots.success.initialize = function() {
     // set up DOM
     this.chart = 
         bv.barChart.create(
-            {chartSVG: this.nodes.chartSVG},
-            {x_axis: "Solver Name", y_axis: "Probability of Success"},
+            {
+                chartSVG: this.nodes.chartSVG,
+                chartDiv: this.nodes.chartDiv
+            },
+            {
+                xAxis: "Solver Name",
+                yAxis: "Probability of Success"
+            },
             this.solvers.length
         );
 

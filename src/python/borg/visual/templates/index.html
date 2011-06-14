@@ -4,6 +4,7 @@
 <meta charset="utf-8"> 
 <title>borg:view</title>
 <base href="{{ base_url }}"> 
+<link href="images/cube_32x32.ico" rel="shortcut icon">
 <link rel="stylesheet" href="http://yui.yahooapis.com/3.3.0/build/cssreset/reset-min.css">
 <link rel="stylesheet" href="http://fonts.googleapis.com/css?family=Nobile:regular,bold">
 <link rel="stylesheet" href="jquery-ui-1.8.12/css/ui-lightness/jquery-ui-1.8.12.custom.css">
@@ -47,13 +48,12 @@
 <p>
 This experimental tool allows interactive visualization and exploration of
 solver performance data. It is intended, in particular, as an aid to
-understanding large-scale solver evaluations on collections of benchmark
-instances in the satisfiability domain. It was developed as part of <a
+understanding large-scale evaluations on collections of benchmark instances in
+the satisfiability domain. It was developed primarily by <a
+href="http://www.cs.utexas.edu/~bsilvert/">Bryan Silverthorn</a> as part of <a
 href="http://nn.cs.utexas.edu/pages/research/borg/">the borg project</a> at The
-University of Texas at Austin, primarily by <a
-href="http://www.cs.utexas.edu/~bsilvert/">Bryan Silverthorn</a>. A modern
-browser is <em>required</em>, and <a href="http://www.google.com/chrome">Google
-Chrome</a> is strongly recommended.
+University of Texas at Austin. A modern browser is <em>required</em>, and <a
+href="http://www.google.com/chrome">Google Chrome</a> is strongly recommended.
 </p>
 
 <h1>Overview of functionality</h1>
@@ -62,10 +62,10 @@ This tool visualizes the computational cost, and the success or failure, of
 runs made by different solvers on collections of instances of some decision
 problem. The available collections are listed under "Data Set" on the left side
 of this page. It provides two views into these data: the raw data can be
-explored in the "Table View", and a similarity-based projection of all
-instances can be analyzed in the "Cluster View". These views make use of a
-probabilistic model, the same model that underlies the borg portfolio solver,
-to quantify instances' similarity as the KL divergence between their solver
+explored in the "Tabular View", and a similarity-based projection of all
+instances can be analyzed in the "Projection View". A probabilistic model---the
+same model that underlies the borg portfolio solver---is used to quantify
+instances' similarity, defined as the KL divergence between their solver
 runtime distributions as predicted by the model.
 </p>
 
@@ -77,8 +77,8 @@ run. The color of a cell conveys the length of the run required to solve that
 instance, where black cells denote runs that failed. The "best" run on a given
 instance is marked by an asterisk. The names of satisfiable and unsatisfiable
 instances are colored accordingly, and the cluster number for each instance
-(the number of the model's most-relevant mixture component) provides a coarse
-grouping.
+(the number of the model's most relevant mixture component) provides high-level
+grouping information.
 </p>
 
 <h1>Details of the cluster view</h1>

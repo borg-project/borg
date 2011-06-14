@@ -4,7 +4,7 @@
 
 bv.views.table = {
     name: "table",
-    description: "Table View"
+    description: "Tabular View"
 };
 
 bv.views.table.create = function(options) {
@@ -65,11 +65,11 @@ bv.views.table.initialize = function() {
     this.runs.forEach(function(runsOn) {
         runsOn.totalCost = runsOn.runs.reduce(function(a, b) { return a + b.cost; }, 0);
         runsOn.maxCost = d3.max(runsOn.runs, function(d) { return d.cost; });
-        runsOn.minCost = d3.min(runsOn.runs, function(d) { return d.cost; });
+        runsOn.minCost = d3.min(runsOn.runs, function(d) { return d.answer !== null ? d.cost : runsOn.maxCost + 1; });
         runsOn.dominant = dominance[runsOn.instance];
 
         runsOn.runs.forEach(function(run) {
-            run.winner = run.cost === runsOn.minCost;
+            run.winner = run.answer !== null && run.cost === runsOn.minCost;
 
             if(runsOn.answer === undefined && run.answer !== null) {
                 runsOn.answer = run.answer;
@@ -81,7 +81,7 @@ bv.views.table.initialize = function() {
 
     // get things moving
     this.prepareTable();
-    this.prepareHeader();
+    bv.later(this, function() { this.prepareHeader(); });
     this.prepareControls();
 };
 
@@ -94,9 +94,6 @@ bv.views.table.prepareTable = function() {
         '    <div id="bv-instance-name-heading">Instance Name [<span class="sat">S</span>/<span class="unsat">U</span>/?] <span class="sidescript">(Cluster #)</span></div>',
         '</header>',
         '<ul id="runs-list"></ul>',
-        '<div id="row-interface">',
-        '    <button class="raise-button">Raise</button>',
-        '</div>',
         '</div>',
         '</section>'
     ];
@@ -160,23 +157,23 @@ bv.views.table.prepareTable = function() {
         })
         .style("left", function(d, i) { return "%spx".format(i * 25); })
         .html(function(d) { return d.winner ? '<span class="win-label">*</span>' : ""; })
-        .on("mouseover", function(d) {
-            d3.select(this)
-                .classed("highlighted", true)
-                .append("div")
-                .classed("cell-label", true)
-                .text(function(d) { return "%.0f s".format(d.cost); });
+        .on("mouseover", function(d, i) {
+            var $label = $('<div id="cell-label"></div>');
+
+            d3.select(this).classed("highlighted", true);
+
+            $label
+                .text("%.0f s".format(d.cost))
+                .css("left", "%spx".format(i * 25 + 30))
+                .appendTo($(this).parent());
         })
         .on("mouseout", function(d) {
-            d3.select(this)
-                .classed("highlighted", false)
-                .select(".cell-label")
-                .remove();
+            d3.select(this).classed("highlighted", false);
+
+            $("#cell-label").remove();
         })
         .each(function(d) { d.cell = this; });
-};
 
-bv.views.table.prepareHeader = function() {
     // render column headings
     d3.select(this.nodes.header)
         .selectAll(".solver-name-outer")
@@ -196,7 +193,9 @@ bv.views.table.prepareHeader = function() {
                 return d;
             }
         });
+};
 
+bv.views.table.prepareHeader = function() {
     var $table = $(this.nodes.table);
     var $header = $(this.nodes.header);
     var nameWidths =
@@ -206,7 +205,7 @@ bv.views.table.prepareHeader = function() {
 
     $header
         .height(d3.max(nameWidths))
-        .width($table.innerWidth());
+        .width($table.outerWidth());
 
     $table.css("margin-top", $header.outerHeight());
 
@@ -214,9 +213,8 @@ bv.views.table.prepareHeader = function() {
     $("div.solver-name").css({
         "-webkit-transform": "rotate(90deg)",
         "-moz-transform": "rotate(90deg)",
-        "-ms-transform": "rotate(90deg)",
-        "-o-transform": "rotate(90deg)",
-        "transform": "rotate(90deg)"
+        msTransform: "rotate(90deg)",
+        transform: "rotate(90deg)"
     });
 };
 

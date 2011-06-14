@@ -22,8 +22,6 @@ bv.load = function(loadable) {
         remaining -= 1;
 
         if(remaining === 0) {
-            console.log("finished loading %s resource(s)".format(loadable.resourcesRequested.length));
-
             $loadable.trigger("resources-loaded");
         }
     });
@@ -33,6 +31,10 @@ bv.load = function(loadable) {
             $loadable.trigger("resource-loaded", [request, resource]);
         });
     });
+};
+
+bv.later = function(this_, callback) {
+    setTimeout(function() { callback.call(this_); }, 0);
 };
 
 {% include "views/cluster.js" %}

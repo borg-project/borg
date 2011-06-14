@@ -3,7 +3,7 @@
 //
 
 bv.views.cluster.plots.cost = {
-    title: "Runtime Dist.",
+    title: "Runtime Distribution",
     order: 1
 };
 
@@ -51,8 +51,14 @@ bv.views.cluster.plots.cost.initialize = function() {
     // prepare for plotting
     this.chart = 
         bv.barChart.create(
-            {chartSVG: this.nodes.chartSVG},
-            {x_axis: "Time to Solution (CPU s)", y_axis: "Fraction of Runs"},
+            {
+                chartDiv: this.nodes.chartDiv,
+                chartSVG: this.nodes.chartSVG
+            },
+            {
+                xAxis: "Time to Solution (CPU s)",
+                yAxis: "Fraction of Runs"
+            },
             40
         );
 
@@ -149,7 +155,6 @@ bv.views.cluster.plots.cost.update = function() {
                     }
 
                     var points = histogram.values[i].map(function(v) { return v.instance.node; });
-
                     var bar = {
                         height: density,
                         left: histogram.ranges[i].left,

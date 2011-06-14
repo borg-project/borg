@@ -4,7 +4,7 @@
 
 bv.views.cluster = {
     name: "cluster",
-    description: "Cluster View",
+    description: "Projection View",
     plots: {}
 };
 
@@ -84,8 +84,32 @@ bv.views.cluster.initialize = function() {
 
     // start things moving
     this.prepareProjection();
-    this.prepareSelections();
-    this.preparePlot();
+
+    bv.later(this, function() {
+        this.prepareSelections();
+        this.preparePlot();
+
+        bv.later(this, function() {
+            this.updateProjection();
+            this.updateSelections();
+            this.updatePlot();
+        });
+    });
+
+    bv.later(this, function() {
+        var $container = $(this.nodes.container);
+
+        this.nodes.projectionBorder =
+            d3.select(this.nodes.projection)
+                .append("svg:rect")
+                .attr("id", "bv-projection-border")
+                .attr("x", 1)
+                .attr("y", 1)
+                .attr("height", $container.innerHeight() - 2)
+                .attr("width", $container.innerWidth() - 2)
+                .style("stroke", this.selection.colors.range()[0])
+                .node();
+    });
 };
 
 bv.views.cluster.prepareProjection = function() {
@@ -93,50 +117,31 @@ bv.views.cluster.prepareProjection = function() {
     var markup = [
         '<section id="bv-projection-container">',
         '<div id="bv-projection-title">Problem Instances (MDS Projection)</div>',
-        '<svg>',
-        '<defs>',
-        '<polygon points="0,-%1$s %1$s,0 0,%1$s -%1$s,0" id="bv-symbol-diamond"></polygon>'.format(12),
-        '</defs>',
-        '</svg>',
         '</section>'
     ];
     var $container = $(markup.join("\n")).appendTo("body");
-    var $projection = $container.children("svg");
-    var dprojection = d3.select($projection.get(0));
 
     this.nodes.container = $container.get(0);
-    this.nodes.projection = dprojection.node();
-    this.nodes.projectionBorder =
-        dprojection
-            .append("svg:rect")
-            .attr("id", "bv-projection-border")
-            .attr("x", 1)
-            .attr("y", 1)
-            .attr("height", $projection.innerHeight() - 2)
-            .attr("width", $projection.innerWidth() - 2)
-            .style("stroke", this.selection.colors.range()[0])
-            .node();
-
-    this.updateProjection();
+    this.nodes.projection = d3.select(this.nodes.container).append("svg:svg").node();
 };
 
 bv.views.cluster.updateProjection = function() {
     // prepare scales
-    var $projection = $(this.nodes.projection);
+    var $container = $(this.nodes.container);
     var xScale =
         d3.scale.linear()
             .domain([
                 d3.min(this.instances, function(d) { return d.x; }),
                 d3.max(this.instances, function(d) { return d.x; })
             ])
-            .rangeRound([16, $projection.innerWidth() - 16]);
+            .rangeRound([16, $container.innerWidth() - 16]);
     var yScale =
         d3.scale.linear()
             .domain([
                 d3.min(this.instances, function(d) { return d.y; }),
                 d3.max(this.instances, function(d) { return d.y; })
             ])
-            .rangeRound([16, $projection.innerHeight() - 16]);
+            .rangeRound([16, $container.innerHeight() - 16]);
 
     // add instance nodes
     var denter =
@@ -148,12 +153,16 @@ bv.views.cluster.updateProjection = function() {
 
     dpoints
         .filter(function(d) { return d.answer === false; })
-        .append("svg:use")
+        .append("svg:rect")
         .attr("class", "instance-point")
-        .attr("x", function(d) { return xScale(d.x); })
-        .attr("y", function(d) { return yScale(d.y) + 1; })
-        .attr("xlink:href", "#bv-symbol-diamond")
-        .each(function(d) { d.node = this; });
+        .attr("x", function(d) { return xScale(d.x) - 7.5; })
+        .attr("y", function(d) { return yScale(d.y) - 7.5; })
+        .attr("height", 17)
+        .attr("width", 17)
+        .attr("transform", function(d) {
+            return "rotate(45 %s,%s)".format(xScale(d.x), yScale(d.y));
+        })
+        .each(function(d) { d.node = this; })
     dpoints
         .filter(function(d) { return d.answer === true; })
         .append("svg:circle")
@@ -161,7 +170,7 @@ bv.views.cluster.updateProjection = function() {
         .attr("cx", function(d) { return xScale(d.x) + 0.5; })
         .attr("cy", function(d) { return yScale(d.y) + 0.5; })
         .attr("r", 10)
-        .each(function(d) { d.node = this; });
+        .each(function(d) { d.node = this; })
     dpoints
         .filter(function(d) { return d.answer === undefined; })
         .append("svg:rect")
@@ -183,15 +192,15 @@ bv.views.cluster.updateProjection = function() {
         })
         .on("mouseover", function(d) {
             d3.select(this).classed("highlighted", true);
-            d3.select(d.label).attr("display", "block");
+            d3.select(d.label).attr("visibility", "visible");
         })
         .on("mouseout", function(d) {
             d3.select(this).classed("highlighted", false);
-            d3.select(d.label).attr("display", "none");
+            d3.select(d.label).attr("visibility", "hidden");
         });
     dpoints
         .append("svg:text")
-        .classed("bv-instance-number", true)
+        .attr("class", "bv-instance-number")
         .attr("x", function(d) { return xScale(d.x); })
         .attr("y", function(d) { return yScale(d.y); })
         .attr("dy", "0.5ex")
@@ -202,7 +211,11 @@ bv.views.cluster.updateProjection = function() {
         denter
             .append("svg:g")
             .classed("instance-label", true)
-            .attr("display", "none")
+            .attr("class", function() {
+                // XXX force Safari to pay attention
+                return d3.select(this).attr("class");
+            })
+            .attr("visibility", "hidden")
             .each(function(d) { d.label = this; });
 
     dlabels
@@ -212,12 +225,15 @@ bv.views.cluster.updateProjection = function() {
         .style("text-anchor", function(d) { return d.rightSide ? "end" : "start"; })
         .text(function(d) { return d.name; })
         .each(function(d) { return d.labelText = this; });
-    dlabels
-        .insert("svg:rect", "text")
-        .attr("x", function(d) { return d.labelText.getBBox().x - 2; })
-        .attr("y", function(d) { return d.labelText.getBBox().y - 2; })
-        .attr("height", function(d) { return d.labelText.getBBox().height + 4; })
-        .attr("width", function(d) { return d.labelText.getBBox().width + 4; });
+
+    bv.later(this, function() {
+        dlabels
+            .insert("svg:rect", "text")
+            .attr("x", function(d) { return d.labelText.getBBox().x - 2; })
+            .attr("y", function(d) { return d.labelText.getBBox().y - 2; })
+            .attr("height", function(d) { return d.labelText.getBBox().height + 4; })
+            .attr("width", function(d) { return d.labelText.getBBox().width + 4; });
+    });
 };
 
 bv.views.cluster.prepareSelections = function() {
@@ -244,13 +260,11 @@ bv.views.cluster.prepareSelections = function() {
         else if(this_.drag !== null) {
             this_.drag = null;
 
-            selection.drag = false;
-
             $(this_.selections).trigger("changed");
         }
     };
 
-    $(this.nodes.projection)
+    $(this.nodes.container)
         .mousedown(function(event) {
             if(event.which === 1) {
                 if(this_.drag === null) {
@@ -291,9 +305,6 @@ bv.views.cluster.prepareSelections = function() {
             }
         });
 
-    // update on changes
-    $(this.selections).bind("changed", function() { this_.updateSelections(); });
-
     // add the initial "everything" selection
     var everything = this.selection.create(this).reify(0, "All Instances");
 
@@ -304,6 +315,9 @@ bv.views.cluster.prepareSelections = function() {
     });
 
     this.selections.add(everything);
+
+    // update on changes
+    $(this.selections).bind("changed", function() { this_.updateSelections(); });
 };
 
 bv.views.cluster.updateSelections = function() {
@@ -374,7 +388,7 @@ bv.views.cluster.updateSelections = function() {
     dboxes
         .enter()
         .append("svg:rect")
-        .classed("selection-region", true)
+        .attr("class", "selection-region")
         .attr("x", function(d) { return d.p1.x; })
         .attr("y", function(d) { return d.p1.y; })
         .attr("height", function(d) { return d.p2.y - d.p1.y; })
@@ -457,26 +471,28 @@ bv.views.cluster.preparePlot = function() {
         .data(Object.keys(this.plots))
         .enter()
         .append("option")
-        .sort(function(d) { return this_.plots[d].order; })
+        .sort(function(c, d) { return d3.ascending(this_.plots[c].order, this_.plots[d].order); })
         .attr("value", function(d) { return d; })
         .text(function(d) { return this_.plots[d].title; });
 
     $(this.nodes.pickSelect)
         .selectmenu({style: "dropdown"})
-        .change(function(event) {
-            if(this_.plot) {
-                this_.plot.destroy();
-            }
+        .change(function(event) { this_.updatePlot(); });
+};
 
-            var plotNodes = {
-                controlsDiv: this_.nodes.plotControlsDiv,
-                chartSVG: this_.nodes.chartSVG
-            };
-            var plotType = this_.plots[$(this).val()];
+bv.views.cluster.updatePlot = function() {
+    if(this.plot !== undefined) {
+        this.plot.destroy();
+    }
 
-            this_.plot = plotType.create(this_, plotNodes);
-        })
-        .trigger("change");
+    var plotNodes = {
+        controlsDiv: this.nodes.plotControlsDiv,
+        chartDiv: this.nodes.chartDiv,
+        chartSVG: this.nodes.chartSVG
+    };
+    var plotType = this.plots[$(this.nodes.pickSelect).val()];
+
+    this.plot = plotType.create(this, plotNodes);
 };
 
 bv.views.cluster.destroy = function() {

@@ -30,7 +30,7 @@ bv.barChart.initialize = function() {
             .attr("y", 2)
             .attr("dy", "1em")
             .style("font-weight", "bold")
-            .text(this.labels.x_axis)
+            .text(this.labels.xAxis)
             .node();
 
     d3chart
@@ -39,21 +39,21 @@ bv.barChart.initialize = function() {
             "transform",
             "translate(%s, %s) rotate(-90)".format(
                 14,
-                $(this.nodes.chartSVG).innerHeight() - 4
+                $(this.nodes.chartDiv).innerHeight() - 4
             )
         )
         .append("svg:text")
         .style("font-weight", "bold")
-        .text(this.labels.y_axis);
+        .text(this.labels.yAxis);
 
     return this;
 };
 
 bv.barChart.update = function(allSeries, xDomain, yDomain, xLabels) {
     // prepare scales
-    var $chartSVG = $(this.nodes.chartSVG);
-    var xScale = d3.scale.linear().domain(xDomain).rangeRound([52, $chartSVG.innerWidth()]);
-    var yScale = d3.scale.linear().domain(yDomain).rangeRound([$chartSVG.innerHeight(), 18]);
+    var $chartDiv = $(this.nodes.chartDiv);
+    var xScale = d3.scale.linear().domain(xDomain).rangeRound([52, $chartDiv.innerWidth()]);
+    var yScale = d3.scale.linear().domain(yDomain).rangeRound([$chartDiv.innerHeight(), 18]);
 
     // update
     this.updateTicks(xScale, yScale);
@@ -68,7 +68,7 @@ bv.barChart.updateTicks = function(xScale, yScale) {
     d3yTicks
         .enter()
         .append("svg:line")
-        .classed("tick-line", true)
+        .attr("class", "tick-line")
         .attr("x1", xScale.range()[0] - 30)
         .attr("y1", yScale.range()[0])
         .attr("x2", xScale.range()[1])
@@ -132,7 +132,7 @@ bv.barChart.updateBars = function(allSeries, xScale, yScale, xLabels) {
     d3allSeries
         .enter()
         .append("svg:g")
-        .classed("series", true)
+        .attr("class", "series")
         .style("fill", function(d) { return d.color; })
         .style("stroke", function(d) { return d.color; })
         .selectAll()
@@ -151,14 +151,14 @@ bv.barChart.updateBars = function(allSeries, xScale, yScale, xLabels) {
             this.highlight = function() {
                 d3.select(bar).classed("highlighted", true);
 
-                dxLabel.text("%s: %s".format(this_.labels.x_axis, xLabels[i]));
+                dxLabel.text("%s: %s".format(this_.labels.xAxis, xLabels[i]));
 
                 $(bar.__data__).trigger("highlighted");
             };
             this.unhighlight = function() {
                 d3.select(bar).classed("highlighted", false);
 
-                dxLabel.text(this_.labels.x_axis);
+                dxLabel.text(this_.labels.xAxis);
 
                 $(bar.__data__).trigger("unhighlighted");
             };

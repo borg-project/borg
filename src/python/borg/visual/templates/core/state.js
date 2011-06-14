@@ -81,7 +81,8 @@ bv.state.withView = function(viewFactory, options) {
 };
 
 bv.state.create = function() {
-    window.history.pushState(this, null, this.url());
+    // XXX
+    //window.history.pushState(this, null, this.url());
 
     this.view = this.viewFactory.create(this.options);
 
