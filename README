@@ -14,6 +14,14 @@ problems, a set of tools for algorithm portfolio development, and a research
 platform for the application of statistical models and decision-theoretic
 reasoning to the algorithm portfolio setting.
 
+The project web site is:
+
+http://nn.cs.utexas.edu/pages/research/borg/
+
+Its technical documentation can be found at:
+
+http://borg.readthedocs.org/
+
 REQUIREMENTS
 ------------
 
