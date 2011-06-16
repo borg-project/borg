@@ -35,6 +35,7 @@ def build(context):
             "experimental.py",
             "portfolios.py",
             "solver_io.py",
+            "storage.py",
             ],
         install_path = install_path,
         )

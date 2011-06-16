@@ -1,6 +1,4 @@
-"""
-@author: Bryan Silverthorn <bcs@cargo-cult.org>
-"""
+"""@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import plac
 
@@ -26,17 +24,10 @@ def main(out_path, portfolio_name, domain_name, *tasks_roots):
 
     cargo.enable_default_logging()
 
-    # find the training tasks
-    domain = borg.get_domain(domain_name)
-    train_paths = []
-    
-    for tasks_root in tasks_roots:
-        train_paths.extend(cargo.files_under(tasks_root, domain.extensions))
-
-    logger.info("using %i tasks for training", len(train_paths))
-
     # train the portfolio
-    solver = borg.portfolios.named[portfolio_name](domain, train_paths, 50.0, 42) # XXX
+    domain = borg.get_domain(domain_name)
+    training = borg.storage.TrainingData(tasks_roots, domain)
+    solver = borg.portfolios.named[portfolio_name](domain, training, 50.0, 42) # XXX
 
     logger.info("portfolio training complete")
 

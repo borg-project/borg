@@ -97,7 +97,7 @@ def plan_knapsack_multiverse(tclass_weights_W, tclass_rates_WSB):
 class BilevelPortfolio(object):
     """Bilevel mixture-model portfolio."""
 
-    def __init__(self, domain, train_paths, budget_interval, budget_count):
+    def __init__(self, domain, training, budget_interval, budget_count):
         # build action set
         self._domain = domain
         self._budgets = [b * budget_interval for b in xrange(1, budget_count + 1)]
@@ -108,19 +108,19 @@ class BilevelPortfolio(object):
         self._budget_index = dict(map(reversed, enumerate(self._budgets)))
 
         (successes, attempts) = \
-            outcome_matrices_from_paths(
+            borg.storage.outcome_matrices_from_runs(
                 self._solver_name_index,
                 self._budgets,
-                train_paths,
+                training.get_run_lists(),
                 )
 
         logger.info("solvers: %s", dict(enumerate(self._solver_names)))
 
         # acquire features
-        features = [numpy.recfromcsv(path + ".features.csv").tolist() for path in train_paths]
+        features = training.get_feature_vectors()
 
         # fit our model
-        self._model = borg.models.BilevelMultinomialModel(successes, attempts, features)
+        self._model = borg.models.BilevelMultinomialModel(successes, attempts, features.values())
 
     def __call__(self, task, budget, cores = 1):
         with borg.accounting():

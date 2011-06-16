@@ -1,6 +1,11 @@
 Installing borg
 ===============
 
+.. warning::
+   These setup instructions were written for a specific CentOS 5.4 environment.
+   More general instructions are in progress; for now, treat these as
+   guidelines.
+
 Outline of setup process
 ------------------------
 
@@ -37,10 +42,9 @@ are needed to build Python and the other package dependencies.
 Installing Python 2.6
 ---------------------
 
-This version of borg has been pre-built for CentOS 5.4, but does not include
-its Python dependencies. CentOS, unfortunately, does not provide a modern
-version of Python. The recommended solution is to install one into a user-owned
-local directory, assumed to be "~/local" in the instructions that follow.
+CentOS, unfortunately, does not provide a modern version of Python. The
+recommended solution is to install one into a user-owned local directory,
+assumed to be "~/local" in the instructions that follow.
 
 Download, unpack, build, and install Python 2.6:::
 
