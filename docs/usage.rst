@@ -1,13 +1,13 @@
 Using borg
 ==========
 
-Executing the portfolio
------------------------
+Training a portfolio
+--------------------
 
 XXX.
 
-Training the portfolio
-----------------------
+Applying a portfolio
+--------------------
 
 XXX.
 
