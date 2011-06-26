@@ -1,17 +1,19 @@
-"""
-@author: Bryan Silverthorn <bcs@cargo-cult.org>
-"""
+"""@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 from __future__ import absolute_import
 
 named_domains = {}
 
 def named_domain(domain_class):
+    """Decorates and automatically registers a domain class."""
+
     named_domains[domain_class.name] = domain_class
 
     return domain_class
 
 def get_domain(name):
+    """Look up and instantiate a domain."""
+
     return named_domains[name]()
 
 from . import defaults

@@ -139,7 +139,7 @@ class SolverProcess(multiprocessing.Process):
 
         self._stm_queue.put((self._solver_id, run_cost, answer, True))
 
-def prepare(command, cnf_path):
+def prepare(command, root, cnf_path):
     """Format command for execution."""
 
     keywords = {
@@ -153,7 +153,9 @@ def prepare(command, cnf_path):
 class RunningSolver(object):
     """In-progress solver process."""
 
-    def __init__(self, parse, command, task_path, stm_queue = None, solver_id = None):
+    def __init__(self, parse, command, root, task_path, stm_queue = None, solver_id = None):
+        """Initialize."""
+
         if stm_queue is None:
             self._stm_queue = multiprocessing.Queue()
         else:
@@ -169,7 +171,7 @@ class RunningSolver(object):
         self._process = \
             SolverProcess(
                 parse,
-                prepare(command, task_path),
+                prepare(command, root, task_path),
                 self._stm_queue,
                 self._mts_queue,
                 self._solver_id,

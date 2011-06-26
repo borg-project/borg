@@ -7,6 +7,7 @@ if __name__ == "__main__":
 
     plac.call(main)
 
+import imp
 import cPickle as pickle
 import cargo
 import borg
@@ -16,24 +17,27 @@ logger = cargo.get_logger(__name__, default_level = "INFO")
 @plac.annotations(
     out_path = ("path to store solver"),
     portfolio_name = ("name of the portfolio to train"),
-    domain_name = ("name of the problem domain"),
+    solvers_path = ("path to the solvers bundle"),
     tasks_roots = ("paths to training task directories"),
     )
-def main(out_path, portfolio_name, domain_name, *tasks_roots):
+def main(out_path, portfolio_name, solvers_path, *tasks_roots):
     """Train a solver."""
 
     cargo.enable_default_logging()
 
+    # load the solvers bundle
+    bundle = imp.load_source("borg.solvers_bundle", solvers_path)
+    #domain = borg.get_domain(domain_name)
+
     # train the portfolio
-    domain = borg.get_domain(domain_name)
-    training = borg.storage.TrainingData(tasks_roots, domain)
-    solver = borg.portfolios.named[portfolio_name](domain, training, 50.0, 42) # XXX
+    training = borg.storage.TrainingData(tasks_roots, bundle.domain)
+    solver = borg.portfolios.named[portfolio_name](bundle, training, 50.0, 42) # XXX
 
     logger.info("portfolio training complete")
 
     # write it to disk
     with open(out_path, "w") as out_file:
-        pickle.dump((domain, solver), out_file, protocol = -1)
+        pickle.dump((bundle.domain, solver), out_file, protocol = -1)
 
     logger.info("portfolio written to %s", out_path)
 

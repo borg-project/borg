@@ -18,10 +18,6 @@ class Satisfiability(object):
     name = "sat"
     extensions = ["*.cnf"]
 
-    @property
-    def solvers(self):
-        return solvers.named
-
     @contextlib.contextmanager
     def task_from_path(self, task_path):
         """Clean up cached task resources on context exit."""
@@ -32,8 +28,8 @@ class Satisfiability(object):
 
         task.clean()
 
-    def compute_features(self, task, cpu_seconds = None):
-        return features.compute_all(task.opb, cpu_seconds)
+    def compute_features(self, task):
+        return features.get_features_for(task.path)
 
     def is_final(self, task, answer):
         """Is the answer definitive for the task?"""

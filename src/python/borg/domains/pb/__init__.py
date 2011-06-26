@@ -57,10 +57,6 @@ class PseudoBooleanSatisfiability(object):
     name = "pb"
     extensions = ["*.opb"]
 
-    @property
-    def solvers(self):
-        return solvers.named
-
     @contextlib.contextmanager
     def task_from_path(self, task_path):
         """Clean up cached task resources on context exit."""

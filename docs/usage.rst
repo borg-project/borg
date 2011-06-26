@@ -4,6 +4,10 @@ Using borg
 Training a portfolio solver
 ---------------------------
 
+Command line:::
+
+    $ python -m borg.tools.train <TRAINED_PORTFOLIO> <PORTFOLIO_TYPE> <PATH_TO_SUBSOLVERS_MODULE> <PATH_TO_TRAINING_INSTANCES>
+
 XXX.
 
 File format: subsolver run records

@@ -97,13 +97,13 @@ def plan_knapsack_multiverse(tclass_weights_W, tclass_rates_WSB):
 class BilevelPortfolio(object):
     """Bilevel mixture-model portfolio."""
 
-    def __init__(self, domain, training, budget_interval, budget_count):
+    def __init__(self, bundle, training, budget_interval, budget_count):
         # build action set
-        self._domain = domain
+        self._domain = bundle.domain
         self._budgets = [b * budget_interval for b in xrange(1, budget_count + 1)]
 
         # acquire running time data
-        self._solver_names = list(self._domain.solvers)
+        self._solver_names = list(bundle.solvers)
         self._solver_name_index = dict(map(reversed, enumerate(self._solver_names)))
         self._budget_index = dict(map(reversed, enumerate(self._budgets)))
 
