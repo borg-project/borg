@@ -1,0 +1,12 @@
+def build(context):
+    context.install_files(
+        "${PREFIX}/lib/borg/visual/templates/core",
+        [
+            "bar_chart.js",
+            "list.js",
+            "state.js",
+            "loading.js",
+            "ui.js",
+            ]
+        )
+

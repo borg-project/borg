@@ -100,6 +100,7 @@ class BilevelPortfolio(object):
     def __init__(self, domain, training, budget_interval, budget_count):
         # build action set
         self._domain = domain
+        self._train_paths = train_paths
         self._budgets = [b * budget_interval for b in xrange(1, budget_count + 1)]
 
         # acquire running time data

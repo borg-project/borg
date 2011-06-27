@@ -6,3 +6,5 @@ def build(context):
         install_path = "${PREFIX}/lib/borg/visual",
         )
 
+    context.recurse("templates")
+

@@ -1,3 +1,14 @@
 def build(context):
-    context.install_files("${PREFIX}/lib/borg/visual/templates", "s2v120c1200-2.cnf")
+    context.install_files(
+        "${PREFIX}/lib/borg/visual/templates",
+        [
+            "index.html",
+            "borgview.css",
+            "borgview.js",
+            "analytics.js",
+            ]
+        )
+
+    context.recurse("core")
+    context.recurse("views")
 

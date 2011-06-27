@@ -1,8 +1,16 @@
 import os.path
 
 def configure(context):
-    # extract its installation path
-    context.start_msg("Checking for NumPy module")
+    # check for various required modules
+    context.check_python_module("plac")
+    context.check_python_module("numpy")
+    context.check_python_module("scipy")
+    context.check_python_module("scikits.learn")
+    context.check_python_module("nose")
+    context.check_python_module("cargo")
+
+    # extract numpy's installation path
+    context.start_msg("Locating the NumPy module")
 
     try:
         import numpy
