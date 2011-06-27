@@ -96,6 +96,7 @@ def main(out_path, fit_path):
     write_rendered("index.html", "index.html", base_url = fit.setup["base_url"])
     write_rendered("borgview.js", "borgview.js", base_url = fit.setup["base_url"])
     write_rendered("borgview.css", "borgview.css")
+    write_rendered("analytics.js", "analytics.js")
 
     with open(os.path.join(out_path, "categories.json"), "w") as output_file:
         category_list = [{"name": k, "path": sanitize(k)} for k in fit.categories.keys()]
