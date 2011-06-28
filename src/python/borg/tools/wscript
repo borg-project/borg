@@ -8,8 +8,6 @@ def build(context):
             "run_validation.py",
             "solve.py",
             "train.py",
-            "view_fit.py",
-            "view_write.py",
             ],
         install_path = "${PYTHONDIR}/borg/tools",
         )
