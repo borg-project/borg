@@ -6,7 +6,7 @@ in the other sections below:
 
 #. installing any missing system-level dependencies;
 #. installing the required Python dependencies;
-#. installing borg and its required "cargo" library; and
+#. installing borg and the cargo library; and
 #. calibrating borg to the local machine.
 
 These instructions assume a bash shell on a Linux system.
