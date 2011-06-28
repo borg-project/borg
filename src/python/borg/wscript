@@ -50,6 +50,5 @@ def build(context):
 
     context.recurse("domains")
     context.recurse("tools")
-    context.recurse("visual")
     context.recurse("test")
 
