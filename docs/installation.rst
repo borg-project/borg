@@ -88,7 +88,7 @@ Installing Python dependencies
 
 The recommended approach to installing borg and its dependencies is to do so
 inside a "virtualenv", a self-contained local Python environment. A copy of
-the ``virtualenv`` tool is packaged with borg.
+`the virtualenv tool <http://www.virtualenv.org/>`_ is packaged with borg.
 
 Start by creating a virtualenv in some directory (we will assume
 ``~/virtualenv``):
