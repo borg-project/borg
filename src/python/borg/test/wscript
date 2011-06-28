@@ -3,6 +3,6 @@ def build(context):
         source = [
             "__init__.py",
             ],
-        install_path = "${PREFIX}/lib/borg/test",
+        install_path = "${PYTHONDIR}/borg/test",
         )
 

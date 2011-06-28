@@ -473,7 +473,7 @@ def fit_multinomial_outer_mixture(rclass_res, rclass_mass, L):
 class BilevelMultinomialModel(object):
     """Two-level multinomial mixture model."""
 
-    def __init__(self, successes, attempts, features):
+    def __init__(self, successes, attempts, features = None):
         """Fit the model to data."""
 
         # mise en place
@@ -507,8 +507,8 @@ class BilevelMultinomialModel(object):
         # fit the task mixture classes
         logger.info("fitting task classes")
 
-        L = 16
-        (self._tclass_LSK, self._tclass_weights_L, tclass_res_LN, _) = \
+        L = 15
+        (self._tclass_LSK, self._tclass_weights_L, self._tclass_res_LN, _) = \
             fit_multinomial_outer_mixture(
                 rclass_res,
                 rclass_mass,
@@ -516,24 +516,29 @@ class BilevelMultinomialModel(object):
                 )
 
         # fit the classifier
-        logger.info("fitting logistic regression classifier")
+        if features is None:
+            logger.info("no features; skipping classifier construction")
 
-        train_x = []
-        train_y = []
+            self._classifier = None
+        else:
+            logger.info("fitting logistic regression classifier")
 
-        for (n, task_features) in enumerate(features):
-            counts_L = numpy.round(tclass_res_LN[:, n] * 100.0).astype(int)
+            train_x = []
+            train_y = []
 
-            train_x.extend([task_features] * numpy.sum(counts_L))
+            for (n, task_features) in enumerate(features):
+                counts_L = numpy.round(self._tclass_res_LN[:, n] * 100.0).astype(int)
 
-            for l in xrange(L):
-                train_y.extend([l] * counts_L[l])
+                train_x.extend([task_features] * numpy.sum(counts_L))
 
-        self._classifier = scikits.learn.linear_model.LogisticRegression()
+                for l in xrange(L):
+                    train_y.extend([l] * counts_L[l])
 
-        self._classifier.fit(train_x, train_y)
+            self._classifier = scikits.learn.linear_model.LogisticRegression()
 
-    def predict(self, failures, features):
+            self._classifier.fit(train_x, train_y)
+
+    def predict(self, failures, features = ()):
         """Return probabilistic predictions of success."""
 
         # mise en place

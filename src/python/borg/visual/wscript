@@ -1,8 +1,0 @@
-def build(context):
-    context(
-        source = [
-            "__init__.py",
-            ],
-        install_path = "${PREFIX}/lib/borg/visual",
-        )
-

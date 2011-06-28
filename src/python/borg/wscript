@@ -1,8 +1,16 @@
 import os.path
 
 def configure(context):
-    # extract its installation path
-    context.start_msg("Checking for NumPy module")
+    # check for various required modules
+    context.check_python_module("plac")
+    context.check_python_module("numpy")
+    context.check_python_module("scipy")
+    context.check_python_module("scikits.learn")
+    context.check_python_module("nose")
+    context.check_python_module("cargo")
+
+    # extract numpy's installation path
+    context.start_msg("Locating the NumPy module")
 
     try:
         import numpy
@@ -18,7 +26,7 @@ def configure(context):
     context.env.append_value("INCLUDES", os.path.join(path, "core/include"))
 
 def build(context):
-    install_path = "${PREFIX}/lib/borg"
+    install_path = "${PYTHONDIR}/borg"
 
     context(
         features = "c cshlib pyext",
@@ -42,6 +50,5 @@ def build(context):
 
     context.recurse("domains")
     context.recurse("tools")
-    context.recurse("visual")
     context.recurse("test")
 

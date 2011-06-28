@@ -1,5 +1,0 @@
-Cython>=0.14.1
-numpy>=1.6.0
-scikits.learn>=0.8
-scipy>=0.9.0
-plac>=0.8.1
