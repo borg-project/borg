@@ -9,6 +9,26 @@ in the other sections below:
 #. installing borg and its required "cargo" library; and
 #. calibrating borg to the local machine.
 
+These instructions assume a bash shell on a Linux system.
+
+Obtaining the project source code
+---------------------------------
+
+The suggested way to download the project source is to use `git
+<http://git-scm.com/>`_, which will simplify acquiring future updates and
+making local changes. Assuming that git is installed, clone the two
+relevant repositories from `github <https://github.com/>`_:
+
+.. code-block:: bash
+
+    $ git clone git@github.com:borg-project/cargo.git
+    $ git clone git@github.com:borg-project/borg.git
+
+If git is not installed and cannot be installed, tarball snapshots of the
+source trees can be downloaded from github's web interface; see the borg and
+cargo repositories under the `borg project github page
+<https://github.com/borg-project>`_.
+
 Installing system dependencies
 ------------------------------
 
@@ -77,12 +97,25 @@ Start by creating a virtualenv in some directory (we will assume
 
     $ python <path_to_borg>/virtualenv --no-site-packages ~/virtualenv
 
-The "--no-site-packages" flag isolates the virtualenv from Python modules
-installed globally. This isolation makes it easier to understand and debug
-problems, but you may opt to use globally-installed packages instead, depending
-on your system.
+The ``--no-site-packages`` flag isolates the virtualenv from Python packages
+installed globally. This isolation can make it easier to understand and debug
+problems, but, if you have many of the dependencies already installed, you may
+opt to omit this flag and include global packages.
 
-Next, install any missing Python packages:
+Next, "activate" the virtualenv to use its Python installation in the current
+shell session:
+
+.. code-block:: bash
+
+    $ source ~/virtualenv/bin/activate
+
+The virtualenv can be later deactivated with:
+
+.. code-block:: bash
+
+    $ deactivate
+
+Finally, install any missing Python packages:
 
 .. code-block:: bash
 
@@ -92,6 +125,28 @@ Next, install any missing Python packages:
     $ pip install numpy
     $ pip install scipy
     $ pip install scikits.learn
+
+Installing borg and cargo
+-------------------------
+
+The borg and cargo tools will be installed from their respective source trees.
+They use the ``waf`` build tool.
+
+From the cargo source tree, with the virtualenv activated,
+
+.. code-block:: bash
+
+    $ ./waf configure
+    $ ./waf build
+    $ ./waf install
+
+And, identically, from the borg source tree,
+
+.. code-block:: bash
+
+    $ ./waf configure
+    $ ./waf build
+    $ ./waf install
 
 .. Final calibration
 .. -----------------
