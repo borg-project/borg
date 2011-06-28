@@ -1,9 +1,6 @@
 Installing borg
 ===============
 
-Outline of the build process
-----------------------------
-
 Compilation and setup for borg involves four major steps, described in detail
 in the other sections below:
 
