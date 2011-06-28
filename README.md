@@ -1,8 +1,6 @@
 borg
 ====
 
-The borg project provides an algorithm portfolio platform.
-
 Modern heuristic solvers can tackle difficult computational problems, but each
 solver performs well only on certain tasks. An algorithm portfolio uses
 empirical knowledge---past experience of each solver's behavior---to run the
