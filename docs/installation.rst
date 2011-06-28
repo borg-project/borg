@@ -1,119 +1,123 @@
 Installing borg
 ===============
 
-.. warning::
-   These setup instructions were written for a specific CentOS 5.4 environment.
-   More general instructions are in progress; for now, treat these as
-   guidelines.
+Outline of the build process
+----------------------------
 
-Outline of setup process
-------------------------
-
-Setting up borg involves four major steps, described in detail in the other
-sections below:
+Compilation and setup for borg involves four major steps, described in detail
+in the other sections below:
 
 #. installing any missing system-level dependencies;
-#. installing a local version of Python 2.6;
-#. installing the required Python packages; and
-#. running a final calibration script.
-
-This process will install local copies of:
-
-* Python 2.6.6
-* numpy 1.5.1
-* scipy 0.9.0
-* scikits.learn 0.6
-* plac 0.8.0
+#. installing the required Python dependencies;
+#. installing borg and its required "cargo" library; and
+#. calibrating borg to the local machine.
 
 Installing system dependencies
 ------------------------------
 
-The system packages (CentOS repository names)
+A reasonably complete development environment is required to compile borg and
+its dependencies. That includes at least:
 
-* gcc
-* gcc-gfortran
-* gcc-c++
-* blas-devel
-* lapack-devel
-* ncurses-devel
+* Python >= 2.6
+* compilers: gcc, gfortran, and g++
+* devel packages for
 
-are needed to build Python and the other package dependencies.
+  * Python
+  * linear algebra libraries: BLAS, LAPACK, and/or ATLAS
 
-Installing Python 2.6
----------------------
+Most, if not all, of these packages are common dependencies, and should already
+be installed on a typical development machine.
 
-CentOS, unfortunately, does not provide a modern version of Python. The
-recommended solution is to install one into a user-owned local directory,
-assumed to be "~/local" in the instructions that follow.
+Verifying Python >= 2.6
+^^^^^^^^^^^^^^^^^^^^^^^
 
-Download, unpack, build, and install Python 2.6:::
+Make sure that you're using a recent Python version by running:
 
-    wget http://www.python.org/ftp/python/2.6.6/Python-2.6.6.tar.bz2
-    tar jxvf Python-2.6.6.tar.bz2
-    cd Python-2.6.6
-    ./configure --prefix=$HOME/local/
-    make
-    make install
-
-Add ~/local/bin to the beginning of your path:::
-
-    $ export PATH=~/local/bin:$PATH
-
-Verify that you're using that python version by running::
+.. code-block:: bash
 
     $ python --version
 
-and checking that it reports "Python 2.6.6".
+and checking that it reports at least "Python 2.6".
 
-Installing other dependencies
------------------------------
+Building Python on CentOS 5.4
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Back up a directory and download the setuptools egg:::
+CentOS 5.4, unfortunately, does not provide a modern version of Python. The
+recommended solution is to install one into a user-owned local directory,
+assumed to be ``~/local`` in the instructions that follow.
 
-    $ cd ..
-    $ wget http://pypi.python.org/packages/2.6/s/setuptools/setuptools-0.6c11-py2.6.egg
+Download, unpack, build, and install Python 2.6:
 
-It will install itself when run as a shell script:::
+.. code-block:: bash
 
-    $ sh setuptools-0.6c11-py2.6.egg
+    $ wget http://www.python.org/ftp/python/2.6.6/Python-2.6.6.tar.bz2
+    $ tar jxvf Python-2.6.6.tar.bz2
+    $ cd Python-2.6.6
+    $ ./configure --prefix=$HOME/local/
+    $ make
+    $ make install
 
-Now we build and install the final set of dependencies (pay no attention to
-complaints about numpy.distutils in easy_install output):::
+Add ``~/local/bin`` to the beginning of your path:
 
-    $ easy_install-2.6 numpy
-    $ easy_install-2.6 scipy
-    $ easy_install-2.6 scikits.learn==0.6
-    $ easy_install-2.6 plac
+.. code-block:: bash
 
-Final calibration
------------------
+    $ export PATH=~/local/bin:$PATH
 
-Borg requires simple calibration to its local execution environment. Run:::
+Note that compiling a full Python system may require additional system
+dependencies, e.g., development packages for ncurses and zlib.
 
-    $ python <path_to_borg>/calibrate <path_to_borg>/etc/local_speed
+Installing Python dependencies
+------------------------------
 
-The process should take no longer than several minutes. It must be performed
-*on a competition cluster node*, since it is (crudely) measuring the speed of
-local execution.
+The recommended approach to installing borg and its dependencies is to do so
+inside a "virtualenv", a self-contained local Python environment. A copy of
+the ``virtualenv`` tool is packaged with borg.
 
-Running borg
-------------
+Start by creating a virtualenv in some directory (we will assume
+``~/virtualenv``):
 
-Finally, make sure that borg is able to solve a basic instance:::
+.. code-block:: bash
 
-    $ python DIR/solve DIR/etc/borg-mix+class.random.pickle DIR/solvers/calibration/unif-k7-r89-v75-c6675-S342542912-045.cnf
+    $ python <path_to_borg>/virtualenv --no-site-packages ~/virtualenv
 
-where DIR is the path to the borg directory.
+The "--no-site-packages" flag isolates the virtualenv from Python modules
+installed globally. This isolation makes it easier to understand and debug
+problems, but you may opt to use globally-installed packages instead, depending
+on your system.
 
-The recommended command line differs for each of our solver entries. For the
-random category, use:::
+Next, install any missing Python packages:
 
-    $ python DIR/solve DIR/etc/borg-mix+class.random.pickle BENCHNAME -seed RANDOMSEED -budget TIMEOUT -cores NBCORE
+.. code-block:: bash
 
-For the industrial category, use:::
+    $ pip install plac
+    $ pip install nose
+    $ pip install cython
+    $ pip install numpy
+    $ pip install scipy
+    $ pip install scikits.learn
 
-    $ python DIR/solve DIR/etc/borg-mix+class.industrial.pickle BENCHNAME -seed RANDOMSEED -budget TIMEOUT -cores NBCORE
+.. Final calibration
+.. -----------------
 
-The solver will adjust for sequential or parallel operation depending on the
-value of NBCORE.
+.. Borg requires simple calibration to its local execution environment. Run:::
+
+    .. $ python <path_to_borg>/calibrate <path_to_borg>/etc/local_speed
+
+.. The process should take no longer than several minutes. It must be performed on
+.. whatever machine that borg will be running on, since its purpose is to measure
+.. the speed of local execution.
+
+.. Running borg
+.. ------------
+
+.. Finally, make sure that borg is able to solve a basic instance:::
+
+    .. $ python DIR/solve DIR/etc/borg-mix+class.random.pickle DIR/solvers/calibration/unif-k7-r89-v75-c6675-S342542912-045.cnf
+
+.. where DIR is the path to the borg directory.
+
+.. The recommended command line differs for each of our solver entries. For the
+.. random category, use:::
+
+    .. $ python DIR/solve DIR/etc/borg-mix+class.random.pickle BENCHNAME -seed RANDOMSEED -budget TIMEOUT -cores NBCORE
 
