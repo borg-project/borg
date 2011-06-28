@@ -5,6 +5,6 @@ def build(context):
             "test_opb.py",
             "test_solvers.py",
             ],
-        install_path = "${PREFIX}/lib/borg/domains/pb/test",
+        install_path = "${PYTHONDIR}/borg/domains/pb/test",
         )
 

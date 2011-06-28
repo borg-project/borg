@@ -17,7 +17,7 @@ def build(context):
         source = [
             "cargo_site_defaults.py",
             ],
-        install_path = "${PREFIX}/lib",
+        install_path = "${PYTHONDIR}",
         )
 
     context.recurse("borg")

@@ -11,6 +11,6 @@ def build(context):
             "view_fit.py",
             "view_write.py",
             ],
-        install_path = "${PREFIX}/lib/borg/tools",
+        install_path = "${PYTHONDIR}/borg/tools",
         )
 

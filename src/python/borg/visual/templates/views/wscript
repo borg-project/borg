@@ -1,6 +1,6 @@
 def build(context):
     context.install_files(
-        "${PREFIX}/lib/borg/visual/templates/views",
+        "${PYTHONDIR}/borg/visual/templates/views",
         [
             "cluster.js",
             "table.js",

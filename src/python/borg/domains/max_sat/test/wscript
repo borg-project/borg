@@ -1,5 +1,5 @@
 def build(context):
-    install_path = "${PREFIX}/lib/borg/domains/max_sat/test"
+    install_path = "${PYTHONDIR}/borg/domains/max_sat/test"
 
     context(
         source = [

@@ -1,6 +1,6 @@
 def build(context):
     context.install_files(
-        "${PREFIX}/lib/borg/visual/templates",
+        "${PYTHONDIR}/borg/visual/templates",
         [
             "index.html",
             "borgview.css",

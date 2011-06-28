@@ -26,7 +26,7 @@ def configure(context):
     context.env.append_value("INCLUDES", os.path.join(path, "core/include"))
 
 def build(context):
-    install_path = "${PREFIX}/lib/borg"
+    install_path = "${PYTHONDIR}/borg"
 
     context(
         features = "c cshlib pyext",

@@ -1,5 +1,5 @@
 def build(context):
-    install_path = "${PREFIX}/lib/borg/domains/pb"
+    install_path = "${PYTHONDIR}/borg/domains/pb"
 
     def cython_build(base):
         context(
