@@ -23,6 +23,15 @@ class DIMACS_GraphFile(object):
         self.clauses = clauses
         self.N = N
 
+    def write(self, out_file):
+        """Write this CNF to a file, in DIMACS format."""
+
+        out_file.write("p cnf {0} {1}\n".format(self.N, len(self.clauses)))
+
+        for clause in self.clauses:
+            out_file.write(" ".join(clause))
+            out_file.write(" 0\n")
+
     def satisfied(self, certificate):
         """Verify that the certificate satisfies this expression."""
 
