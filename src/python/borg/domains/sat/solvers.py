@@ -55,7 +55,10 @@ def parse_sat_output(stdout):
 class SAT_SolverFactory(object):
     """Construct a basic competition solver callable."""
 
-    def __init__(self, command):
+    def __init__(self, root, command):
+        """Initialize."""
+
+        self._root = root
         self._command = command
 
     def __call__(self, task, stm_queue = None, solver_id = None):
@@ -63,11 +66,9 @@ class SAT_SolverFactory(object):
             borg.solver_io.RunningSolver(
                 parse_sat_output,
                 self._command,
-                self._root,
+                self._root(),
                 task.path,
                 stm_queue = stm_queue,
                 solver_id = solver_id,
                 )
-
-#named = dict(zip(commands, map(SAT_SolverFactory, commands.values())))
 

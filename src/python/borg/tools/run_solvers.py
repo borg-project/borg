@@ -1,6 +1,4 @@
-"""
-@author: Bryan Silverthorn <bcs@cargo-cult.org>
-"""
+"""@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import plac
 
@@ -16,8 +14,10 @@ import borg
 
 logger = cargo.get_logger(__name__, default_level = "INFO")
 
-def run_solver_on(bundle, solver_name, task_path, budget):
+def run_solver_on(solvers_path, solver_name, task_path, budget):
     """Run a solver."""
+
+    bundle = borg.load_solvers(solvers_path)
 
     with bundle.domain.task_from_path(task_path) as task:
         with borg.accounting() as accountant:
@@ -39,7 +39,7 @@ def run_solver_on(bundle, solver_name, task_path, budget):
     return (solver_name, None, budget, cost, succeeded)
 
 @plac.annotations(
-    solvers_path = ("path to the solvers bundle"),
+    solvers_path = ("path to the solvers bundle", "positional", None, os.path.abspath),
     tasks_root = ("path to task files", "positional", None, os.path.abspath),
     budget = ("per-instance budget", "positional", None, float),
     discard = ("do not record results", "flag", "d"),
@@ -61,11 +61,11 @@ def main(solvers_path, tasks_root, budget, discard = False, runs = 4, workers = 
         for _ in xrange(runs):
             for solver_name in bundle.solvers:
                 for path in paths:
-                    yield (run_solver_on, [bundle, solver_name, path, budget])
+                    yield (run_solver_on, [solvers_path, solver_name, path, budget])
 
-    def collect_run((_, arguments), row):
+    def collect_run(task, row):
         if not discard:
-            (_, _, cnf_path, _) = arguments
+            (_, _, cnf_path, _) = task.args
             csv_path = cnf_path + ".rtd.csv"
             existed = os.path.exists(csv_path)
 

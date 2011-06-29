@@ -15,7 +15,7 @@ import cargo.unix.sessions
 import cargo.unix.accounting
 import borg
 
-logger = cargo.get_logger(__name__)
+logger = cargo.get_logger(__name__, default_level = "INFO")
 
 def random_seed():
     """Return a random solver seed."""
@@ -56,6 +56,8 @@ class SolverProcess(multiprocessing.Process):
         self._solver_id = solver_id
         self._seed = random_seed()
         self._popened = None
+
+        logger.info("running %s", arguments)
 
         multiprocessing.Process.__init__(self)
 
@@ -143,9 +145,9 @@ def prepare(command, root, cnf_path):
     """Format command for execution."""
 
     keywords = {
-        "root": borg.defaults.solvers_root.rstrip("/"),
-        "seed": random_seed(),
+        "root": root,
         "task": cnf_path,
+        "seed": random_seed(),
         }
 
     return [s.format(**keywords) for s in command]
