@@ -7,7 +7,6 @@ if __name__ == "__main__":
 
     plac.call(main)
 
-import imp
 import cPickle as pickle
 import cargo
 import borg
@@ -26,8 +25,7 @@ def main(out_path, portfolio_name, solvers_path, *tasks_roots):
     cargo.enable_default_logging()
 
     # load the solvers bundle
-    bundle = imp.load_source("borg.solvers_bundle", solvers_path)
-    #domain = borg.get_domain(domain_name)
+    bundle = borg.load_solvers(solvers_path)
 
     # train the portfolio
     training = borg.storage.TrainingData(tasks_roots, bundle.domain)

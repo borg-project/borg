@@ -55,7 +55,7 @@ class PseudoBooleanTask(object):
 @borg.named_domain
 class PseudoBooleanSatisfiability(object):
     name = "pb"
-    extensions = ["*.opb"]
+    extensions = ["*.opb", "*.pbo"]
 
     @contextlib.contextmanager
     def task_from_path(self, task_path):

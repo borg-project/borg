@@ -2,6 +2,8 @@
 
 from __future__ import absolute_import
 
+import imp
+
 named_domains = {}
 
 def named_domain(domain_class):
@@ -15,6 +17,11 @@ def get_domain(name):
     """Look up and instantiate a domain."""
 
     return named_domains[name]()
+
+def load_solvers(path):
+    """Load a bundle of solvers."""
+
+    return imp.load_source("borg.solvers_bundle", path)
 
 from . import defaults
 from . import portfolios

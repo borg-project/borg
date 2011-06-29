@@ -68,7 +68,8 @@ def parse_competition(stdout):
     return None
 
 class PseudoBooleanSolverFactory(object):
-    def __init__(self, command):
+    def __init__(self, root, command):
+        self._root = root
         self._command = command
 
     def __call__(self, task, stm_queue = None, solver_id = None):
@@ -76,6 +77,7 @@ class PseudoBooleanSolverFactory(object):
             borg.solver_io.RunningSolver(
                 parse_competition,
                 self._command,
+                self._root(),
                 task.path,
                 stm_queue = stm_queue,
                 solver_id = solver_id,
@@ -87,6 +89,7 @@ class LinearPseudoBooleanSolverFactory(PseudoBooleanSolverFactory):
             borg.solver_io.RunningSolver(
                 parse_competition,
                 self._command,
+                self._root(),
                 task.get_linearized_path(),
                 stm_queue = stm_queue,
                 solver_id = solver_id,
@@ -251,9 +254,9 @@ def build_minion_pb_solver(task, stm_queue = None, solver_id = None):
             solver_id = solver_id,
             )
 
-nlc_named = dict(zip(nlc_commands, map(PseudoBooleanSolverFactory, nlc_commands.values())))
-lin_named = dict(zip(lin_commands, map(LinearPseudoBooleanSolverFactory, lin_commands.values())))
-scip_named = dict(zip(scip_commands, map(SCIP_SolverFactory, scip_commands.values())))
-minion_named = {"minion-0.12": build_minion_pb_solver}
-named = dict(nlc_named.items() + lin_named.items() + scip_named.items() + minion_named.items())
+#nlc_named = dict(zip(nlc_commands, map(PseudoBooleanSolverFactory, nlc_commands.values())))
+#lin_named = dict(zip(lin_commands, map(LinearPseudoBooleanSolverFactory, lin_commands.values())))
+#scip_named = dict(zip(scip_commands, map(SCIP_SolverFactory, scip_commands.values())))
+#minion_named = {"minion-0.12": build_minion_pb_solver}
+#named = dict(nlc_named.items() + lin_named.items() + scip_named.items() + minion_named.items())
 

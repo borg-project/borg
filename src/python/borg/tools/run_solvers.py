@@ -16,14 +16,14 @@ import borg
 
 logger = cargo.get_logger(__name__, default_level = "INFO")
 
-def run_solver_on(domain, solver_name, task_path, budget):
+def run_solver_on(bundle, solver_name, task_path, budget):
     """Run a solver."""
 
-    with domain.task_from_path(task_path) as task:
+    with bundle.domain.task_from_path(task_path) as task:
         with borg.accounting() as accountant:
-            answer = domain.solvers[solver_name](task)(budget)
+            answer = bundle.solvers[solver_name](task)(budget)
 
-        succeeded = domain.is_final(task, answer)
+        succeeded = bundle.domain.is_final(task, answer)
 
     cost = accountant.total.cpu_seconds
 
@@ -39,29 +39,29 @@ def run_solver_on(domain, solver_name, task_path, budget):
     return (solver_name, None, budget, cost, succeeded)
 
 @plac.annotations(
-    domain_name = ("name of the problem domain",),
+    solvers_path = ("path to the solvers bundle"),
     tasks_root = ("path to task files", "positional", None, os.path.abspath),
     budget = ("per-instance budget", "positional", None, float),
     discard = ("do not record results", "flag", "d"),
     runs = ("number of runs", "option", "r", int),
     workers = ("submit jobs?", "option", "w", int),
     )
-def main(domain_name, tasks_root, budget, discard = False, runs = 4, workers = 0):
+def main(solvers_path, tasks_root, budget, discard = False, runs = 4, workers = 0):
     """Collect solver running-time data."""
 
     cargo.enable_default_logging()
 
     def yield_runs():
-        domain = borg.get_domain(domain_name)
-        paths = list(cargo.files_under(tasks_root, domain.extensions))
+        bundle = borg.load_solvers(solvers_path)
+        paths = list(cargo.files_under(tasks_root, bundle.domain.extensions))
 
         if not paths:
             raise ValueError("no paths found under specified root")
 
         for _ in xrange(runs):
-            for solver_name in domain.solvers:
+            for solver_name in bundle.solvers:
                 for path in paths:
-                    yield (run_solver_on, [domain, solver_name, path, budget])
+                    yield (run_solver_on, [bundle, solver_name, path, budget])
 
     def collect_run((_, arguments), row):
         if not discard:
@@ -77,5 +77,5 @@ def main(domain_name, tasks_root, budget, discard = False, runs = 4, workers = 0
 
                 writer.writerow(row)
 
-    cargo.distribute_or_labor(yield_runs(), workers, collect_run)
+    cargo.do_or_distribute(yield_runs(), workers, collect_run)
 
