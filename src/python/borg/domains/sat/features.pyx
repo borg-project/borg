@@ -423,7 +423,7 @@ def get_features_for(cnf_path):
     previous_utime = resource.getrusage(resource.RUSAGE_SELF).ru_utime
 
     with open(cnf_path) as cnf_file:
-        cnf = borg.instance.parse_sat_file(cnf_file)
+        cnf = borg.domains.sat.instance.parse_sat_file(cnf_file)
 
     core_features = compute_features(cnf)
 
@@ -431,5 +431,6 @@ def get_features_for(cnf_path):
 
     logger.info("collected features for %s in %.2f s", cnf_path, cost)
 
-    return zip(*([("cost", 0.5)] + core_features)) # XXX
+    # XXX return true cost (or don't use it as a feature)
+    return zip(*([("cost", 0.5)] + core_features))
 

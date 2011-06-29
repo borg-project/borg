@@ -9,12 +9,12 @@ def build(context):
             install_path = install_path,
             )
 
-    cython_build("dimacs")
+    cython_build("features")
+    cython_build("instance")
 
     context(
         source = [
             "__init__.py",
-            "features.py",
             "solvers.py",
             ],
         install_path = install_path,

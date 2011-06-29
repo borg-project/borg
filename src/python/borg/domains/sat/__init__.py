@@ -4,6 +4,7 @@ import contextlib
 import borg
 
 from . import features
+from . import instance
 from . import solvers
 
 class SatisfiabilityTask(object):

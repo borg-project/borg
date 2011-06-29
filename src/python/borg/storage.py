@@ -35,6 +35,7 @@ class TrainingData(object):
         self._feature_vectors = {}
 
         for path in train_paths:
+            #if os.path.exists(path):
             # load run records
             run_data = numpy.recfromcsv("{0}.rtd.csv".format(path), usemask = True)
             run_list = []

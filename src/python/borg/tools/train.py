@@ -29,13 +29,13 @@ def main(out_path, portfolio_name, solvers_path, *tasks_roots):
 
     # train the portfolio
     training = borg.storage.TrainingData(tasks_roots, bundle.domain)
-    solver = borg.portfolios.named[portfolio_name](bundle, training, 50.0, 42) # XXX
+    portfolio = borg.portfolios.named[portfolio_name](bundle, training, 50.0, 42) # XXX
 
     logger.info("portfolio training complete")
 
     # write it to disk
     with open(out_path, "w") as out_file:
-        pickle.dump((bundle.domain, solver), out_file, protocol = -1)
+        pickle.dump(portfolio, out_file, protocol = -1)
 
     logger.info("portfolio written to %s", out_path)
 

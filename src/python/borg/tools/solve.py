@@ -54,14 +54,15 @@ def enable_output():
     logging.root.addHandler(handler)
 
 @plac.annotations(
-    solver_path  = ("path to solver pickle"),
+    model_path  = ("path to trained model pickle"),
+    solvers_path  = ("path to solvers bundle"),
     input_path = ("path to instance"),
     seed = ("PRNG seed", "option", None, int),
     budget = ("time limit (CPU or wall)", "option", None, float),
     cores = ("units of execution", "option", None, int),
     quiet = ("be less noisy", "flag", "q"),
     )
-def main(solver_path, input_path, seed = 42, budget = 2e6, cores = 1, quiet = False):
+def main(model_path, solvers_path, input_path, seed = 42, budget = 2e6, cores = 1, quiet = False):
     """Solve a problem instance."""
 
     try:
@@ -75,18 +76,20 @@ def main(solver_path, input_path, seed = 42, budget = 2e6, cores = 1, quiet = Fa
         random.seed(numpy.random.randint(2**31))
 
         # run the solver
-        logger.info("loaded portfolio from %s", solver_path)
+        bundle = borg.load_solvers(solvers_path)
 
-        with open(solver_path) as file:
-            (domain, solver) = pickle.load(file)
+        logger.info("loaded portfolio model from %s", model_path)
+
+        with open(model_path) as file:
+            portfolio = pickle.load(file)
 
         logger.info("solving %s", input_path)
 
-        with domain.task_from_path(input_path) as task:
+        with bundle.domain.task_from_path(input_path) as task:
             remaining = budget - borg.get_accountant().total.cpu_seconds
-            answer = solver(task, borg.Cost(cpu_seconds = remaining), cores)
+            answer = portfolio(task, bundle, borg.Cost(cpu_seconds = remaining), cores)
 
-            return domain.show_answer(task, answer)
+            return bundle.domain.show_answer(task, answer)
     except KeyboardInterrupt:
         print "\nc terminating on SIGINT"
 

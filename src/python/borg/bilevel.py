@@ -122,11 +122,11 @@ class BilevelPortfolio(object):
         # fit our model
         self._model = borg.models.BilevelMultinomialModel(successes, attempts, features.values())
 
-    def __call__(self, task, budget, cores = 1):
+    def __call__(self, task, bundle, budget, cores = 1):
         with borg.accounting():
-            return self._solve(task, budget, cores)
+            return self._solve(task, bundle, budget, cores)
 
-    def _solve(self, task, budget, cores):
+    def _solve(self, task, bundle, budget, cores):
         # print oracle knowledge, if any
         #(runs,) = borg.portfolios.get_task_run_data([task]).values()
         #(oracle_history, oracle_counts, _) = \
@@ -142,7 +142,7 @@ class BilevelPortfolio(object):
         #messages.append("true rates:\n%s" % cargo.pretty_probability_matrix(true_rates))
 
         # obtain features
-        (_, features) = self._domain.compute_features(task, budget.cpu_seconds / 10.0)
+        (_, features) = self._domain.compute_features(task)
 
         # select a solver
         queue = multiprocessing.Queue()
@@ -166,8 +166,8 @@ class BilevelPortfolio(object):
             (L, S, B) = tclass_rates_LSB.shape
 
             # XXX force determinism
-            for (s, b) in failed_indices:
-                tclass_rates_LSB[:, s, :b + 1] = 1e-6
+            #for (s, b) in failed_indices:
+                #tclass_rates_LSB[:, s, :b + 1] = 1e-6
 
             # prepare augmented PMF matrix
             augmented_tclass_arrays = [tclass_rates_LSB]
@@ -212,7 +212,7 @@ class BilevelPortfolio(object):
             else:
                 s = a
                 name = self._solver_names[s]
-                solver = self._domain.solvers[name](task, queue, uuid.uuid4())
+                solver = bundle.solvers[name](task, queue, uuid.uuid4())
                 solver.s = s
                 solver.cpu_cost = 0.0
 
@@ -257,7 +257,7 @@ class BilevelPortfolio(object):
 
                 solver.cpu_cost += borg.machine_to_normal(run_cpu_seconds)
 
-                if self._domain.is_final(task, answer):
+                if bundle.domain.is_final(task, answer):
                     break
                 elif terminated:
                     failed.append(solver)
