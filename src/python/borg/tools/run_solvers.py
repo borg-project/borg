@@ -9,6 +9,9 @@ if __name__ == "__main__":
 
 import os.path
 import csv
+import zlib
+import base64
+import cPickle as pickle
 import cargo
 import borg
 
@@ -36,7 +39,7 @@ def run_solver_on(solvers_path, solver_name, task_path, budget):
         os.path.basename(task_path),
         )
 
-    return (solver_name, None, budget, cost, succeeded)
+    return (solver_name, budget, cost, succeeded, answer)
 
 @plac.annotations(
     solvers_path = ("path to the solvers bundle", "positional", None, os.path.abspath),
@@ -65,17 +68,26 @@ def main(solvers_path, tasks_root, budget, discard = False, runs = 4, workers = 
 
     def collect_run(task, row):
         if not discard:
+            # unpack run outcome
+            (solver_name, budget, cost, succeeded, answer) = row
+
+            if answer is None:
+                answer_text = None
+            else:
+                answer_text = base64.b64encode(zlib.compress(pickle.dumps(answer)))
+
+            # write it to disk
             (_, _, cnf_path, _) = task.args
-            csv_path = cnf_path + ".rtd.csv"
+            csv_path = cnf_path + ".runs.csv"
             existed = os.path.exists(csv_path)
 
             with open(csv_path, "a") as csv_file:
                 writer = csv.writer(csv_file)
 
                 if not existed:
-                    writer.writerow(["solver", "seed", "budget", "cost", "answer"])
+                    writer.writerow(["solver", "budget", "cost", "succeeded", "answer"])
 
-                writer.writerow(row)
+                writer.writerow([solver_name, budget, cost, succeeded, answer_text])
 
     cargo.do_or_distribute(yield_runs(), workers, collect_run)
 
