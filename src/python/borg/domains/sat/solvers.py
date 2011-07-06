@@ -6,31 +6,6 @@ import borg
 
 logger = cargo.get_logger(__name__)
 
-def basic_command(relative):
-    """Prepare a basic competition solver command."""
-
-    return ["{{root}}/{0}".format(relative), "{task}", "{seed}"]
-
-#commands = {
-    ## complete
-    #"precosat-570": ["{root}/precosat-570-239dbbe-100801/precosat", "--seed={seed}", "{task}"],
-    #"lingeling-276": ["{root}/lingeling-276-6264d55-100731/lingeling", "--seed={seed}", "{task}"],
-    #"cryptominisat-2.9.0": ["{root}/cryptominisat-2.9.0/cryptominisat-2.9.0Linux64", "--randomize={seed}", "{task}"],
-    #"glucosER": ["{root}/glucosER/glucoser_static", "{task}"],
-    #"glucose": ["{root}/glucose/glucose_static", "{task}"],
-    #"SApperloT": ["{root}/SApperloT/SApperloT-base", "-seed={seed}", "{task}"],
-    #"march_hi": basic_command("march_hi/march_hi"),
-    #"kcnfs-2006": ["{root}/kcnfs-2006/kcnfs-2006", "{task}"],
-    ## incomplete
-    #"TNM": basic_command("TNM/TNM"),
-    #"gnovelty+2": basic_command("gnovelty+2/gnovelty+2"),
-    #"hybridGM3": basic_command("hybridGM3/hybridGM3"),
-    #"adaptg2wsat2009++": basic_command("adaptg2wsat2009++/adaptg2wsat2009++"),
-    #"iPAWS": basic_command("iPAWS/iPAWS"),
-    #"FH": basic_command("FH/FH"),
-    #"NCVWr": basic_command("NCVWr/NCVWr"),
-    #}
-
 def parse_sat_output(stdout):
     """Parse a solver's standard competition-format output."""
 
