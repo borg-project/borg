@@ -39,8 +39,8 @@ class TrainingData(object):
             run_data = numpy.recfromcsv("{0}.runs.csv".format(path), usemask = True)
             run_list = []
 
-            for (run_solver, _, run_budget, run_cost, run_answer) in run_data.tolist():
-                record = RunRecord(run_solver, run_budget, run_cost, run_answer is not None)
+            for (run_solver, run_budget, run_cost, run_succeeded, run_answer) in run_data.tolist():
+                record = RunRecord(run_solver, run_budget, run_cost, run_succeeded)
 
                 run_list.append(record)
 
