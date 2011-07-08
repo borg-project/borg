@@ -2,7 +2,7 @@ def build(context):
     context(
         source = [
             "__init__.py",
-            "calibrate.py",
+            "get_calibration.py",
             "get_features.py",
             "run_solvers.py",
             "run_validation.py",

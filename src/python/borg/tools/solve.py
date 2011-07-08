@@ -60,9 +60,19 @@ def enable_output():
     seed = ("PRNG seed", "option", None, int),
     budget = ("time limit (CPU or wall)", "option", None, float),
     cores = ("units of execution", "option", None, int),
+    speed = ("machine calibration ratio", "option", "s", float),
     quiet = ("be less noisy", "flag", "q"),
     )
-def main(model_path, solvers_path, input_path, seed = 42, budget = 2e6, cores = 1, quiet = False):
+def main(
+    model_path,
+    solvers_path,
+    input_path,
+    seed = 42,
+    budget = 3600.0,
+    cores = 1,
+    speed = borg.defaults.machine_speed,
+    quiet = False
+    ):
     """Solve a problem instance."""
 
     try:

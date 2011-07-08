@@ -47,9 +47,20 @@ def run_solver_on(solvers_path, solver_name, task_path, budget):
     budget = ("per-instance budget", "positional", None, float),
     discard = ("do not record results", "flag", "d"),
     runs = ("number of runs", "option", "r", int),
+    only_solver = ("only run one solver", "option"),
+    suffix = ("runs file suffix", "option"),
     workers = ("submit jobs?", "option", "w", int),
     )
-def main(solvers_path, tasks_root, budget, discard = False, runs = 4, workers = 0):
+def main(
+    solvers_path,
+    tasks_root,
+    budget,
+    discard = False,
+    runs = 4,
+    only_solver = None,
+    suffix = ".runs.csv",
+    workers = 0,
+    ):
     """Collect solver running-time data."""
 
     cargo.enable_default_logging()
@@ -61,8 +72,16 @@ def main(solvers_path, tasks_root, budget, discard = False, runs = 4, workers = 
         if not paths:
             raise ValueError("no paths found under specified root")
 
+        if only_solver is None:
+            solver_names = bundle.solvers.keys()
+        else:
+            if only_solver not in bundle.solvers:
+                raise ArgumentError("no such solver")
+
+            solver_names = [only_solver]
+
         for _ in xrange(runs):
-            for solver_name in bundle.solvers:
+            for solver_name in solver_names:
                 for path in paths:
                     yield (run_solver_on, [solvers_path, solver_name, path, budget])
 
@@ -78,7 +97,7 @@ def main(solvers_path, tasks_root, budget, discard = False, runs = 4, workers = 
 
             # write it to disk
             (_, _, cnf_path, _) = task.args
-            csv_path = cnf_path + ".runs.csv"
+            csv_path = cnf_path + suffix
             existed = os.path.exists(csv_path)
 
             with open(csv_path, "a") as csv_file:
