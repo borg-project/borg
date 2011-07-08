@@ -23,7 +23,7 @@ set, often multiple times. Since this process requires an (unsurprisingly)
 enormous amount of computational time, and the borg project makes sets of
 training data publicly available, let's download one of those sets:
 
-XXX
+http://nn.cs.utexas.edu/pages/research/borg-bulk/tasks-pb-pre11.tar.xz
 
 At this point we have both a suite of subsolvers and a set of training data.
 The third and penultimate step in constructing a borg portfolio is fitting a
