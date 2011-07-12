@@ -19,7 +19,7 @@ class RunRecord(object):
 class TrainingData(object):
     """Load and access portfolio training data."""
 
-    def __init__(self, tasks_roots, domain):
+    def __init__(self, tasks_roots, domain, suffix = ".runs.csv"):
         """Initialize."""
 
         # scan for CSV files
@@ -36,7 +36,7 @@ class TrainingData(object):
 
         for path in train_paths:
             # load run records
-            run_data = numpy.recfromcsv("{0}.runs.csv".format(path), usemask = True)
+            run_data = numpy.recfromcsv(path + suffix, usemask = True)
             run_list = []
 
             for (run_solver, run_budget, run_cost, run_succeeded, run_answer) in run_data.tolist():

@@ -17,9 +17,10 @@ logger = cargo.get_logger(__name__, default_level = "INFO")
     out_path = ("path to store solver"),
     portfolio_name = ("name of the portfolio to train"),
     solvers_path = ("path to the solvers bundle"),
+    suffix = ("runs file suffix", "option"),
     tasks_roots = ("paths to training task directories"),
     )
-def main(out_path, portfolio_name, solvers_path, *tasks_roots):
+def main(out_path, portfolio_name, solvers_path, suffix = ".runs.csv", *tasks_roots):
     """Train a solver."""
 
     cargo.enable_default_logging()
@@ -28,7 +29,7 @@ def main(out_path, portfolio_name, solvers_path, *tasks_roots):
     bundle = borg.load_solvers(solvers_path)
 
     # train the portfolio
-    training = borg.storage.TrainingData(tasks_roots, bundle.domain)
+    training = borg.storage.TrainingData(tasks_roots, bundle.domain, suffix = suffix)
     portfolio = borg.portfolios.named[portfolio_name](bundle, training, 50.0, 42) # XXX
 
     logger.info("portfolio training complete")
