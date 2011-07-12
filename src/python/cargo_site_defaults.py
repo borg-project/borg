@@ -5,8 +5,8 @@
 
 condor_matching = \
     "InMastodon" \
+    " && regexp(\"rhavan-.*\", ParallelSchedulingGroup)" \
     " && (Arch == \"X86_64\")" \
     " && (OpSys == \"LINUX\")" \
-    " && regexp(\"rhavan-.*\", ParallelSchedulingGroup)" \
     " && (Memory > 1024)"
 
