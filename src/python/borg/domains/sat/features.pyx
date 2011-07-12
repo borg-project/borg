@@ -91,22 +91,25 @@ def compute_clause_balance_statistics(constraints_csr_CV):
         i = constraints_csr_CV_indptr[c]
         j = constraints_csr_CV_indptr[c + 1]
 
-        positives = 0.0
-
-        for k in xrange(i, j):
-            if constraints_csr_CV_data[k] > 0:
-                positives += 1.0
-
-        # XXX questionable, but match SATzilla's behavior for now
-        if positives <= 1.0:
-            horn_clauses += 1
+        if j > i:
+            positives = 0.0
 
             for k in xrange(i, j):
-                v = constraints_csr_CV_indices[k]
+                if constraints_csr_CV_data[k] > 0:
+                    positives += 1.0
 
-                horn_variables_V[v] += 1.0
+            # XXX questionable, but match SATzilla's behavior for now
+            if positives <= 1.0:
+                horn_clauses += 1
 
-        pn_ratios_C[c] = 2.0 * fabs(0.5 - positives / (j - i))
+                for k in xrange(i, j):
+                    v = constraints_csr_CV_indices[k]
+
+                    horn_variables_V[v] += 1.0
+
+            pn_ratios_C[c] = 2.0 * fabs(0.5 - positives / (j - i))
+        else:
+            pn_ratios_C[c] = -1.0
 
     features = array_features("POSNEG-RATIO-CLAUSE", pn_ratios_C)
     features += [("POSNEG-RATIO-CLAUSE-entropy", entropy_of(pn_ratios_C, 100, 1.0))]
@@ -124,13 +127,16 @@ def compute_variable_balance_statistics(constraints_csr_VC):
         i = constraints_csr_VC.indptr[v]
         j = constraints_csr_VC.indptr[v + 1]
 
-        positives = 0.0
+        if j > i:
+            positives = 0.0
 
-        for k in xrange(i, j):
-            if constraints_csr_VC.data[k] > 0:
-                positives += 1.0
+            for k in xrange(i, j):
+                if constraints_csr_VC.data[k] > 0:
+                    positives += 1.0
 
-        pn_ratios_V[v] = 2.0 * abs(0.5 - positives / (j - i))
+            pn_ratios_V[v] = 2.0 * abs(0.5 - positives / (j - i))
+        else:
+            pn_ratios_V[v] = -1.0
 
     features = array_features("POSNEG-RATIO-VAR", pn_ratios_V, cv = "sd")
     features += [("POSNEG-RATIO-VAR-entropy", entropy_of(pn_ratios_V, 100, 1.0))]
@@ -220,7 +226,7 @@ def compute_variable_graph_degrees(constraints_csr_CV, constraints_csr_VC):
                     vg_degrees_V[v] += 1
 
     features = array_features("VG", vg_degrees_V / float(C))
-    features += [("KLB-featuretime", 0.0)] # XXX
+    #features += [("KLB-featuretime", 0.0)] # XXX
 
     logger.info("computed variable graph statistics")
 
@@ -351,7 +357,7 @@ def compute_cluster_coefficients(adjacency_csr_CC):
 
     features = array_features("cluster-coeff", cg_coefficients_C)
     features += [("cluster-coeff-entropy", entropy_of(cg_coefficients_C, 100, 1.0))]
-    features += [("CG-featuretime", 0.0)] # XXX
+    #features += [("CG-featuretime", 0.0)] # XXX
 
     logger.info("computed clause constraint clustering coefficients")
 
@@ -401,19 +407,21 @@ def compute_features(cnf):
     #adjacency_csr_CC = construct_clause_graph(constraints_csr_CV, constraints_csr_VC)
     #features += compute_clause_graph_degrees(adjacency_csr_CC)
     #features += compute_cluster_coefficients(adjacency_csr_CC)
-    features += [
-        ("CG-mean", -1),
-        ("CG-coeff-variation", 0),
-        ("CG-min", -1),
-        ("CG-max", 0),
-        ("CG-entropy", -1),
-        ("cluster-coeff-mean", -1),
-        ("cluster-coeff-coeff-variation", 0),
-        ("cluster-coeff-min", -1),
-        ("cluster-coeff-max", 0),
-        ("cluster-coeff-entropy", 0),
-        ("CG-featuretime", -1),
-        ]
+    #features += [
+        #("CG-mean", -1),
+        #("CG-coeff-variation", 0),
+        #("CG-min", -1),
+        #("CG-max", 0),
+        #("CG-entropy", -1),
+        #("cluster-coeff-mean", -1),
+        #("cluster-coeff-coeff-variation", 0),
+        #("cluster-coeff-min", -1),
+        #("cluster-coeff-max", 0),
+        #("cluster-coeff-entropy", 0),
+        #("CG-featuretime", -1),
+        #]
+
+    assert numpy.all(numpy.isfinite([v for (_, v) in features]))
 
     return features
 
@@ -431,6 +439,5 @@ def get_features_for(cnf_path):
 
     logger.info("collected features for %s in %.2f s", cnf_path, cost)
 
-    # XXX return true cost (or don't use it as a feature)
-    return zip(*([("cost", 0.5)] + core_features))
+    return zip(*core_features)
 

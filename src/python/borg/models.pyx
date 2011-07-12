@@ -521,18 +521,25 @@ class BilevelMultinomialModel(object):
 
             self._classifier = None
         else:
-            logger.info("fitting logistic regression classifier")
+            logger.info("generating training data for logistic regression")
 
             train_x = []
             train_y = []
 
             for (n, task_features) in enumerate(features):
+                assert numpy.all(numpy.isfinite(task_features))
+
                 counts_L = numpy.round(self._tclass_res_LN[:, n] * 100.0).astype(int)
 
                 train_x.extend([task_features] * numpy.sum(counts_L))
 
                 for l in xrange(L):
                     train_y.extend([l] * counts_L[l])
+
+            train_x = numpy.array(train_x)
+            train_y = numpy.array(train_y)
+
+            logger.info("fitting classifier to %i examples", len(train_y))
 
             self._classifier = scikits.learn.linear_model.LogisticRegression()
 
