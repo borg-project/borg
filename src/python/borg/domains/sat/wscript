@@ -20,3 +20,5 @@ def build(context):
         install_path = install_path,
         )
 
+    context.recurse("test")
+

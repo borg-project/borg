@@ -37,6 +37,12 @@ class Satisfiability(object):
 
         return answer is not None
 
+    def write_answer(self, file_, answer):
+        pass
+
+    def read_answer(self, file_):
+        pass
+
     def show_answer(self, task, answer):
         if answer is None:
             print "s UNKNOWN"
