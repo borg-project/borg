@@ -41,7 +41,7 @@ class SAT_SolverFactory(object):
             borg.solver_io.RunningSolver(
                 parse_sat_output,
                 self._command,
-                self._root(),
+                self._root,
                 task.path,
                 stm_queue = stm_queue,
                 solver_id = solver_id,

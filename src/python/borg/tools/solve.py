@@ -75,6 +75,9 @@ def main(
     ):
     """Solve a problem instance."""
 
+    # XXX hackish
+    borg.defaults.machine_speed = speed
+
     try:
         # general setup
         enable_output()

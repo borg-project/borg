@@ -17,16 +17,16 @@ import borg
 
 logger = cargo.get_logger(__name__, default_level = "INFO")
 
-def run_solver_on(solvers_path, solver_name, task_path, budget):
+def run_solver_on(solvers_paths, solver_name, task_path, budget):
     """Run a solver."""
 
-    bundle = borg.load_solvers(solvers_path)
+    suite = borg.Suite.load_integrated(*solvers_paths)
 
-    with bundle.domain.task_from_path(task_path) as task:
+    with suite.domain.task_from_path(task_path) as task:
         with borg.accounting() as accountant:
-            answer = bundle.solvers[solver_name](task)(budget)
+            answer = suite.solvers[solver_name](task)(budget)
 
-        succeeded = bundle.domain.is_final(task, answer)
+        succeeded = suite.domain.is_final(task, answer)
 
     cost = accountant.total.cpu_seconds
 
@@ -41,13 +41,21 @@ def run_solver_on(solvers_path, solver_name, task_path, budget):
 
     return (solver_name, budget, cost, succeeded, answer)
 
+def appender(items):
+    def append(item):
+        items.append(item)
+
+        return items
+
+    return append
+
 @plac.annotations(
-    solvers_path = ("path to the solvers bundle", "positional", None, os.path.abspath),
+    solvers_path = ("path to the solvers suite", "positional", None, os.path.abspath),
     tasks_root = ("path to task files", "positional", None, os.path.abspath),
     budget = ("per-instance budget", "positional", None, float),
     discard = ("do not record results", "flag", "d"),
     runs = ("number of runs", "option", "r", int),
-    only_solver = ("only run one solver", "option"),
+    suites = ("other solver suites", "option", "s", appender([])),
     suffix = ("runs file suffix", "option"),
     workers = ("submit jobs?", "option", "w", int),
     )
@@ -57,7 +65,7 @@ def main(
     budget,
     discard = False,
     runs = 4,
-    only_solver = None,
+    suites = [],
     suffix = ".runs.csv",
     workers = 0,
     ):
@@ -66,24 +74,19 @@ def main(
     cargo.enable_default_logging()
 
     def yield_runs():
-        bundle = borg.load_solvers(solvers_path)
-        paths = list(cargo.files_under(tasks_root, bundle.domain.extensions))
+        suite_paths = [solvers_path] + suites
+        suite = borg.Suite.load_integrated(*suite_paths)
+        paths = list(cargo.files_under(tasks_root, suite.domain.extensions))
 
         if not paths:
             raise ValueError("no paths found under specified root")
 
-        if only_solver is None:
-            solver_names = bundle.solvers.keys()
-        else:
-            if only_solver not in bundle.solvers:
-                raise ArgumentError("no such solver")
-
-            solver_names = [only_solver]
+        solver_names = suite.solvers.keys()
 
         for _ in xrange(runs):
             for solver_name in solver_names:
                 for path in paths:
-                    yield (run_solver_on, [solvers_path, solver_name, path, budget])
+                    yield (run_solver_on, [suite_paths, solver_name, path, budget])
 
     def collect_run(task, row):
         if not discard:
