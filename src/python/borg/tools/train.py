@@ -29,8 +29,8 @@ def main(out_path, portfolio_name, solvers_path, suffix = ".runs.csv", *tasks_ro
     bundle = borg.load_solvers(solvers_path)
 
     # train the portfolio
-    training = borg.storage.TrainingData(tasks_roots, bundle.domain, suffix = suffix)
-    portfolio = borg.portfolios.named[portfolio_name](bundle, training, 50.0, 42) # XXX
+    training = borg.storage.TrainingData.from_roots(tasks_roots, bundle.domain, suffix = suffix)
+    portfolio = borg.portfolios.named[portfolio_name](bundle, training, 100.0, 60) # XXX
 
     logger.info("portfolio training complete")
 

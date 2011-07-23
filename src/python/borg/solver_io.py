@@ -210,3 +210,32 @@ class RunningSolver(object):
 
             self._process.join()
 
+class RunningPortfolio(object):
+    """Portfolio running on a task."""
+
+    def __init__(self, portfolio, suite, task):
+        """Initialize."""
+
+        self.portfolio = portfolio
+        self.suite = suite
+        self.task = task
+
+    def __call__(self, budget):
+        """Attempt to solve the associated task."""
+
+        return self.portfolio(self.task, self.suite, borg.Cost(cpu_seconds = budget))
+
+class RunningPortfolioFactory(object):
+    """Run a portfolio on tasks."""
+
+    def __init__(self, portfolio, suite):
+        """Initialize."""
+
+        self.portfolio = portfolio
+        self.suite = suite
+
+    def __call__(self, task):
+        """Return an instance of this portfolio running on the task."""
+
+        return RunningPortfolio(self.portfolio, self.suite, task)
+

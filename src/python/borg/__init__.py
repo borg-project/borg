@@ -4,6 +4,7 @@ from __future__ import absolute_import
 
 import os.path
 import imp
+import uuid
 import cargo
 
 logger = cargo.get_logger(__name__, default_level = "INFO")
@@ -31,7 +32,7 @@ def load_solvers(path):
 
     logger.info("loading solver suite from %s", path)
 
-    return imp.load_source("borg.solvers_bundle", path)
+    return imp.load_source("borg.suite_{0}".format(uuid.uuid4().hex), path)
 
 class Suite(object):
     """Suite of subsolvers."""
@@ -76,6 +77,7 @@ from . import models
 from . import expenses
 from . import solver_io
 from . import storage
+from . import fake
 from . import domains
 
 from borg.expenses import *

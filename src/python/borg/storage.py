@@ -19,22 +19,13 @@ class RunRecord(object):
 class TrainingData(object):
     """Load and access portfolio training data."""
 
-    def __init__(self, tasks_roots, domain, suffix = ".runs.csv"):
-        """Initialize."""
+    def __init__(self, task_paths, domain, suffix):
+        """Collect training data from task paths."""
 
-        # scan for CSV files
-        train_paths = []
-
-        for tasks_root in tasks_roots:
-            train_paths.extend(cargo.files_under(tasks_root, domain.extensions))
-
-        logger.info("using %i tasks for training", len(train_paths))
-
-        # fetch training data from each file
         self._run_lists = {}
         self._feature_vectors = {}
 
-        for path in train_paths:
+        for path in task_paths:
             # load run records
             run_data = numpy.recfromcsv(path + suffix, usemask = True)
             run_list = []
@@ -70,6 +61,17 @@ class TrainingData(object):
         """Retrieve features of all tasks."""
 
         return self._feature_vectors
+
+    @staticmethod
+    def from_roots(tasks_roots, domain, suffix = ".runs.csv"):
+        """Collect training data by scanning for tasks."""
+
+        task_paths = []
+
+        for tasks_root in tasks_roots:
+            task_paths.extend(cargo.files_under(tasks_root, domain.extensions))
+
+        return TrainingData(task_paths)
 
 def outcome_matrices_from_runs(solver_index, budgets, run_lists):
     """Build run-outcome matrices from records."""

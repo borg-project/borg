@@ -74,7 +74,7 @@ def main(
     cargo.enable_default_logging()
 
     def yield_runs():
-        suite_paths = [solvers_path] + suites
+        suite_paths = [solvers_path] + map(os.path.abspath, suites)
         suite = borg.Suite.load_integrated(*suite_paths)
         paths = list(cargo.files_under(tasks_root, suite.domain.extensions))
 

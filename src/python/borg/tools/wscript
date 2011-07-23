@@ -5,9 +5,10 @@ def build(context):
             "get_calibration.py",
             "get_features.py",
             "run_solvers.py",
-            "run_validation.py",
             "solve.py",
             "train.py",
+            "cactus.py",
+            "simulate.py",
             ],
         install_path = "${PYTHONDIR}/borg/tools",
         )

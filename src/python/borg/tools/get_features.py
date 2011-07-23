@@ -18,7 +18,10 @@ def features_for_path(domain, task_path):
     logger.info("getting features of %s", os.path.basename(task_path))
 
     with domain.task_from_path(task_path) as task:
-        return domain.compute_features(task)
+        with borg.accounting() as accountant:
+            (names, values) = domain.compute_features(task)
+
+        return (["cpu_cost"] + list(names), [accountant.total.cpu_seconds] + list(values))
 
 @plac.annotations(
     domain_name = ("name of the problem domain",),
