@@ -166,8 +166,8 @@ class BilevelPortfolio(object):
             (L, S, B) = tclass_rates_LSB.shape
 
             # XXX force determinism
-            #for (s, b) in failed_indices:
-                #tclass_rates_LSB[:, s, :b + 1] = 1e-6
+            for (s, b) in failed_indices:
+                tclass_rates_LSB[:, s, :b + 1] = 1e-6
 
             # prepare augmented PMF matrix
             augmented_tclass_arrays = [tclass_rates_LSB]

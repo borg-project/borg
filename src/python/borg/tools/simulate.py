@@ -21,10 +21,10 @@ class PortfolioMaker(object):
     def __init__(self, portfolio_name):
         self.name = portfolio_name
 
-    def __call__(self, suite, train_paths):
-        training = borg.storage.TrainingData(train_paths, suite.domain, suffix = ".ppfolio.runs.csv")
+    def __call__(self, suite, train_paths, suffix):
+        training = borg.storage.TrainingData(train_paths, suite.domain, suffix = suffix)
         factory = borg.portfolios.named[self.name]
-        portfolio = factory(suite, training, 100.0, 50) # XXX
+        portfolio = factory(suite, training, 100.0, 60) # XXX
 
         return borg.solver_io.RunningPortfolioFactory(portfolio, suite)
 
@@ -32,14 +32,14 @@ class SolverMaker(object):
     def __init__(self, solver_name):
         self.name = solver_name
 
-    def __call__(self, suite, train_paths):
+    def __call__(self, suite, train_paths, suffix):
         return suite.solvers[self.name]
 
 def simulate_split(maker, suite_path, train_paths, test_paths, suffix, budget, split):
     """Make a validation run."""
 
     suite = borg.fake.FakeSuite(borg.load_solvers(suite_path), test_paths, suffix)
-    solver = maker(suite, train_paths)
+    solver = maker(suite, train_paths, suffix)
     successes = []
 
     for test_path in test_paths:
@@ -63,6 +63,17 @@ def simulate_split(maker, suite_path, train_paths, test_paths, suffix, budget, s
                 cpu_cost,
                 )
 
+            #if not succeeded:
+                #feasible = False
+
+                #for run in suite.runs_data.get_run_list(test_path):
+                    #logger.info("%s: %s in %.2f", run.solver, run.success, run.cost)
+
+                    #feasible = feasible or run.success
+
+                #if feasible:
+                    #raise SystemExit()
+
     logger.info(
         "method %s had final success rate %.2f",
         maker.name,
@@ -72,9 +83,8 @@ def simulate_split(maker, suite_path, train_paths, test_paths, suffix, budget, s
     return \
         zip(
             itertools.repeat(maker.name),
-            itertools.repeat(budget),
-            sorted(successes),
             numpy.arange(len(successes) + 1.0),
+            sorted(successes),
             itertools.repeat(split),
             )
 
@@ -134,7 +144,7 @@ def main(
     with open(out_path, "w") as out_file:
         writer = csv.writer(out_file)
 
-        writer.writerow(["name", "budget", "cost", "solved", "split"])
+        writer.writerow(["solver", "solved", "cost", "split"])
 
         cargo.do_or_distribute(yield_runs(), workers, lambda _, r: writer.writerows(r))
 

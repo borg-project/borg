@@ -7,6 +7,9 @@ import contextlib
 import multiprocessing
 import numpy
 import borg
+import cargo
+
+logger = cargo.get_logger(__name__, default_level = "DETAIL")
 
 class FakeSolver(object):
     """Provide a solver interface to stored run data."""
@@ -27,11 +30,12 @@ class FakeSolver(object):
         candidate_runs = []
 
         for run in runs:
-            if run.budget >= borg.defaults.minimum_fake_run_budget: # XXX
-                candidate_runs.append(run)
+            candidate_runs.append(run)
 
         self._run = candidate_runs[random.randrange(len(candidate_runs))]
         self._position = 0.0
+
+        logger.debug("replaying %s run: %s in %.0f", self._run.solver, self._run.success, self._run.cost)
 
     def __call__(self, budget):
         """Unpause the solver, block for some limit, and terminate it."""
@@ -52,17 +56,20 @@ class FakeSolver(object):
         """Unpause the solver for the specified duration."""
 
         assert self._position is not None
+        assert self._position <= self._run.budget
 
         new_position = self._position + budget
+
+        logger.detail("moving to %.0f of %.0f in %s run", new_position, self._run.cost, self._run.solver)
 
         if new_position >= self._run.cost:
             self._stm_queue.put((self._solver_id, self._run.cost - self._position, self._run.success, True))
 
-            self._run_position = None
+            self._position = None
         else:
             self._stm_queue.put((self._solver_id, budget, None, False))
 
-            self._run_position = new_position
+            self._position = new_position
 
     def stop(self):
         """Terminate the solver."""
@@ -118,8 +125,7 @@ class FakeSuite(object):
     """Mimic a solver suite, using simulated solvers."""
 
     def __init__(self, suite, test_paths, suffix):
-        runs_data = borg.storage.TrainingData(test_paths, suite.domain, suffix)
-
+        self.runs_data = borg.storage.TrainingData(test_paths, suite.domain, suffix)
         self.domain = FakeDomain(suite.domain)
-        self.solvers = dict((k, FakeSolverFactory(k, runs_data)) for k in suite.solvers)
+        self.solvers = dict((k, FakeSolverFactory(k, self.runs_data)) for k in suite.solvers)
 
