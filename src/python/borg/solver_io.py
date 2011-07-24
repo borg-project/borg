@@ -81,6 +81,8 @@ class SolverProcess(multiprocessing.Process):
                     signal.signal(signal.SIGUSR1, signal.SIG_IGN)
             except DeathRequestedError:
                 pass
+            except Exception, error:
+                self._stm_queue.put(error)
         except KeyboardInterrupt:
             pass
         finally:
@@ -184,7 +186,12 @@ class RunningSolver(object):
 
         self.unpause_for(budget)
 
-        (solver_id, run_cpu_cost, answer, terminated) = self._stm_queue.get()
+        response = self._stm_queue.get()
+
+        if isinstance(response, Exception):
+            raise response
+        else:
+            (solver_id, run_cpu_cost, answer, terminated) = response
 
         assert solver_id == self._solver_id
 

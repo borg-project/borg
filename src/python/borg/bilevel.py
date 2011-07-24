@@ -249,7 +249,12 @@ class BilevelPortfolio(object):
             solver.cpu_budgeted = solver.cpu_cost + planned_cpu_cost
 
             if len(running) == cores:
-                (solver_id, run_cpu_seconds, answer, terminated) = queue.get()
+                response = queue.get()
+
+                if isinstance(response, Exception):
+                    raise response
+                else:
+                    (solver_id, run_cpu_seconds, answer, terminated) = response
 
                 borg.get_accountant().charge_cpu(run_cpu_seconds)
 
