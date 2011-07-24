@@ -6,19 +6,39 @@ import scipy.sparse
 cimport numpy
 
 class SAT_Instance(object):
-    """Read a SAT instance in DIMACS format."""
+    """A propositional formula in CNF."""
 
     def __init__(self, constraints):
+        """Initialize."""
+
         self.constraints = constraints
         (self.M, self.N) = constraints.shape
+
+    def to_clauses(self):
+        """Return the list of clauses in this formula."""
+
+        indptr = self.constraints.indptr
+        indices = self.constraints.indices
+        data = self.constraints.data
+
+        clauses = []
+
+        for m in xrange(self.M):
+            i = self.constraints.indptr[m]
+            j = self.constraints.indptr[m + 1]
+            clause = [(indices[k] + 1) * numpy.sign(data[k]) for k in xrange(i, j)]
+
+            clauses.append(clause)
+
+        return clauses
 
     def write(self, out_file):
         """Write this CNF to a file, in DIMACS format."""
 
-        out_file.write("p cnf {0} {1}\n".format(self.N, len(self.clauses)))
+        out_file.write("p cnf {0} {1}\n".format(self.N, self.M))
 
-        for clause in self.clauses:
-            out_file.write(" ".join(clause))
+        for clause in self.to_clauses():
+            out_file.write(" ".join(map(str, clause)))
             out_file.write(" 0\n")
 
     #def satisfied(self, certificate):
@@ -49,6 +69,28 @@ class SAT_Instance(object):
                 #return None
 
         #return assignment
+
+    @staticmethod
+    def from_clauses(clauses, N):
+        values = []
+        m_indices = []
+        n_indices = []
+
+        for (i, clause) in enumerate(clauses):
+            for l in clause:
+                values.append(int(numpy.sign(l)))
+
+                m_indices.append(i)
+                n_indices.append(abs(l) - 1)
+
+        coo = \
+            scipy.sparse.coo_matrix(
+                (values, (m_indices, n_indices)),
+                [len(clauses), N],
+                )
+        csr = coo.tocsr()
+
+        return SAT_Instance(csr)
 
 cdef class DIMACS_Lexer(object):
     cdef bytes _text
