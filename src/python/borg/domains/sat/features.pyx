@@ -6,29 +6,80 @@ import scipy.sparse
 import cargo
 import borg
 
-cimport numpy
+cimport libc.math
 cimport cython
+cimport numpy
 
 cdef extern from "math.h":
     double fabs(double)
 
 logger = cargo.get_logger(__name__, default_level = "INFO")
 
-def entropy_of(array, states, maximum = None):
-    (N,) = array.shape
+@cython.boundscheck(False)
+def entropy_of_int(array, states):
+    """Compute a measure of array entropy."""
 
-    if maximum is None:
-        maximum = states
+    cdef int N = array.shape[0]
+    cdef int S = states
 
-    (binned, _) = numpy.histogram(array, bins = states, range = (0, maximum))
+    cdef numpy.ndarray[int] array_N = array
+    cdef numpy.ndarray[int] binned_S = numpy.zeros(states, numpy.intc)
 
-    normed = binned[binned > 0].astype(float)
-    normed /= N
-    normed *= numpy.log(normed)
+    cdef int n
+    cdef int s
 
-    return -numpy.sum(normed)
+    for n in xrange(N):
+        s = array_N[n] / S
+
+        if s > S - 1:
+            binned_S[S - 1] += 1
+        else:
+            binned_S[s] += 1
+
+    cdef double entropy = 0.0
+
+    for s in xrange(states):
+        x = (<double>binned_S[s]) / N
+
+        if x > 0:
+            entropy -= x * libc.math.log(x)
+
+    return entropy
+
+@cython.boundscheck(False)
+def entropy_of_double(array, states, double maximum):
+    """Compute a measure of array entropy."""
+
+    cdef int N = array.shape[0]
+    cdef int S = states
+
+    cdef numpy.ndarray[double] array_N = array
+    cdef numpy.ndarray[int] binned_S = numpy.zeros(states, numpy.intc)
+
+    cdef int n
+    cdef int s
+
+    for n in xrange(N):
+        s = <int>(array_N[n] / maximum)
+
+        if s > S - 1:
+            binned_S[S - 1] += 1
+        else:
+            binned_S[s] += 1
+
+    cdef double entropy = 0.0
+
+    for s in xrange(states):
+        x = (<double>binned_S[s]) / N
+
+        if x > 0:
+            entropy -= x * libc.math.log(x)
+
+    return entropy
 
 def array_features(prefix, array, cv = "cv"):
+    """Compute standard array statistics."""
+
     mu = numpy.mean(array)
     sigma = numpy.std(array)
     features = [("{0}-mean".format(prefix), mu)]
@@ -52,16 +103,40 @@ def array_features(prefix, array, cv = "cv"):
 
     return features
 
-def compute_vc_graph_degrees(adjacency_csr_VC):
-    (V, C) = adjacency_csr_VC.shape
+@cython.boundscheck(False)
+def compute_vc_graph_degrees(constraints_csr_CV, constraints_csr_VC):
+    """Extract variable-clause graph degrees from constraint matrix."""
 
-    vcg_degrees_V = numpy.asarray(adjacency_csr_VC.sum(axis = 1))[:, 0]
-    vcg_degrees_C = numpy.asarray(adjacency_csr_VC.sum(axis = 0))[0, :]
+    cdef int C = constraints_csr_CV.shape[0]
+    cdef int V = constraints_csr_CV.shape[1]
+
+    cdef numpy.ndarray[int] constraints_csr_CV_indptr = constraints_csr_CV.indptr
+    cdef numpy.ndarray[int] constraints_csr_VC_indptr = constraints_csr_VC.indptr
+
+    cdef numpy.ndarray[int] vcg_degrees_V = numpy.empty(V, numpy.intc)
+    cdef numpy.ndarray[int] vcg_degrees_C = numpy.empty(C, numpy.intc)
+
+    cdef int c
+    cdef int v
+    cdef int i
+    cdef int j
+
+    for c in xrange(C):
+        i = constraints_csr_CV_indptr[c]
+        j = constraints_csr_CV_indptr[c + 1]
+
+        vcg_degrees_C[c] = j - i
+
+    for v in xrange(V):
+        i = constraints_csr_VC_indptr[v]
+        j = constraints_csr_VC_indptr[v + 1]
+
+        vcg_degrees_V[v] = j - i
 
     features = array_features("VCG-VAR", vcg_degrees_V / float(C))
-    features += [("VCG-VAR-entropy", entropy_of(vcg_degrees_V, C))]
+    features += [("VCG-VAR-entropy", entropy_of_int(vcg_degrees_V, C))]
     features += array_features("VCG-CLAUSE", vcg_degrees_C / float(V))
-    features += [("VCG-CLAUSE-entropy", entropy_of(vcg_degrees_C, V))]
+    features += [("VCG-CLAUSE-entropy", entropy_of_int(vcg_degrees_C, V))]
 
     logger.info("computed variable-clause graph statistics")
 
@@ -69,6 +144,8 @@ def compute_vc_graph_degrees(adjacency_csr_VC):
 
 @cython.boundscheck(False)
 def compute_clause_balance_statistics(constraints_csr_CV):
+    """Extract clause balance statistics from constraint matrix."""
+
     cdef int C = constraints_csr_CV.shape[0]
     cdef int V = constraints_csr_CV.shape[1]
 
@@ -112,49 +189,72 @@ def compute_clause_balance_statistics(constraints_csr_CV):
             pn_ratios_C[c] = -1.0
 
     features = array_features("POSNEG-RATIO-CLAUSE", pn_ratios_C)
-    features += [("POSNEG-RATIO-CLAUSE-entropy", entropy_of(pn_ratios_C, 100, 1.0))]
+    features += [("POSNEG-RATIO-CLAUSE-entropy", entropy_of_double(pn_ratios_C, 100, 1.0))]
 
     logger.info("computed clause balance statistics")
 
     return (features, horn_variables_V, horn_clauses)
 
+@cython.boundscheck(False)
 def compute_variable_balance_statistics(constraints_csr_VC):
-    (V, C) = constraints_csr_VC.shape
+    """Extract variable balance statistics from constraint matrix."""
 
-    pn_ratios_V = numpy.zeros(V)
+    cdef int V = constraints_csr_VC.shape[0]
+    cdef int C = constraints_csr_VC.shape[1]
+
+    cdef numpy.ndarray[int] constraints_csr_VC_indptr = constraints_csr_VC.indptr
+    cdef numpy.ndarray[int] constraints_csr_VC_indices = constraints_csr_VC.indices
+    cdef numpy.ndarray[numpy.int8_t] constraints_csr_VC_data = constraints_csr_VC.data
+
+    cdef numpy.ndarray[double] pn_ratios_V = numpy.zeros(V)
+
+    cdef int i
+    cdef int j
+    cdef int k
+    cdef int v
 
     for v in xrange(V):
-        i = constraints_csr_VC.indptr[v]
-        j = constraints_csr_VC.indptr[v + 1]
+        i = constraints_csr_VC_indptr[v]
+        j = constraints_csr_VC_indptr[v + 1]
 
         if j > i:
             positives = 0.0
 
             for k in xrange(i, j):
-                if constraints_csr_VC.data[k] > 0:
+                if constraints_csr_VC_data[k] > 0:
                     positives += 1.0
 
-            pn_ratios_V[v] = 2.0 * abs(0.5 - positives / (j - i))
+            pn_ratios_V[v] = 2.0 * fabs(0.5 - positives / (j - i))
         else:
             pn_ratios_V[v] = -1.0
 
     features = array_features("POSNEG-RATIO-VAR", pn_ratios_V, cv = "sd")
-    features += [("POSNEG-RATIO-VAR-entropy", entropy_of(pn_ratios_V, 100, 1.0))]
+    features += [("POSNEG-RATIO-VAR-entropy", entropy_of_double(pn_ratios_V, 100, 1.0))]
 
     logger.info("computed variable balance statistics")
 
     return features
 
+@cython.boundscheck(False)
 def compute_small_clause_counts(constraints_csr_CV):
-    (C, V) = constraints_csr_CV.shape
+    """Extract small-clause counts from constraint matrix."""
 
-    unary = 0
-    binary = 0
-    trinary = 0
+    cdef int C = constraints_csr_CV.shape[0]
+    cdef int V = constraints_csr_CV.shape[1]
+
+    cdef numpy.ndarray[int] constraints_csr_CV_indptr = constraints_csr_CV.indptr
+
+    cdef int unary = 0
+    cdef int binary = 0
+    cdef int trinary = 0
+
+    cdef int c
+    cdef int i
+    cdef int j
 
     for c in xrange(C):
-        i = constraints_csr_CV.indptr[c]
-        j = constraints_csr_CV.indptr[c + 1]
+        i = constraints_csr_CV_indptr[c]
+        j = constraints_csr_CV_indptr[c + 1]
 
         length = j - i
 
@@ -174,10 +274,12 @@ def compute_small_clause_counts(constraints_csr_CV):
         ]
 
 def compute_horn_clause_counts(C, horn_variables_V, horn_clauses):
+    """Extract Horn-clause counts from constraint matrix."""
+
     (V,) = horn_variables_V.shape
 
     features = array_features("HORNY-VAR", horn_variables_V / float(C))
-    features += [("HORNY-VAR-entropy", entropy_of(horn_variables_V, C))]
+    features += [("HORNY-VAR-entropy", entropy_of_int(horn_variables_V, C))]
     features += [("horn-clauses-fraction", horn_clauses / float(C))]
 
     logger.info("computed Horn-clause counts")
@@ -186,6 +288,8 @@ def compute_horn_clause_counts(C, horn_variables_V, horn_clauses):
 
 @cython.boundscheck(False)
 def compute_variable_graph_degrees(constraints_csr_CV, constraints_csr_VC):
+    """Extract variable graph degrees from constraint matrix."""
+
     cdef int C = constraints_csr_CV.shape[0]
     cdef int V = constraints_csr_CV.shape[1]
 
@@ -226,7 +330,6 @@ def compute_variable_graph_degrees(constraints_csr_CV, constraints_csr_VC):
                     vg_degrees_V[v] += 1
 
     features = array_features("VG", vg_degrees_V / float(C))
-    #features += [("KLB-featuretime", 0.0)] # XXX
 
     logger.info("computed variable graph statistics")
 
@@ -234,6 +337,8 @@ def compute_variable_graph_degrees(constraints_csr_CV, constraints_csr_VC):
 
 @cython.boundscheck(False)
 def construct_clause_graph(constraints_csr_CV, constraints_csr_VC):
+    """Build the clause graph."""
+
     cdef int C = constraints_csr_CV.shape[0]
     cdef int V = constraints_csr_CV.shape[1]
 
@@ -285,6 +390,8 @@ def construct_clause_graph(constraints_csr_CV, constraints_csr_VC):
             )
 
 def compute_clause_graph_degrees(adjacency_csr_CC):
+    """Extract clause graph degrees from clause adjacency matrix."""
+
     (C, _) = adjacency_csr_CC.shape
 
     cg_degrees_C = numpy.zeros(C, int)
@@ -296,7 +403,7 @@ def compute_clause_graph_degrees(adjacency_csr_CC):
         cg_degrees_C[c] = b - a
 
     features = array_features("CG", cg_degrees_C / float(C))
-    features += [("CG-entropy", entropy_of(cg_degrees_C, C))]
+    features += [("CG-entropy", entropy_of_int(cg_degrees_C, C))]
 
     logger.info("computed clause constraint graph statistics")
 
@@ -304,6 +411,8 @@ def compute_clause_graph_degrees(adjacency_csr_CC):
 
 @cython.boundscheck(False)
 def compute_cluster_coefficients(adjacency_csr_CC):
+    """Extract clause cluster coefficients from clause adjacency matrix."""
+
     cdef int C = adjacency_csr_CC.shape[0]
 
     cdef numpy.ndarray[double] cg_coefficients_C = numpy.empty(C, float)
@@ -321,8 +430,6 @@ def compute_cluster_coefficients(adjacency_csr_CC):
     cdef unsigned int m
     cdef unsigned int e
     cdef unsigned int edges
-
-    #print len(adjacency_csr_CC.indices)
 
     for c in xrange(C):
         i = adjacency_csr_CC_indptr[c]
@@ -353,56 +460,37 @@ def compute_cluster_coefficients(adjacency_csr_CC):
 
         cg_coefficients_C[c] = edges / <double>((j - i + 1) * (j - i))
 
-        #print c, j - i
-
     features = array_features("cluster-coeff", cg_coefficients_C)
-    features += [("cluster-coeff-entropy", entropy_of(cg_coefficients_C, 100, 1.0))]
-    #features += [("CG-featuretime", 0.0)] # XXX
+    features += [("cluster-coeff-entropy", entropy_of_double(cg_coefficients_C, 100, 1.0))]
 
     logger.info("computed clause constraint clustering coefficients")
 
     return features
 
 def compute_features(cnf):
-    """Gather the basic structural features."""
+    """Gather structural features of the CNF expression."""
 
-    # mise en place
     (C, V) = cnf.constraints.shape
 
     constraints_csr_CV = cnf.constraints
     constraints_csr_VC = constraints_csr_CV.T.tocsr()
 
-    adjacency_csr_CV = \
-        scipy.sparse.csr_matrix(
-            (
-                numpy.ones(len(cnf.constraints.data), int),
-                cnf.constraints.indices,
-                cnf.constraints.indptr,
-                ),
-            shape = (C, V),
-            )
-    adjacency_csr_VC = adjacency_csr_CV.T.tocsr()
-
-    # compute feature groups
     features = [
         ("nvars", V),
         ("nclauses", C),
         ("vars-clauses-ratio", float(V) / C),
         ]
 
-    features += compute_vc_graph_degrees(adjacency_csr_VC)
+    features += compute_vc_graph_degrees(constraints_csr_CV, constraints_csr_VC)
 
-    (cb_features, horn_variables_V, horn_clauses) = \
-        compute_clause_balance_statistics(constraints_csr_CV)
+    #(cb_features, horn_variables_V, horn_clauses) = \
+        #compute_clause_balance_statistics(constraints_csr_CV)
 
-    features += cb_features
-    features += compute_variable_balance_statistics(constraints_csr_VC)
-    features += compute_small_clause_counts(constraints_csr_CV)
-    features += compute_horn_clause_counts(C, horn_variables_V, horn_clauses)
-    features += compute_variable_graph_degrees(constraints_csr_CV, constraints_csr_VC)
-
-    # XXX SATzilla's tool spits out useless values if its CPU expenditure for CG computation
-    # XXX exceeds a (quite low) threshold, making these features impossible to simulate
+    #features += cb_features
+    #features += compute_variable_balance_statistics(constraints_csr_VC)
+    #features += compute_small_clause_counts(constraints_csr_CV)
+    #features += compute_horn_clause_counts(C, horn_variables_V, horn_clauses)
+    #features += compute_variable_graph_degrees(constraints_csr_CV, constraints_csr_VC)
 
     #adjacency_csr_CC = construct_clause_graph(constraints_csr_CV, constraints_csr_VC)
     #features += compute_clause_graph_degrees(adjacency_csr_CC)
@@ -432,6 +520,10 @@ def get_features_for(cnf_path):
 
     with open(cnf_path) as cnf_file:
         cnf = borg.domains.sat.instance.parse_sat_file(cnf_file)
+
+    cost = resource.getrusage(resource.RUSAGE_SELF).ru_utime - previous_utime
+
+    logger.info("parsed %s in %.2f s", cnf_path, cost)
 
     core_features = compute_features(cnf)
 

@@ -122,6 +122,10 @@ cdef class DIMACS_Lexer(object):
         else:
             return self._p[:self._q - self._p]
 
+#cdef class ArrayVector(object):
+    #def __init__(self):
+        #pass
+
 cdef class DIMACS_Parser(object):
     cdef DIMACS_Lexer _lexer
     cdef list _csr_data

@@ -1,6 +1,7 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import contextlib
+import cargo
 import borg
 
 from . import features
