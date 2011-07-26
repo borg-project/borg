@@ -119,7 +119,7 @@ class FakeDomain(object):
         return (names[1:], features[1:])
 
     def is_final(self, task, answer):
-        return answer
+        return bool(answer)
 
 class FakeSuite(object):
     """Mimic a solver suite, using simulated solvers."""
