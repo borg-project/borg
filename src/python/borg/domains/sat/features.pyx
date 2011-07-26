@@ -28,8 +28,10 @@ def entropy_of_int(array, states):
     cdef int s
 
     for n in xrange(N):
-        s = array_N[n] / S
+        s = array_N[n]
 
+        if s < 0:
+            binned_S[0] += 1
         if s > S - 1:
             binned_S[S - 1] += 1
         else:
@@ -58,8 +60,10 @@ def entropy_of_double(array, states, double maximum):
     cdef int s
 
     for n in xrange(N):
-        s = <int>(array_N[n] / maximum)
+        s = <int>(array_N[n] / (maximum / S))
 
+        if s < 0:
+            binned_S[0] += 1
         if s > S - 1:
             binned_S[S - 1] += 1
         else:
