@@ -15,7 +15,6 @@ cdef extern from "math.h":
 
 logger = cargo.get_logger(__name__, default_level = "INFO")
 
-@cython.boundscheck(False)
 def entropy_of_int(array, states):
     """Compute a measure of array entropy."""
 
@@ -46,7 +45,6 @@ def entropy_of_int(array, states):
 
     return entropy
 
-@cython.boundscheck(False)
 def entropy_of_double(array, states, double maximum):
     """Compute a measure of array entropy."""
 
@@ -103,7 +101,6 @@ def array_features(prefix, array, cv = "cv"):
 
     return features
 
-@cython.boundscheck(False)
 def compute_vc_graph_degrees(constraints_csr_CV, constraints_csr_VC):
     """Extract variable-clause graph degrees from constraint matrix."""
 
@@ -142,15 +139,14 @@ def compute_vc_graph_degrees(constraints_csr_CV, constraints_csr_VC):
 
     return features
 
-@cython.boundscheck(False)
 def compute_clause_balance_statistics(constraints_csr_CV):
     """Extract clause balance statistics from constraint matrix."""
 
     cdef int C = constraints_csr_CV.shape[0]
     cdef int V = constraints_csr_CV.shape[1]
 
-    cdef numpy.ndarray[double, ndim = 1] pn_ratios_C = numpy.zeros(C)
-    cdef numpy.ndarray[double, ndim = 1] horn_variables_V = numpy.zeros(V)
+    cdef numpy.ndarray[double] pn_ratios_C = numpy.zeros(C)
+    cdef numpy.ndarray[int] horn_variables_V = numpy.zeros(V, numpy.intc)
 
     cdef int horn_clauses = 0
 
@@ -182,7 +178,7 @@ def compute_clause_balance_statistics(constraints_csr_CV):
                 for k in xrange(i, j):
                     v = constraints_csr_CV_indices[k]
 
-                    horn_variables_V[v] += 1.0
+                    horn_variables_V[v] += 1
 
             pn_ratios_C[c] = 2.0 * fabs(0.5 - positives / (j - i))
         else:
@@ -195,7 +191,6 @@ def compute_clause_balance_statistics(constraints_csr_CV):
 
     return (features, horn_variables_V, horn_clauses)
 
-@cython.boundscheck(False)
 def compute_variable_balance_statistics(constraints_csr_VC):
     """Extract variable balance statistics from constraint matrix."""
 
@@ -235,7 +230,6 @@ def compute_variable_balance_statistics(constraints_csr_VC):
 
     return features
 
-@cython.boundscheck(False)
 def compute_small_clause_counts(constraints_csr_CV):
     """Extract small-clause counts from constraint matrix."""
 
@@ -286,7 +280,6 @@ def compute_horn_clause_counts(C, horn_variables_V, horn_clauses):
 
     return features
 
-@cython.boundscheck(False)
 def compute_variable_graph_degrees(constraints_csr_CV, constraints_csr_VC):
     """Extract variable graph degrees from constraint matrix."""
 
@@ -294,7 +287,7 @@ def compute_variable_graph_degrees(constraints_csr_CV, constraints_csr_VC):
     cdef int V = constraints_csr_CV.shape[1]
 
     cdef numpy.ndarray[long] vg_degrees_V = numpy.zeros(V, int)
-    cdef numpy.ndarray[numpy.uint8_t] vg_setmask_V = numpy.empty(V, numpy.uint8)
+    cdef numpy.ndarray[numpy.uint8_t] vg_setmask_V = numpy.zeros(V, numpy.uint8)
 
     cdef numpy.ndarray[int] constraints_csr_CV_indptr = constraints_csr_CV.indptr
     cdef numpy.ndarray[int] constraints_csr_CV_indices = constraints_csr_CV.indices
@@ -315,8 +308,6 @@ def compute_variable_graph_degrees(constraints_csr_CV, constraints_csr_VC):
         i = constraints_csr_VC_indptr[v]
         j = constraints_csr_VC_indptr[v + 1]
 
-        vg_setmask_V[:] = 0
-
         for k in xrange(i, j):
             c = constraints_csr_VC_indices[k]
             a = constraints_csr_CV_indptr[c]
@@ -329,13 +320,22 @@ def compute_variable_graph_degrees(constraints_csr_CV, constraints_csr_VC):
                     vg_setmask_V[w] = 1
                     vg_degrees_V[v] += 1
 
+        for k in xrange(i, j):
+            c = constraints_csr_VC_indices[k]
+            a = constraints_csr_CV_indptr[c]
+            b = constraints_csr_CV_indptr[c + 1]
+
+            for d in xrange(a, b):
+                w = constraints_csr_CV_indices[d]
+
+                vg_setmask_V[w] = 0
+
     features = array_features("VG", vg_degrees_V / float(C))
 
     logger.info("computed variable graph statistics")
 
     return features
 
-@cython.boundscheck(False)
 def construct_clause_graph(constraints_csr_CV, constraints_csr_VC):
     """Build the clause graph."""
 
@@ -409,7 +409,6 @@ def compute_clause_graph_degrees(adjacency_csr_CC):
 
     return features
 
-@cython.boundscheck(False)
 def compute_cluster_coefficients(adjacency_csr_CC):
     """Extract clause cluster coefficients from clause adjacency matrix."""
 
@@ -483,31 +482,18 @@ def compute_features(cnf):
 
     features += compute_vc_graph_degrees(constraints_csr_CV, constraints_csr_VC)
 
-    #(cb_features, horn_variables_V, horn_clauses) = \
-        #compute_clause_balance_statistics(constraints_csr_CV)
+    (cb_features, horn_variables_V, horn_clauses) = \
+        compute_clause_balance_statistics(constraints_csr_CV)
 
-    #features += cb_features
-    #features += compute_variable_balance_statistics(constraints_csr_VC)
-    #features += compute_small_clause_counts(constraints_csr_CV)
-    #features += compute_horn_clause_counts(C, horn_variables_V, horn_clauses)
-    #features += compute_variable_graph_degrees(constraints_csr_CV, constraints_csr_VC)
+    features += cb_features
+    features += compute_variable_balance_statistics(constraints_csr_VC)
+    features += compute_small_clause_counts(constraints_csr_CV)
+    features += compute_horn_clause_counts(C, horn_variables_V, horn_clauses)
+    features += compute_variable_graph_degrees(constraints_csr_CV, constraints_csr_VC)
 
     #adjacency_csr_CC = construct_clause_graph(constraints_csr_CV, constraints_csr_VC)
     #features += compute_clause_graph_degrees(adjacency_csr_CC)
     #features += compute_cluster_coefficients(adjacency_csr_CC)
-    #features += [
-        #("CG-mean", -1),
-        #("CG-coeff-variation", 0),
-        #("CG-min", -1),
-        #("CG-max", 0),
-        #("CG-entropy", -1),
-        #("cluster-coeff-mean", -1),
-        #("cluster-coeff-coeff-variation", 0),
-        #("cluster-coeff-min", -1),
-        #("cluster-coeff-max", 0),
-        #("cluster-coeff-entropy", 0),
-        #("CG-featuretime", -1),
-        #]
 
     assert numpy.all(numpy.isfinite([v for (_, v) in features]))
 
