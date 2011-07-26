@@ -279,5 +279,5 @@ class BilevelPortfolio(object):
 
         return answer
 
-borg.portfolios.named["borg-mix+class"] = BilevelPortfolio
+borg.portfolios.named["borg"] = BilevelPortfolio
 

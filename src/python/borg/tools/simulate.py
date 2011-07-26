@@ -10,8 +10,7 @@ if __name__ == "__main__":
 import os.path
 import csv
 import uuid
-import itertools
-import numpy
+import random
 import cargo
 import borg
 
@@ -40,7 +39,7 @@ def simulate_split(maker, suite_path, train_paths, test_paths, suffix, budget, s
 
     suite = borg.fake.FakeSuite(borg.load_solvers(suite_path), test_paths, suffix)
     solver = maker(suite, train_paths, suffix)
-    successes = []
+    rows = []
 
     for test_path in test_paths:
         logger.info("simulating run on %s", test_path)
@@ -52,9 +51,6 @@ def simulate_split(maker, suite_path, train_paths, test_paths, suffix, budget, s
             succeeded = suite.domain.is_final(test_task, answer)
             cpu_cost = accountant.total.cpu_seconds
 
-            if succeeded:
-                successes.append(cpu_cost)
-
             logger.info(
                 "%s %s on %s (%.2f CPU s)",
                 maker.name,
@@ -62,6 +58,10 @@ def simulate_split(maker, suite_path, train_paths, test_paths, suffix, budget, s
                 os.path.basename(test_path),
                 cpu_cost,
                 )
+
+            success_str = "TRUE" if succeeded else "FALSE"
+
+            rows.append([test_path, maker.name, budget, cpu_cost, success_str, None, split])
 
             #if not succeeded:
                 #feasible = False
@@ -74,28 +74,48 @@ def simulate_split(maker, suite_path, train_paths, test_paths, suffix, budget, s
                 #if feasible:
                     #raise SystemExit()
 
-    logger.info(
-        "method %s had final success rate %.2f",
-        maker.name,
-        float(len(successes)) / len(test_paths),
-        )
+    return rows
 
-    return \
-        zip(
-            itertools.repeat(maker.name),
-            numpy.arange(len(successes) + 1.0),
-            sorted(successes),
-            itertools.repeat(split),
-            )
+def yield_split_runs(makers, suite, budget):
+    # assemble task set
+    paths = list(cargo.files_under(tasks_root, suite.domain.extensions))
+    examples = int(round(len(paths) * 0.50))
+
+    logger.info("found %i tasks under %s", len(paths), tasks_root)
+
+    # build validation runs
+    for _ in xrange(runs):
+        split = uuid.uuid4()
+        shuffled = sorted(paths, key = lambda _ : random.random())
+        train_paths = shuffled[:examples]
+        test_paths = shuffled[examples:]
+
+        for maker in makers:
+            yield (
+                simulate_split,
+                [maker, suite_path, train_paths, test_paths, suffix, budget, split],
+                )
+
+def yield_explicit_runs(makers, splits, suite_path, suffix, budget):
+    """Make runs on train/test splits."""
+
+    for (train_paths, test_paths) in splits:
+        split_id = uuid.uuid4()
+
+        for maker in makers:
+            yield (
+                simulate_split,
+                [maker, suite_path, train_paths, test_paths, suffix, budget, split_id],
+                )
 
 @plac.annotations(
     out_path = ("results output path"),
     portfolio_name = ("name of the portfolio to train"),
     suite_path = ("path to the solvers suite"),
     budget = ("CPU seconds per instance", "positional", None, float),
-    tasks_root = ("path to task files", "positional", None, os.path.abspath),
+    train_root = ("path to train task files", "positional", None, os.path.abspath),
+    test_root = ("path to test task files", "positional", None, os.path.abspath),
     suffix = ("runs data file suffix", "option"),
-    runs = ("number of validation runs", "option", "r", int),
     workers = ("submit jobs?", "option", "w", int),
     )
 def main(
@@ -103,9 +123,9 @@ def main(
     portfolio_name,
     suite_path,
     budget,
-    tasks_root,
+    train_root,
+    test_root,
     suffix = ".runs.csv",
-    runs = 8,
     workers = 0,
     ):
     """Simulate portfolio and solver performance."""
@@ -114,37 +134,29 @@ def main(
 
     cargo.get_logger("borg.portfolios", level = "DETAIL")
 
-    def yield_runs():
-        # assemble task set
-        suite = borg.load_solvers(suite_path)
-        paths = list(cargo.files_under(tasks_root, suite.domain.extensions))
-        examples = int(round(len(paths) * 0.50))
+    # prepare solver makers
+    suite = borg.load_solvers(suite_path)
 
-        logger.info("found %i tasks under %s", len(paths), tasks_root)
+    if portfolio_name == "-":
+        makers = map(SolverMaker, suite.solvers)
+    else:
+        makers = [PortfolioMaker(portfolio_name)]
 
-        # prepare solver makers
-        if portfolio_name == "-":
-            makers = map(SolverMaker, suite.solvers)
-        else:
-            makers = [PortfolioMaker(portfolio_name)]
+    # generate jobs
+    train_paths = list(cargo.files_under(train_root, suite.domain.extensions))
+    test_paths = list(cargo.files_under(test_root, suite.domain.extensions))
 
-        # build validation runs
-        for _ in xrange(runs):
-            split = uuid.uuid4()
-            shuffled = sorted(paths, key = lambda _ : numpy.random.rand())
-            train_paths = shuffled[:examples]
-            test_paths = shuffled[examples:]
+    logger.info("found %i tasks under %s", len(train_paths), train_root)
+    logger.info("found %i tasks under %s", len(test_paths), test_root)
 
-            for maker in makers:
-                yield (
-                    simulate_split,
-                    [maker, suite_path, train_paths, test_paths, suffix, budget, split],
-                    )
+    splits = [(train_paths, test_paths)]
+    jobs = list(yield_explicit_runs(makers, splits, suite_path, suffix, budget))
 
+    # and run them
     with open(out_path, "w") as out_file:
         writer = csv.writer(out_file)
 
-        writer.writerow(["solver", "solved", "cost", "split"])
+        writer.writerow(["path", "solver", "budget", "cost", "success", "answer", "split"])
 
-        cargo.do_or_distribute(yield_runs(), workers, lambda _, r: writer.writerows(r))
+        cargo.do_or_distribute(jobs, workers, lambda _, r: writer.writerows(r))
 
