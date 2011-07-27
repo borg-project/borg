@@ -1,12 +1,14 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
+import os
 import numpy
 import scipy.sparse
 
-cimport cpython.exc
 cimport libc.errno
 cimport libc.string
 cimport libc.stdlib
+cimport posix.unistd
+cimport cpython.exc
 cimport numpy
 
 class SAT_Instance(object):
@@ -101,14 +103,14 @@ cdef struct DIMACS_Token:
     int n
 
 cdef class DIMACS_Lexer(object):
-    cdef bytes _text
     cdef char* _p
     cdef char* _q
+    cdef object _ward
 
-    def __init__(self, text):
-        self._text = text
-        self._p = self._text
+    cdef start(self, char* p, object ward):
+        self._p = p
         self._q = self._p
+        self._ward = ward
 
     cdef DIMACS_Token lex(self):
         while self._q[0] == ' ' and self._q[0] != '\0':
@@ -249,8 +251,8 @@ cdef class DIMACS_Parser(object):
     cdef ArrayVectorInt32 _csr_indices
     cdef ArrayVectorInt32 _csr_indptrs
 
-    def parse(self, text):
-        self._lexer = DIMACS_Lexer(text)
+    def parse(self, lexer):
+        self._lexer = lexer
         self._csr_data = ArrayVectorInt8()
         self._csr_indices = ArrayVectorInt32()
         self._csr_indptrs = ArrayVectorInt32()
@@ -328,6 +330,45 @@ cdef class DIMACS_Parser(object):
                 self._csr_data.append(value)
                 self._csr_indices.append(libc.stdlib.abs(literal) - 1)
 
+cdef extern from "sys/mman.h":
+    void* mmap(void* start, size_t length, int prot, int flags, int fd, posix.unistd.off_t offset)
+    int munmap(void* start, size_t length)
+
+    cdef int PROT_READ
+    cdef int MAP_SHARED
+    cdef void* MAP_FAILED
+
+cdef class MappedFile(object):
+    """Manage a memory-mapped file."""
+
+    cdef void* region
+    cdef size_t length
+
+    def __cinit__(self, fd):
+        self.length = os.fstat(fd).st_size
+        self.region = mmap(NULL, self.length, PROT_READ, MAP_SHARED, fd, 0)
+
+        if self.region == MAP_FAILED:
+            raise IOError("mmap failed")
+
+    def __dealloc__(self):
+        if self.region != NULL and self.region != MAP_FAILED:
+            munmap(self.region, self.length)
+
 def parse_sat_file(task_file):
-    return DIMACS_Parser().parse(task_file.read())
+    """Parse a SAT instance stored in DIMACS CNF format."""
+
+    fileno = getattr(task_file, "fileno", None)
+    lexer = DIMACS_Lexer()
+
+    if fileno is None:
+        contents = task_file.read()
+
+        lexer.start(contents, contents)
+    else:
+        mapped = MappedFile(fileno())
+
+        lexer.start(<char*>mapped.region, mapped)
+
+    return DIMACS_Parser().parse(lexer)
 
