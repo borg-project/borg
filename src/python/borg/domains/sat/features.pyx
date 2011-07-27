@@ -108,6 +108,8 @@ def array_features(prefix, array, cv = "cv"):
 def compute_vc_graph_degrees(constraints_csr_CV, constraints_csr_VC):
     """Extract variable-clause graph degrees from constraint matrix."""
 
+    logger.info("computing variable-clause graph statistics")
+
     cdef int C = constraints_csr_CV.shape[0]
     cdef int V = constraints_csr_CV.shape[1]
 
@@ -139,12 +141,12 @@ def compute_vc_graph_degrees(constraints_csr_CV, constraints_csr_VC):
     features += array_features("VCG-CLAUSE", vcg_degrees_C / float(V))
     features += [("VCG-CLAUSE-entropy", entropy_of_int(vcg_degrees_C, V))]
 
-    logger.info("computed variable-clause graph statistics")
-
     return features
 
 def compute_clause_balance_statistics(constraints_csr_CV):
     """Extract clause balance statistics from constraint matrix."""
+
+    logger.info("computing clause balance statistics")
 
     cdef int C = constraints_csr_CV.shape[0]
     cdef int V = constraints_csr_CV.shape[1]
@@ -191,12 +193,12 @@ def compute_clause_balance_statistics(constraints_csr_CV):
     features = array_features("POSNEG-RATIO-CLAUSE", pn_ratios_C)
     features += [("POSNEG-RATIO-CLAUSE-entropy", entropy_of_double(pn_ratios_C, 100, 1.0))]
 
-    logger.info("computed clause balance statistics")
-
     return (features, horn_variables_V, horn_clauses)
 
 def compute_variable_balance_statistics(constraints_csr_VC):
     """Extract variable balance statistics from constraint matrix."""
+
+    logger.info("computing variable balance statistics")
 
     cdef int V = constraints_csr_VC.shape[0]
     cdef int C = constraints_csr_VC.shape[1]
@@ -230,12 +232,12 @@ def compute_variable_balance_statistics(constraints_csr_VC):
     features = array_features("POSNEG-RATIO-VAR", pn_ratios_V, cv = "sd")
     features += [("POSNEG-RATIO-VAR-entropy", entropy_of_double(pn_ratios_V, 100, 1.0))]
 
-    logger.info("computed variable balance statistics")
-
     return features
 
 def compute_small_clause_counts(constraints_csr_CV):
     """Extract small-clause counts from constraint matrix."""
+
+    logger.info("computing small-clause counts")
 
     cdef int C = constraints_csr_CV.shape[0]
     cdef int V = constraints_csr_CV.shape[1]
@@ -263,8 +265,6 @@ def compute_small_clause_counts(constraints_csr_CV):
         elif length == 3:
             trinary += 1
 
-    logger.info("computed small-clause counts")
-
     return [
         ("UNARY", unary / float(C)),
         ("BINARY+", (unary + binary) / float(C)),
@@ -274,18 +274,20 @@ def compute_small_clause_counts(constraints_csr_CV):
 def compute_horn_clause_counts(C, horn_variables_V, horn_clauses):
     """Extract Horn-clause counts from constraint matrix."""
 
+    logger.info("computing Horn-clause counts")
+
     (V,) = horn_variables_V.shape
 
     features = array_features("HORNY-VAR", horn_variables_V / float(C))
     features += [("HORNY-VAR-entropy", entropy_of_int(horn_variables_V, C))]
     features += [("horn-clauses-fraction", horn_clauses / float(C))]
 
-    logger.info("computed Horn-clause counts")
-
     return features
 
 def compute_variable_graph_degrees(constraints_csr_CV, constraints_csr_VC):
     """Extract variable graph degrees from constraint matrix."""
+
+    logger.info("computing variable graph statistics")
 
     cdef int C = constraints_csr_CV.shape[0]
     cdef int V = constraints_csr_CV.shape[1]
@@ -336,12 +338,12 @@ def compute_variable_graph_degrees(constraints_csr_CV, constraints_csr_VC):
 
     features = array_features("VG", vg_degrees_V / float(C))
 
-    logger.info("computed variable graph statistics")
-
     return features
 
 def construct_clause_graph(constraints_csr_CV, constraints_csr_VC):
     """Build the clause graph."""
+
+    logger.info("constructing clause constraint graph")
 
     cdef int C = constraints_csr_CV.shape[0]
     cdef int V = constraints_csr_CV.shape[1]
@@ -385,8 +387,6 @@ def construct_clause_graph(constraints_csr_CV, constraints_csr_VC):
 
         cc_indptrs.append(len(cc_indices))
 
-    logger.info("constructed clause constraint graph")
-
     return \
         scipy.sparse.csr_matrix(
             (numpy.ones(len(cc_indices), bool), numpy.array(cc_indices, int), cc_indptrs),
@@ -395,6 +395,8 @@ def construct_clause_graph(constraints_csr_CV, constraints_csr_VC):
 
 def compute_clause_graph_degrees(adjacency_csr_CC):
     """Extract clause graph degrees from clause adjacency matrix."""
+
+    logger.info("computing clause constraint graph statistics")
 
     (C, _) = adjacency_csr_CC.shape
 
@@ -409,12 +411,12 @@ def compute_clause_graph_degrees(adjacency_csr_CC):
     features = array_features("CG", cg_degrees_C / float(C))
     features += [("CG-entropy", entropy_of_int(cg_degrees_C, C))]
 
-    logger.info("computed clause constraint graph statistics")
-
     return features
 
 def compute_cluster_coefficients(adjacency_csr_CC):
     """Extract clause cluster coefficients from clause adjacency matrix."""
+
+    logger.info("computing clause constraint clustering coefficients")
 
     cdef int C = adjacency_csr_CC.shape[0]
 
@@ -465,8 +467,6 @@ def compute_cluster_coefficients(adjacency_csr_CC):
 
     features = array_features("cluster-coeff", cg_coefficients_C)
     features += [("cluster-coeff-entropy", entropy_of_double(cg_coefficients_C, 100, 1.0))]
-
-    logger.info("computed clause constraint clustering coefficients")
 
     return features
 
