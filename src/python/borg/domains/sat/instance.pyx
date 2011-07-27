@@ -3,6 +3,10 @@
 import numpy
 import scipy.sparse
 
+cimport cpython.exc
+cimport libc.errno
+cimport libc.string
+cimport libc.stdlib
 cimport numpy
 
 class SAT_Instance(object):
@@ -92,6 +96,10 @@ class SAT_Instance(object):
 
         return SAT_Instance(csr)
 
+cdef struct DIMACS_Token:
+    char* p
+    int n
+
 cdef class DIMACS_Lexer(object):
     cdef bytes _text
     cdef char* _p
@@ -102,7 +110,7 @@ cdef class DIMACS_Lexer(object):
         self._p = self._text
         self._q = self._p
 
-    cdef bytes lex(self):
+    cdef DIMACS_Token lex(self):
         while self._q[0] == ' ' and self._q[0] != '\0':
             self._q += 1
 
@@ -117,48 +125,163 @@ cdef class DIMACS_Lexer(object):
             while self._q[0] != " " and self._q[0] != "\n" and self._q[0] != "\0":
                 self._q += 1
 
-        if self._p == self._q:
-            return None
-        else:
-            return self._p[:self._q - self._p]
+        cdef DIMACS_Token token
 
-#cdef class ArrayVector(object):
-    #def __init__(self):
-        #pass
+        token.p = self._p
+        token.n = self._q - self._p
+
+        return token
+
+cdef class ArrayVectorInt8(object):
+    """Simple append-only resizing array."""
+
+    cdef int size
+    cdef int capacity
+    cdef numpy.ndarray array
+    cdef numpy.int8_t* data
+
+    def __init__(self):
+        """Initialize."""
+
+        self.size = 0
+        self.capacity = 1 * 1024 * 1024
+        self.array = numpy.empty(self.capacity, numpy.int8)
+        self.data = <numpy.int8_t*>self.array.data
+
+    cdef bint append(self, numpy.int8_t v) except False:
+        """Append a single element to the vector."""
+
+        if self.size == self.capacity:
+            self.expand()
+
+        self.data[self.size] = v
+
+        self.size += 1
+
+        return True
+
+    cdef expand(self):
+        """Increase the size of the storage array."""
+
+        self.capacity *= 2
+
+        self.array.resize(self.capacity)
+
+        self.data = <numpy.int8_t*>self.array.data
+
+    cdef trim(self):
+        """Reduce the size of the storage array to capacity."""
+
+        self.capacity = self.size
+
+        self.array.resize(self.capacity)
+
+        self.data = <numpy.int8_t*>self.array.data
+
+cdef class ArrayVectorInt32(object):
+    """Simple append-only resizing array."""
+
+    cdef int size
+    cdef int capacity
+    cdef numpy.ndarray array
+    cdef numpy.int32_t* data
+
+    def __init__(self):
+        """Initialize."""
+
+        self.size = 0
+        self.capacity = 1 * 1024 * 1024
+        self.array = numpy.empty(self.capacity, numpy.int32)
+        self.data = <numpy.int32_t*>self.array.data
+
+    cdef bint append(self, numpy.int32_t v) except False:
+        """Append a single element to the vector."""
+
+        if self.size == self.capacity:
+            self.expand()
+
+        self.data[self.size] = v
+
+        self.size += 1
+
+        return True
+
+    cdef expand(self):
+        """Increase the size of the storage array."""
+
+        self.capacity *= 2
+
+        self.array.resize(self.capacity)
+
+        self.data = <numpy.int32_t*>self.array.data
+
+    cdef trim(self):
+        """Reduce the size of the storage array to capacity."""
+
+        self.capacity = self.size
+
+        self.array.resize(self.capacity)
+
+        self.data = <numpy.int32_t*>self.array.data
+
+cdef int strntol(char* p, int n) except? 2147483647:
+    cdef char t[32]
+
+    if n >= 32:
+        raise ValueError("token length exceeds maximum")
+
+    libc.string.strncpy(&t[0], p, n)
+
+    t[n] = 0
+
+    libc.errno.errno = 0
+
+    v = libc.stdlib.strtol(&t[0], NULL, 10)
+
+    if libc.errno.errno == 0:
+        return v
+    else:
+        cpython.exc.PyErr_SetFromErrno(ValueError)
 
 cdef class DIMACS_Parser(object):
     cdef DIMACS_Lexer _lexer
-    cdef list _csr_data
-    cdef list _csr_indices
-    cdef list _csr_indptrs
+    cdef ArrayVectorInt8 _csr_data
+    cdef ArrayVectorInt32 _csr_indices
+    cdef ArrayVectorInt32 _csr_indptrs
 
     def parse(self, text):
         self._lexer = DIMACS_Lexer(text)
-        self._csr_data = []
-        self._csr_indices = []
-        self._csr_indptrs = [0]
+        self._csr_data = ArrayVectorInt8()
+        self._csr_indices = ArrayVectorInt32()
+        self._csr_indptrs = ArrayVectorInt32()
 
         while True:
             token = self._lexer.lex()
 
-            if len(token) == 0:
+            if token.n == 0:
                 return
-            elif token[0] == "c":
+            elif token.p[0] == "c":
                 self.parse_comment()
-            elif token[0] == "p":
+            elif token.p[0] == "p":
                 (kind, N, M) = self.parse_header()
 
                 break
 
-        if kind == "cnf":
-            while self.parse_constraint():
-                pass
-        else:
-            raise RuntimeError("unknown instance type")
+        if kind != "cnf":
+            raise RuntimeError("unknown problem instance type")
+
+        self._csr_indptrs.append(0)
+
+        while self.parse_constraint():
+            pass
+
+        self._csr_data.trim()
+        self._csr_indices.trim()
+        self._csr_indptrs.trim()
 
         constraints = \
             scipy.sparse.csr_matrix(
-                (self._csr_data, self._csr_indices, self._csr_indptrs),
+                (self._csr_data.array, self._csr_indices.array, self._csr_indptrs.array),
                 shape = (M, N),
                 dtype = numpy.int8,
                 )
@@ -169,42 +292,41 @@ cdef class DIMACS_Parser(object):
         while True:
             token = self._lexer.lex()
 
-            if len(token) == 0 or token[0] == "\n":
+            if token.n == 0 or token.p[0] == "\n":
                 break
 
     cdef parse_header(self):
-        kind = self._lexer.lex()
-        N = int(self._lexer.lex())
-        M = int(self._lexer.lex())
+        token = self._lexer.lex()
+        kind = token.p[:token.n]
+
+        token = self._lexer.lex()
+        N = strntol(token.p, token.n)
+
+        token = self._lexer.lex()
+        M = strntol(token.p, token.n)
 
         return (kind, N, M)
 
-    cdef int parse_constraint(self):
-        cdef char* token
-        cdef int literal
-
+    cdef int parse_constraint(self) except -1:
         while True:
-            str_token = self._lexer.lex()
+            token = self._lexer.lex()
 
-            if str_token is None:
-                return False
-            else:
-                token = str_token
+            if token.n == 0:
+                return 0
+            elif token.p[0] == "0":
+                self._csr_indptrs.append(self._csr_data.size)
 
-                if token[0] == "0":
-                    self._csr_indptrs.append(len(self._csr_data))
+                return 1
+            elif token.p[0] != "\n":
+                literal = strntol(token.p, token.n)
 
-                    return True
-                elif token[0] != "\n":
-                    literal = int(str_token)
+                if literal > 0:
+                    value = 1
+                else:
+                    value = -1
 
-                    if literal > 0:
-                        value = 1
-                    else:
-                        value = -1
-
-                    self._csr_data.append(value)
-                    self._csr_indices.append(abs(literal) - 1)
+                self._csr_data.append(value)
+                self._csr_indices.append(libc.stdlib.abs(literal) - 1)
 
 def parse_sat_file(task_file):
     return DIMACS_Parser().parse(task_file.read())
