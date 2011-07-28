@@ -1,43 +1,13 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
-import os.path
 import time
 import uuid
-import resource
-import itertools
 import multiprocessing
 import numpy
 import cargo
 import borg
 
 logger = cargo.get_logger(__name__, default_level = "INFO")
-
-def outcome_matrices_from_paths(solver_index, budgets, paths):
-    """Build run-outcome matrices from records."""
-
-    # XXX again, belongs in the generic "run storage" module
-
-    S = len(solver_index)
-    B = len(budgets)
-    N = len(paths)
-    successes = numpy.zeros((N, S, B))
-    attempts = numpy.zeros((N, S))
-
-    for (n, path) in enumerate(paths):
-        (runs,) = borg.portfolios.get_task_run_data([path]).values()
-
-        for (run_solver, _, run_budget, run_cost, run_answer) in runs.tolist():
-            s = solver_index.get(run_solver)
-
-            if s is not None and run_budget >= budgets[-1]:
-                b = numpy.digitize([run_cost], budgets)
-
-                attempts[n, s] += 1.0
-
-                if b < B and run_answer:
-                    successes[n, s, b] += 1.0
-
-    return (successes, attempts)
 
 def plan_knapsack_multiverse(tclass_weights_W, tclass_rates_WSB):
     """
@@ -99,7 +69,6 @@ class BilevelPortfolio(object):
 
     def __init__(self, bundle, training, budget_interval, budget_count):
         # build action set
-        self._domain = bundle.domain
         self._budgets = [b * budget_interval for b in xrange(1, budget_count + 1)]
 
         # acquire running time data
@@ -142,7 +111,7 @@ class BilevelPortfolio(object):
         #messages.append("true rates:\n%s" % cargo.pretty_probability_matrix(true_rates))
 
         # obtain features
-        (_, features) = self._domain.compute_features(task)
+        (_, features) = bundle.domain.compute_features(task)
 
         # select a solver
         queue = multiprocessing.Queue()
