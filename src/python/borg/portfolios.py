@@ -126,96 +126,49 @@ class BaselinePortfolio(object):
 
         return self._best(task)(borg.unicore_cpu_budget(budget))
 
-def knapsack_plan(rates, solver_rindex, budgets, remaining):
-    """
-    Generate an optimal plan for a static probability table.
-
-    Budgets *must* be in ascending order and *must* be spaced by a fixed
-    interval from zero.
-    """
-
-    # find the index of our starting budget
-    start = None
-
-    for (b, budget) in enumerate(budgets):
-        if budget > remaining:
-            break
-        else:
-            start = b
-
-    if start is None:
-        return []
-
-    # generate the values table and associated policy
-    with fpe_handling(divide = "ignore"):
-        log_rates = numpy.log(1.0 - rates)
-
-    (nsolvers, nbudgets) = log_rates.shape
-    values = numpy.zeros(nbudgets + 1)
-    policy = {}
-
-    for b in xrange(1, nbudgets + 1):
-        region = log_rates[:, :b] + values[None, b - 1::-1]
-        i = numpy.argmin(region)
-        (s, c) = numpy.unravel_index(i, region.shape)
-
-        values[b] = region[s, c]
-        policy[b] = (s, c)
-
-    # build a plan from the policy
-    plan = []
-    b = start + 1
-
-    while b > 0:
-        (_, c) = action = policy[b]
-        b -= c + 1
-
-        plan.append(action)
-
-    # heuristically reorder the plan
-    reordered = sorted(plan, key = lambda (s, c): -rates[s, c] / budgets[c])
-
-    # translate and return it
-    return [(solver_rindex[s], budgets[c]) for (s, c) in reordered]
-
-class UberOraclePortfolio(object):
+class OraclePortfolio(object):
     """Optimal discrete-budget portfolio."""
 
-    def __init__(self, domain, train_paths, budget_interval, budget_count):
-        assert domain.name == "fake"
+    def __init__(self, bundle, training, budget_interval, budget_count):
+        """Initialize."""
 
-        self._domain = domain
         self._budgets = [b * budget_interval for b in xrange(1, budget_count + 1)]
-        self._solver_rindex = dict(enumerate(domain.solvers))
+        self._solver_rindex = dict(enumerate(bundle.solvers))
         self._solver_index = dict(map(reversed, self._solver_rindex.items()))
         self._budget_rindex = dict(enumerate(self._budgets))
         self._budget_index = dict(map(reversed, self._budget_rindex.items()))
 
-    def __call__(self, task, budget, cores = 1):
+    def __call__(self, task, bundle, budget, cores = 1):
+        """Run the portfolio."""
+
         assert cores == 1
+        assert bundle.domain.name == "fake"
 
         # grab known run data
-        (runs,) = get_task_run_data([task]).values()
-        (_, _, rates) = \
-            action_rates_from_runs(
+        runs = bundle.runs_data.get_run_list(task)
+
+        (successes, attempts) = \
+            borg.storage.outcome_matrices_from_runs(
                 self._solver_index,
-                self._budget_index,
-                runs.tolist(),
-                )
-
-        # make a plan, and follow through
-        plan = \
-            knapsack_plan(
-                rates,
-                self._solver_rindex,
                 self._budgets,
-                borg.unicore_cpu_budget(budget),
+                {None: runs},
+                )
+        rates = (successes / attempts[..., None])[0, ...]
+
+        # make a plan
+        plan = \
+            borg.bilevel.plan_knapsack_multiverse(
+                numpy.array([1.0]),
+                numpy.array([rates]),
                 )
 
-        for (name, cost) in plan:
-            answer = self._domain.solvers[name](task)(cost)
+        # and follow through
+        for (solver_i, budget_i) in plan:
+            solver = self._solver_rindex[solver_i]
+            budget = self._budget_rindex[budget_i]
+            answer = bundle.solvers[solver](task)(budget)
 
-            if self._domain.is_final(task, answer):
+            if bundle.domain.is_final(task, answer):
                 return answer
 
         return None
@@ -279,7 +232,7 @@ class ClassifierPortfolio(object):
 named = {
     #"random": RandomPortfolio,
     #"baseline": BaselinePortfolio,
-    #"uber-oracle": UberOraclePortfolio,
+    "oracle": OraclePortfolio,
     #"classifier": ClassifierPortfolio,
     }
 
