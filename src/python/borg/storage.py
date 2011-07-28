@@ -27,10 +27,14 @@ class TrainingData(object):
 
         for path in task_paths:
             # load run records
-            run_data = numpy.recfromcsv(path + suffix, usemask = True)
             run_list = []
+            run_data = numpy.recfromcsv(path + suffix, usemask = True)
+            rows = run_data.tolist()
 
-            for (run_solver, run_budget, run_cost, run_succeeded, run_answer) in run_data.tolist():
+            if run_data.shape == ():
+                rows = [rows]
+
+            for (run_solver, run_budget, run_cost, run_succeeded, run_answer) in rows:
                 record = RunRecord(run_solver, run_budget, run_cost, run_succeeded)
 
                 run_list.append(record)
