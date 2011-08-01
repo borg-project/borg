@@ -4,12 +4,9 @@
 
 import os.path
 import uuid
-import resource
-import itertools
 import contextlib
 import multiprocessing
 import numpy
-import scipy.stats
 import scikits.learn.linear_model
 import cargo
 import borg
@@ -136,7 +133,6 @@ class OraclePortfolio(object):
         self._solver_rindex = dict(enumerate(bundle.solvers))
         self._solver_index = dict(map(reversed, self._solver_rindex.items()))
         self._budget_rindex = dict(enumerate(self._budgets))
-        self._budget_index = dict(map(reversed, self._budget_rindex.items()))
 
     def __call__(self, task, bundle, budget, cores = 1):
         """Run the portfolio."""
@@ -173,11 +169,54 @@ class OraclePortfolio(object):
 
         return None
 
+class PreplanningPortfolio(object):
+    """Optimal discrete-budget portfolio."""
+
+    def __init__(self, bundle, training, budget_interval, budget_count):
+        """Initialize."""
+
+        self._budgets = [b * budget_interval for b in xrange(1, budget_count + 1)]
+        self._solver_rindex = dict(enumerate(bundle.solvers))
+        self._solver_index = dict(map(reversed, self._solver_rindex.items()))
+        self._budget_rindex = dict(enumerate(self._budgets))
+
+        # make a plan
+        run_lists = training.get_run_lists()
+
+        (successes, attempts) = \
+            borg.storage.outcome_matrices_from_runs(
+                self._solver_index,
+                self._budgets,
+                run_lists,
+                )
+
+        self._plan = \
+            borg.bilevel.plan_knapsack_multiverse(
+                numpy.ones(len(run_lists)) / len(run_lists),
+                numpy.array(successes / attempts[..., None]),
+                )
+
+    def __call__(self, task, bundle, budget, cores = 1):
+        """Run the portfolio."""
+
+        assert cores == 1
+
+        for (solver_i, budget_i) in self._plan:
+            solver = self._solver_rindex[solver_i]
+            budget = self._budget_rindex[budget_i]
+            answer = bundle.solvers[solver](task)(budget)
+
+            if bundle.domain.is_final(task, answer):
+                return answer
+
+        return None
+
 class ClassifierPortfolio(object):
     """Classifier-based portfolio."""
 
-    def __init__(self, domain, train_paths, budget_interval, budget_count):
-        self._domain = domain
+    def __init__(self, bundle, training, budget_interval, budget_count):
+        """Initialize."""
+
         action_budget = budget_interval * budget_count
         solver_rindex = dict(enumerate(domain.solvers))
         solver_index = dict(map(reversed, solver_rindex.items()))
@@ -214,6 +253,8 @@ class ClassifierPortfolio(object):
             model.fit(train_xs[solver], train_ys[solver])
 
     def __call__(self, task, budget, cores = 1):
+        """Run the portfolio."""
+
         assert cores == 1
 
         # obtain features
@@ -234,5 +275,6 @@ named = {
     #"baseline": BaselinePortfolio,
     "oracle": OraclePortfolio,
     #"classifier": ClassifierPortfolio,
+    "preplanning": PreplanningPortfolio,
     }
 

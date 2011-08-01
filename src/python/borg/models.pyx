@@ -562,6 +562,7 @@ class BilevelMultinomialModel(object):
             tclass_lr_weights_L = self._tclass_weights_L
 
         # compute conditional tclass probabilities
+        # XXX is the line below correct? should it not be 1.0 - numpy.cumsum(self...)?
         rclass_fail_cmf_SKB = numpy.cumsum(1.0 - self._rclass_SKB, axis = -1)
         tclass_post_weights_L = numpy.log(tclass_lr_weights_L)
 
@@ -589,4 +590,55 @@ class BilevelMultinomialModel(object):
         mean_post_rates_SB = numpy.sum(tclass_post_weights_L[:, None, None] * tclass_post_rates_LSB, axis = 0)
 
         return (tclass_post_weights_L, tclass_post_rates_LSB)
+
+class MassMixtureModel(object):
+    """Simple nonparametric multinomial mixture model."""
+
+    def __init__(self, successes, attempts, features = None):
+        """Fit the model to data."""
+
+        logger.info("building mass-mixture model")
+
+        self._rates_NSB = successes / attempts[..., None]
+
+        #if features is None:
+            #self._classifier = None
+        #else:
+            #classifier = scikits.learn.linear_model.LogisticRegression()
+
+            #classifier.fit(features, numpy.arange(len(features)))
+
+            #self._classifier = classifier
+
+    def predict(self, failures, features):
+        """Return probabilistic predictions."""
+
+        # mise en place
+        F = len(failures)
+        (N, S, B) = self._rates_NSB.shape
+
+        # compute conditional task probabilities
+        weights_N = numpy.log(numpy.ones(N) / N)
+        #weights_N = self._classifier.predict_proba([features])[0]
+        #weights_N += 1e-6
+        #weights_N /= numpy.sum(weights_N)
+        #weights_N = numpy.log(weights_N)
+
+        fail_cmf_NSB = 1.0 - numpy.cumsum(self._rates_NSB, axis = -1)
+
+        for n in xrange(N):
+            for (s, b) in failures:
+                p = fail_cmf_NSB[n, s, b]
+
+                if p > 0.0:
+                    weights_N[n] += numpy.log(p)
+                else:
+                    weights_N[n] = -numpy.inf
+
+        weights_N -= numpy.logaddexp.reduce(weights_N)
+        weights_N = numpy.exp(weights_N)
+
+        print numpy.argsort(weights_N)[-8:]
+
+        return (weights_N, self._rates_NSB)
 

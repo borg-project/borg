@@ -9,6 +9,17 @@ import borg
 
 logger = cargo.get_logger(__name__, default_level = "INFO")
 
+def log_or_ninf(array):
+    """Return the log of an array, safely taking log(0) to be -inf."""
+
+    assert numpy.all(array >= 0.0)
+
+    result = numpy.ones_like(array) * -numpy.inf
+
+    result[array > 0] = numpy.log(array[array > 0])
+
+    return result
+
 def plan_knapsack_multiverse(tclass_weights_W, tclass_rates_WSB):
     """
     Generate an optimal plan for a static set of possible probability tables.
@@ -16,20 +27,9 @@ def plan_knapsack_multiverse(tclass_weights_W, tclass_rates_WSB):
     Budgets *must* be in ascending order and linearly spaced from zero.
     """
 
-    # heuristically filter low-probability actions
-    mean_rates_SB = numpy.sum(tclass_weights_W[:, None, None] * tclass_rates_WSB, axis = 0)
-    mean_cmf_SB = numpy.cumsum(mean_rates_SB, axis = -1)
-    #threshold = 0.10
-
-    #if numpy.all(mean_cmf_SB <= threshold):
-        #logger.warning("not filtering tclasses; no entries in mean exceed %.2f", threshold)
-    #else:
-        #tclass_rates_WSB[:, mean_cmf_SB[:, :1] <= threshold] = 1e-8
-        #tclass_rates_WSB[:, mean_cmf_SB <= threshold] = 1e-8
-
-    # convert model predictions appropriately
+    # convert model predictions to a log CMF
     log_weights_W = numpy.log(tclass_weights_W)
-    log_fail_cmf_WSB = numpy.log(1.0 - numpy.cumsum(tclass_rates_WSB, axis = -1))
+    log_fail_cmf_WSB = log_or_ninf(1.0 - numpy.cumsum(tclass_rates_WSB, axis = -1))
 
     # generate the value table and associated policy
     (W, S, B) = log_fail_cmf_WSB.shape
@@ -56,6 +56,9 @@ def plan_knapsack_multiverse(tclass_weights_W, tclass_rates_WSB):
         plan.append(action)
 
     # heuristically reorder the plan
+    mean_rates_SB = numpy.sum(tclass_weights_W[:, None, None] * tclass_rates_WSB, axis = 0)
+    mean_cmf_SB = numpy.cumsum(mean_rates_SB, axis = -1)
+
     def heuristic((s, c)):
         return mean_cmf_SB[s, c] / (c + 1)
 
@@ -68,6 +71,8 @@ class BilevelPortfolio(object):
     """Bilevel mixture-model portfolio."""
 
     def __init__(self, bundle, training, budget_interval, budget_count):
+        """Initialize."""
+
         # build action set
         self._budgets = [b * budget_interval for b in xrange(1, budget_count + 1)]
 
@@ -89,26 +94,17 @@ class BilevelPortfolio(object):
         features = training.get_feature_vectors()
 
         # fit our model
-        self._model = borg.models.BilevelMultinomialModel(successes, attempts, features.values())
+        #self._model = borg.models.BilevelMultinomialModel(successes, attempts, features.values())
+        self._model = borg.models.MassMixtureModel(successes, attempts, features.values())
 
     def __call__(self, task, bundle, budget, cores = 1):
+        """Run the portfolio."""
+
         with borg.accounting():
             return self._solve(task, bundle, budget, cores)
 
     def _solve(self, task, bundle, budget, cores):
-        # print oracle knowledge, if any
-        #(runs,) = borg.portfolios.get_task_run_data([task]).values()
-        #(oracle_history, oracle_counts, _) = \
-            #borg.portfolios.action_rates_from_runs(
-                #self._solver_name_index,
-                #self._budget_index,
-                #runs.tolist(),
-                #)
-        #true_rates = oracle_history / oracle_counts
-        #hopeless = numpy.sum(true_rates) < 1e-2
-        #messages = []
-
-        #messages.append("true rates:\n%s" % cargo.pretty_probability_matrix(true_rates))
+        """Run the portfolio."""
 
         # obtain features
         (_, features) = bundle.domain.compute_features(task)
@@ -132,11 +128,12 @@ class BilevelPortfolio(object):
                 failed_indices.append((solver.s, total_b - 1))
 
             (tclass_weights_L, tclass_rates_LSB) = self._model.predict(failed_indices, features)
+            #(tclass_weights_L, tclass_rates_LSB) = self._model.predict(failed_indices)
             (L, S, B) = tclass_rates_LSB.shape
 
             # XXX force determinism
-            for (s, b) in failed_indices:
-                tclass_rates_LSB[:, s, :b + 1] = 1e-6
+            #for (s, b) in failed_indices:
+                #tclass_rates_LSB[:, s, :b + 1] = 1e-6
 
             # prepare augmented PMF matrix
             augmented_tclass_arrays = [tclass_rates_LSB]
@@ -150,7 +147,8 @@ class BilevelPortfolio(object):
                 paused_tclass_LB = numpy.zeros((L, B))
 
                 paused_tclass_LB[:, :B - c - 1] = tclass_rates_LSB[:, s, c + 1:]
-                paused_tclass_LB /= 1.0 - numpy.sum(tclass_rates_LSB[:, s, :c + 1], axis = -1)[..., None]
+                remaining_LB = 1.0 - numpy.sum(tclass_rates_LSB[:, s, :c + 1], axis = -1)[..., None]
+                paused_tclass_LB[remaining_LB > 0.0] /= remaining_LB[remaining_LB > 0.0]
 
                 augmented_tclass_arrays.append(paused_tclass_LB[:, None, :])
 
@@ -197,10 +195,6 @@ class BilevelPortfolio(object):
             subjective_rate = augmented_mean_cmf_AB[a, c]
 
             logger.info(
-            #tclass_cmf_LSB = numpy.cumsum(tclass_rates_LSB, axis = -1)
-            #mean_cmf_SB = numpy.sum(tclass_weights_L[:, None, None] * tclass_cmf_LSB, axis = 0)
-            #messages.append("mean augmented subjective CMF:\n%s" % cargo.pretty_probability_matrix(mean_cmf_SB))
-            #messages.append(
                 "running %s@%i for %i with %i remaining (b = %.2f)" % (
                     name,
                     borg.normal_to_machine(solver.cpu_cost),
