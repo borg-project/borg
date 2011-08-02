@@ -776,3 +776,165 @@ class DeltaPosterior(object):
 
         return -numpy.inf
 
+class DeltaKernel(object):
+    """Delta-function kernel."""
+
+    def evaluate(self, x):
+        if x == 0.0:
+            return 1.0
+        else:
+            return 0.0
+
+    def integrate(self, x):
+        if x >= 0.0:
+            return 1.0
+        else:
+            return 0.0
+
+class KernelModel(object):
+    """Kernel density estimation model."""
+
+    def __init__(self, costs, attempts, kernel):
+        """Initialize."""
+
+        self._costs_csr_SNR = costs
+        self._attempts_NS = attempts
+        self._kernel = kernel
+
+    def condition(self, failures):
+        """Return an RTD model conditioned on past runs."""
+
+        (N, S) = self._attempts_NS.shape
+        log_weights_N = -numpy.ones(N) * numpy.log(N)
+
+        for (s, budget) in failures:
+            costs_sNR = self._costs_csr_SNR[s]
+
+            for n in xrange(N):
+                i = costs_sNR.indptr[n]
+                j = costs_sNR.indptr[n + 1]
+
+                estimate = 0.0
+
+                for k in xrange(i, j):
+                    estimate += self._kernel.integrate(costs_sNR.data[k] - budget)
+
+                estimate /= self._attempts_NS[n, s]
+
+                if estimate < 1.0:
+                    log_weights_N[n] += numpy.log(1.0 - estimate)
+                else:
+                    log_weights_N[n] = -numpy.inf
+
+        log_weights_N -= numpy.logaddexp.reduce(log_weights_N)
+
+        return DeltaPosterior(log_weights_N, self._costs_csr_SNR, self._attempts_NS)
+
+    @staticmethod
+    def fit(solver_index, grouped_runs, kernel):
+        """Fit a delta-function model."""
+
+        logger.info("fitting delta model")
+
+        S = len(solver_index)
+        N = len(grouped_runs)
+
+        budget = None
+        coo_data = map(lambda _: [], xrange(S))
+        coo_n_indices = map(lambda _: [], xrange(S))
+        coo_r_indices = map(lambda _: [], xrange(S))
+        attempts_NS = numpy.zeros((N, S), int)
+
+        for (n, runs) in enumerate(grouped_runs):
+            for run in runs:
+                if budget is None:
+                    budget = run.budget
+                else:
+                    assert budget == run.budget
+
+                s = solver_index[run.solver]
+                r = attempts_NS[n, s]
+
+                if run.success:
+                    coo_data[s].append(run.cost)
+                    coo_n_indices[s].append(n)
+                    coo_r_indices[s].append(r)
+
+                attempts_NS[n, s] = r + 1
+
+        costs_SNR = []
+        coo_widths_S = numpy.max(attempts_NS, axis = 0)
+
+        for s in xrange(S):
+            coo = \
+                scipy.sparse.coo_matrix(
+                    (coo_data[s], (coo_n_indices[s], coo_r_indices[s])),
+                    shape = (N, coo_widths_S[s]),
+                    )
+
+            costs_SNR.append(coo.tocsr())
+
+        return KernelModel(costs_SNR, attempts_NS, kernel)
+
+class KernelPosterior(object):
+    """Conditioned kernel density model."""
+
+    def __init__(self, model, log_weights_N):
+        """Initialize."""
+
+        self._model = model
+        self._log_weights_N = log_weights_N
+
+    @property
+    def components(self):
+        """The number of mixture components."""
+
+        return self._log_weights_N.size
+
+    def get_weights(self):
+        """The weights of mixture components in the model."""
+
+        return self._log_weights_N
+
+    def get_log_pdf(self, n, s, budget):
+        """Compute the log PDF."""
+
+        # XXX are failures being correctly accounted for?
+
+        costs_csr_sNR = self._model._costs_csr_SNR[s]
+
+        i = costs_csr_sNR.indptr[n]
+        j = costs_csr_sNR.indptr[n + 1]
+
+        estimate = 0.0
+
+        for k in xrange(i, j):
+            estimate += self._model._kernel.evaluate(costs_csr_sNR.data[k] - budget)
+
+        estimate /= self._attempts_NS[n, s]
+
+        if estimate > 0.0:
+            return numpy.log(estimate)
+        else:
+            return -numpy.inf
+
+    def get_log_cdf(self, n, s, budget):
+        """Compute the log CDF."""
+
+        costs_csr_sNR = self._model._costs_csr_SNR[s]
+
+        i = costs_csr_sNR.indptr[n]
+        j = costs_csr_sNR.indptr[n + 1]
+
+        estimate = 0.0
+
+        for k in xrange(i, j):
+            estimate += self._model._kernel.integrate(costs_csr_sNR.data[k] - budget)
+
+        estimate /= self._attempts_NS[n, s]
+
+        if estimate > 0.0:
+            return numpy.log(estimate)
+        else:
+            return -numpy.inf
+
