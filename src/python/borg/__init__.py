@@ -72,7 +72,6 @@ class Suite(object):
 
 from . import defaults
 from . import portfolios
-from . import bilevel
 from . import models
 from . import expenses
 from . import solver_io

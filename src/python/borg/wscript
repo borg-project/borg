@@ -37,7 +37,6 @@ def build(context):
     context(
         source = [
             "__init__.py",
-            "bilevel.py",
             "defaults.py",
             "expenses.py",
             "experimental.py",
