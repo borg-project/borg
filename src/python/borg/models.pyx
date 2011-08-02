@@ -591,202 +591,17 @@ class BilevelMultinomialModel(object):
 
         return (tclass_post_weights_L, tclass_post_rates_LSB)
 
-class MassMixtureModel(object):
-    """Simple nonparametric multinomial mixture model."""
-
-    def __init__(self, successes, attempts, features = None):
-        """Fit the model to data."""
-
-        logger.info("building mass-mixture model")
-
-        self._rates_NSB = successes / attempts[..., None]
-
-        #if features is None:
-            #self._classifier = None
-        #else:
-            #classifier = scikits.learn.linear_model.LogisticRegression()
-
-            #classifier.fit(features, numpy.arange(len(features)))
-
-            #self._classifier = classifier
-
-    def predict(self, failures, features):
-        """Return probabilistic predictions."""
-
-        # mise en place
-        (N, S, B) = self._rates_NSB.shape
-
-        # compute conditional task probabilities
-        weights_N = numpy.log(numpy.ones(N) / N)
-        #weights_N = self._classifier.predict_proba([features])[0]
-        #weights_N += 1e-6
-        #weights_N /= numpy.sum(weights_N)
-        #weights_N = numpy.log(weights_N)
-
-        fail_cmf_NSB = 1.0 - numpy.cumsum(self._rates_NSB, axis = -1)
-
-        for n in xrange(N):
-            for (s, b) in failures:
-                p = fail_cmf_NSB[n, s, b]
-
-                if p > 0.0:
-                    weights_N[n] += numpy.log(p)
-                else:
-                    weights_N[n] = -numpy.inf
-
-        weights_N -= numpy.logaddexp.reduce(weights_N)
-        weights_N = numpy.exp(weights_N)
-
-        print numpy.argsort(weights_N)[-8:]
-
-        return (weights_N, self._rates_NSB)
-
-class DeltaModel(object):
-    """Delta-function model."""
-
-    def __init__(self, costs, attempts):
-        """Initialize."""
-
-        self._costs_csr_SNR = costs
-        self._attempts_NS = attempts
-
-    def condition(self, failures):
-        """Return an RTD model conditioned on past runs."""
-
-        (N, S) = self._attempts_NS.shape
-        log_weights_N = -numpy.ones(N) * numpy.log(N)
-
-        for (s, budget) in failures:
-            costs_sNR = self._costs_csr_SNR[s]
-
-            for n in xrange(N):
-                i = costs_sNR.indptr[n]
-                j = costs_sNR.indptr[n + 1]
-
-                for k in xrange(i, j):
-                    if costs_sNR.data[k] > budget:
-                        break
-
-                R = self._attempts_NS[n, s]
-
-                if k < i + R:
-                    log_weights_N[n] += numpy.log(1.0 - (k - i) / float(R))
-                else:
-                    log_weights_N[n] = -numpy.inf
-
-        log_weights_N -= numpy.logaddexp.reduce(log_weights_N)
-
-        return DeltaPosterior(log_weights_N, self._costs_csr_SNR, self._attempts_NS)
-
-    @staticmethod
-    def fit(solver_index, grouped_runs):
-        """Fit a delta-function model."""
-
-        logger.info("fitting delta model")
-
-        S = len(solver_index)
-        N = len(grouped_runs)
-
-        budget = None
-        coo_data = map(lambda _: [], xrange(S))
-        coo_n_indices = map(lambda _: [], xrange(S))
-        coo_r_indices = map(lambda _: [], xrange(S))
-        attempts_NS = numpy.zeros((N, S), int)
-
-        for (n, runs) in enumerate(grouped_runs):
-            for run in runs:
-                if budget is None:
-                    budget = run.budget
-                else:
-                    assert budget == run.budget
-
-                s = solver_index[run.solver]
-                r = attempts_NS[n, s]
-
-                if run.success:
-                    coo_data[s].append(run.cost)
-                    coo_n_indices[s].append(n)
-                    coo_r_indices[s].append(r)
-
-                attempts_NS[n, s] = r + 1
-
-        costs_SNR = []
-        coo_widths_S = numpy.max(attempts_NS, axis = 0)
-
-        for s in xrange(S):
-            coo = \
-                scipy.sparse.coo_matrix(
-                    (coo_data[s], (coo_n_indices[s], coo_r_indices[s])),
-                    shape = (N, coo_widths_S[s]),
-                    )
-
-            costs_SNR.append(coo.tocsr())
-
-        return DeltaModel(costs_SNR, attempts_NS)
-
-class DeltaPosterior(object):
-    """Conditioned delta-function model."""
-
-    def __init__(self, log_weights_N, costs_csr_SNR, attempts_NS):
-        """Initialize."""
-
-        self._log_weights_N = log_weights_N
-        self._costs_csr_SNR = costs_csr_SNR
-        self._attempts_NS = attempts_NS
-
-    @property
-    def components(self):
-        """The number of mixture components."""
-
-        return self._log_weights_N.size
-
-    def get_weights(self):
-        """The weights of mixture components in the model."""
-
-        return self._log_weights_N
-
-    def get_log_pdf(self, n, s, budget):
-        """Compute the log PDF."""
-
-        costs_csr_sNR = self._costs_csr_SNR[s]
-
-        i = costs_csr_sNR.indptr[n]
-        j = costs_csr_sNR.indptr[n + 1]
-
-        for k in xrange(i, j):
-            if budget == costs_csr_sNR.data[k]:
-                return 0.0
-
-        return -numpy.inf
-
-    def get_log_cdf(self, n, s, budget):
-        """Compute the log CDF."""
-
-        costs_csr_sNR = self._costs_csr_SNR[s]
-
-        i = costs_csr_sNR.indptr[n]
-        j = costs_csr_sNR.indptr[n + 1]
-
-        for k in xrange(i, j):
-            if costs_csr_sNR.data[k] > budget:
-                break
-
-        if k > i:
-            return numpy.log(k - i) - numpy.log(self._attempts_NS[n, s])
-
-        return -numpy.inf
-
 class DeltaKernel(object):
     """Delta-function kernel."""
 
     def evaluate(self, x):
         if x == 0.0:
-            return 1.0
+            return numpy.inf
         else:
             return 0.0
 
     def integrate(self, x):
-        if x >= 0.0:
+        if x <= 0.0:
             return 1.0
         else:
             return 0.0
@@ -800,6 +615,9 @@ class KernelModel(object):
         self._costs_csr_SNR = costs
         self._attempts_NS = attempts
         self._kernel = kernel
+
+        for costs_csr_sNR in self._costs_csr_SNR:
+            assert not numpy.any(numpy.isnan(costs_csr_sNR.data))
 
     def condition(self, failures):
         """Return an RTD model conditioned on past runs."""
@@ -828,13 +646,15 @@ class KernelModel(object):
 
         log_weights_N -= numpy.logaddexp.reduce(log_weights_N)
 
-        return DeltaPosterior(log_weights_N, self._costs_csr_SNR, self._attempts_NS)
+        assert not numpy.any(numpy.isnan(log_weights_N))
+
+        return KernelPosterior(self, log_weights_N)
 
     @staticmethod
     def fit(solver_index, grouped_runs, kernel):
-        """Fit a delta-function model."""
+        """Fit a kernel-density model."""
 
-        logger.info("fitting delta model")
+        logger.info("fitting kernel-density model")
 
         S = len(solver_index)
         N = len(grouped_runs)
@@ -911,7 +731,7 @@ class KernelPosterior(object):
         for k in xrange(i, j):
             estimate += self._model._kernel.evaluate(costs_csr_sNR.data[k] - budget)
 
-        estimate /= self._attempts_NS[n, s]
+        estimate /= self._model._attempts_NS[n, s]
 
         if estimate > 0.0:
             return numpy.log(estimate)
@@ -931,7 +751,7 @@ class KernelPosterior(object):
         for k in xrange(i, j):
             estimate += self._model._kernel.integrate(costs_csr_sNR.data[k] - budget)
 
-        estimate /= self._attempts_NS[n, s]
+        estimate /= self._model._attempts_NS[n, s]
 
         if estimate > 0.0:
             return numpy.log(estimate)

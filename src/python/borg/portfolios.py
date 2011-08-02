@@ -284,9 +284,10 @@ class MixturePortfolio(object):
 
         # fit our model
         self._model = \
-            borg.models.DeltaModel.fit(
+            borg.models.KernelModel.fit(
                 self._solver_name_index,
                 training.get_run_lists().values(),
+                borg.models.DeltaKernel(),
                 )
         self._planner = \
             borg.planners.KnapsackMultiversePlanner(

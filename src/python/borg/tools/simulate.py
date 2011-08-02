@@ -17,13 +17,15 @@ import borg
 logger = cargo.get_logger(__name__, default_level = "INFO")
 
 class PortfolioMaker(object):
-    def __init__(self, portfolio_name):
+    def __init__(self, portfolio_name, model_name, interval):
         self.name = portfolio_name
+        self.model_name = model_name
+        self.interval = interval
 
     def __call__(self, suite, train_paths, suffix):
         training = borg.storage.TrainingData(train_paths, suite.domain, suffix = suffix)
         factory = borg.portfolios.named[self.name]
-        portfolio = factory(suite, training, 100.0) # XXX
+        portfolio = factory(suite, training, self.interval)
 
         return borg.solver_io.RunningPortfolioFactory(portfolio, suite)
 
@@ -115,6 +117,8 @@ def yield_explicit_runs(makers, splits, suite_path, suffix, budget):
     budget = ("CPU seconds per instance", "positional", None, float),
     train_root = ("path to train task files", "positional", None, os.path.abspath),
     test_root = ("path to test task files", "positional", None, os.path.abspath),
+    model_name = ("name of portfolio model", "option", None),
+    interval = ("planner discretization width", "option", None),
     suffix = ("runs data file suffix", "option"),
     workers = ("submit jobs?", "option", "w", int),
     )
@@ -125,6 +129,8 @@ def main(
     budget,
     train_root,
     test_root,
+    model_name = "kernel",
+    interval = 100.0,
     suffix = ".runs.csv",
     workers = 0,
     ):
@@ -140,7 +146,7 @@ def main(
     if portfolio_name == "-":
         makers = map(SolverMaker, suite.solvers)
     else:
-        makers = [PortfolioMaker(portfolio_name)]
+        makers = [PortfolioMaker(portfolio_name, model_name, interval)]
 
     # generate jobs
     train_paths = list(cargo.files_under(train_root, suite.domain.extensions))

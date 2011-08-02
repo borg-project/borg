@@ -43,14 +43,17 @@ class KnapsackMultiversePlanner(object):
 
             plan.append((s, self._budget_interval * (c + 1)))
 
-        ## heuristically reorder the plan
-        #mean_rates_SB = numpy.sum(tclass_weights_W[:, None, None] * tclass_rates_WSB, axis = 0)
-        #mean_cmf_SB = numpy.cumsum(mean_rates_SB, axis = -1)
+        # heuristically reorder the plan
+        log_mean_fail_cmf_SB = numpy.logaddexp.reduce(log_fail_cmf_WSB + log_weights_W[:, None, None], axis = 0)
 
-        #def heuristic((s, c)):
-            #return mean_cmf_SB[s, c] / (c + 1)
+        def heuristic((s, budget)):
+            c = int(budget / self._budget_interval) - 1
 
-        #plan = sorted(plan, key = heuristic, reverse = True)
+            assert c >= 0
+
+            return log_mean_fail_cmf_SB[s, c] / (c + 1)
+
+        plan = sorted(plan, key = heuristic)
 
         # ...
         return plan
@@ -72,10 +75,15 @@ class KnapsackMultiversePlanner(object):
                     # XXX avoid the exponentiation
                     p = numpy.exp(posterior.get_log_cdf(w, s, budget))
 
+                    assert not numpy.isnan(p)
+
                     if p == 1.0:
                         log_fail_cmf_WSB[w, s, b] = -numpy.inf
                     else:
                         log_fail_cmf_WSB[w, s, b] = numpy.log(1.0 - p)
+
+                    if b > 0:
+                        assert log_fail_cmf_WSB[w, s, b] <= log_fail_cmf_WSB[w, s, b - 1]
 
         return log_fail_cmf_WSB
 
