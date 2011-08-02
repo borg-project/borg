@@ -45,6 +45,7 @@ def build(context):
             "solver_io.py",
             "storage.py",
             "fake.py",
+            "planners.py",
             ],
         install_path = install_path,
         )

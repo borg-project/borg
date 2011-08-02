@@ -614,7 +614,6 @@ class MassMixtureModel(object):
         """Return probabilistic predictions."""
 
         # mise en place
-        F = len(failures)
         (N, S, B) = self._rates_NSB.shape
 
         # compute conditional task probabilities
@@ -641,4 +640,139 @@ class MassMixtureModel(object):
         print numpy.argsort(weights_N)[-8:]
 
         return (weights_N, self._rates_NSB)
+
+class DeltaModel(object):
+    """Delta-function model."""
+
+    def __init__(self, costs, attempts):
+        """Initialize."""
+
+        self._costs_csr_SNR = costs
+        self._attempts_NS = attempts
+
+    def condition(self, failures):
+        """Return an RTD model conditioned on past runs."""
+
+        (N, S) = self._attempts_NS.shape
+        log_weights_N = -numpy.ones(N) * numpy.log(N)
+
+        for (s, budget) in failures:
+            costs_sNR = self._costs_csr_SNR[s]
+
+            for n in xrange(N):
+                i = costs_sNR.indptr[n]
+                j = costs_sNR.indptr[n + 1]
+
+                for k in xrange(i, j):
+                    if costs_sNR.data[k] > budget:
+                        break
+
+                R = self._attempts_NS[n, s]
+
+                if k < i + R:
+                    log_weights_N[n] += numpy.log(1.0 - (k - i) / float(R))
+                else:
+                    log_weights_N[n] = -numpy.inf
+
+        log_weights_N -= numpy.logaddexp.reduce(log_weights_N)
+
+        return DeltaPosterior(log_weights_N, self._costs_csr_SNR, self._attempts_NS)
+
+    @staticmethod
+    def fit(solver_index, grouped_runs):
+        """Fit a delta-function model."""
+
+        logger.info("fitting delta model")
+
+        S = len(solver_index)
+        N = len(grouped_runs)
+
+        budget = None
+        coo_data = map(lambda _: [], xrange(S))
+        coo_n_indices = map(lambda _: [], xrange(S))
+        coo_r_indices = map(lambda _: [], xrange(S))
+        attempts_NS = numpy.zeros((N, S), int)
+
+        for (n, runs) in enumerate(grouped_runs):
+            for run in runs:
+                if budget is None:
+                    budget = run.budget
+                else:
+                    assert budget == run.budget
+
+                s = solver_index[run.solver]
+                r = attempts_NS[n, s]
+
+                if run.success:
+                    coo_data[s].append(run.cost)
+                    coo_n_indices[s].append(n)
+                    coo_r_indices[s].append(r)
+
+                attempts_NS[n, s] = r + 1
+
+        costs_SNR = []
+        coo_widths_S = numpy.max(attempts_NS, axis = 0)
+
+        for s in xrange(S):
+            coo = \
+                scipy.sparse.coo_matrix(
+                    (coo_data[s], (coo_n_indices[s], coo_r_indices[s])),
+                    shape = (N, coo_widths_S[s]),
+                    )
+
+            costs_SNR.append(coo.tocsr())
+
+        return DeltaModel(costs_SNR, attempts_NS)
+
+class DeltaPosterior(object):
+    """Conditioned delta-function model."""
+
+    def __init__(self, log_weights_N, costs_csr_SNR, attempts_NS):
+        """Initialize."""
+
+        self._log_weights_N = log_weights_N
+        self._costs_csr_SNR = costs_csr_SNR
+        self._attempts_NS = attempts_NS
+
+    @property
+    def components(self):
+        """The number of mixture components."""
+
+        return self._log_weights_N.size
+
+    def get_weights(self):
+        """The weights of mixture components in the model."""
+
+        return self._log_weights_N
+
+    def get_log_pdf(self, n, s, budget):
+        """Compute the log PDF."""
+
+        costs_csr_sNR = self._costs_csr_SNR[s]
+
+        i = costs_csr_sNR.indptr[n]
+        j = costs_csr_sNR.indptr[n + 1]
+
+        for k in xrange(i, j):
+            if budget == costs_csr_sNR.data[k]:
+                return 0.0
+
+        return -numpy.inf
+
+    def get_log_cdf(self, n, s, budget):
+        """Compute the log CDF."""
+
+        costs_csr_sNR = self._costs_csr_SNR[s]
+
+        i = costs_csr_sNR.indptr[n]
+        j = costs_csr_sNR.indptr[n + 1]
+
+        for k in xrange(i, j):
+            if costs_csr_sNR.data[k] > budget:
+                break
+
+        if k > i:
+            return numpy.log(k - i) - numpy.log(self._attempts_NS[n, s])
+
+        return -numpy.inf
 

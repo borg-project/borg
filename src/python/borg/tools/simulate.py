@@ -23,7 +23,7 @@ class PortfolioMaker(object):
     def __call__(self, suite, train_paths, suffix):
         training = borg.storage.TrainingData(train_paths, suite.domain, suffix = suffix)
         factory = borg.portfolios.named[self.name]
-        portfolio = factory(suite, training, 100.0, 60) # XXX
+        portfolio = factory(suite, training, 100.0) # XXX
 
         return borg.solver_io.RunningPortfolioFactory(portfolio, suite)
 

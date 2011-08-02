@@ -78,6 +78,7 @@ from . import expenses
 from . import solver_io
 from . import storage
 from . import fake
+from . import planners
 from . import domains
 
 from borg.expenses import *
