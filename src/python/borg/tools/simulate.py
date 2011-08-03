@@ -113,7 +113,7 @@ def yield_explicit_runs(makers, splits, suite_path, suffix, budget):
 @plac.annotations(
     out_path = ("results output path"),
     portfolio_name = ("name of the portfolio to train"),
-    suite_path = ("path to the solvers suite"),
+    suite_path = ("path to the solvers suite", "positional", None, os.path.abspath),
     budget = ("CPU seconds per instance", "positional", None, float),
     train_root = ("path to train task files", "positional", None, os.path.abspath),
     test_root = ("path to test task files", "positional", None, os.path.abspath),

@@ -9,6 +9,7 @@ def build(context):
             "train.py",
             "cactus.py",
             "simulate.py",
+            "simulate_splits.py",
             ],
         install_path = "${PYTHONDIR}/borg/tools",
         )

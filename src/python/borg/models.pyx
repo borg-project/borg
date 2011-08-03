@@ -606,6 +606,18 @@ class DeltaKernel(object):
         else:
             return 0.0
 
+class GaussianKernel(object):
+    """Normal kernel."""
+
+    def __init__(self, h):
+        pass
+
+    def evaluate(self, v, x):
+        pass
+
+    def integrate(self, v, x):
+        pass
+
 class KernelModel(object):
     """Kernel density estimation model."""
 

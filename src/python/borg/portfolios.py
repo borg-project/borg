@@ -273,6 +273,8 @@ class ClassifierPortfolio(object):
 class MixturePortfolio(object):
     """Hybrid mixture-model portfolio."""
 
+    runs_limit = 256
+
     def __init__(self, bundle, training, budget_interval):
         """Initialize."""
 
@@ -312,7 +314,7 @@ class MixturePortfolio(object):
         failed = []
         answer = None
 
-        while True:
+        for i in xrange(self.runs_limit):
             # obtain model predictions
             failures = []
 
@@ -324,9 +326,12 @@ class MixturePortfolio(object):
             # make a plan...
             remaining = budget - borg.get_accountant().total
             normal_cpu_budget = borg.machine_to_normal(borg.unicore_cpu_budget(remaining))
+
+            if normal_cpu_budget < 0.0:
+                break
+
             raw_plan = self._planner.plan(posterior, normal_cpu_budget)
 
-            # XXX use up all remaining time
             if len(raw_plan) == 0:
                 break
 
@@ -346,7 +351,8 @@ class MixturePortfolio(object):
 
             # be informative
             logger.info(
-                "running %s@%i for %i with %i remaining" % (
+                "[run %i] %s@%i for %i with %i remaining" % (
+                    i,
                     name,
                     borg.normal_to_machine(solver.cpu_cost),
                     borg.normal_to_machine(planned_cpu_cost),
