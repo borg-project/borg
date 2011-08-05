@@ -82,7 +82,7 @@ class FakeSolverFactory(object):
         self._runs_data = runs_data
 
     def __call__(self, task, stm_queue = None, solver_id = None):
-        all_runs = self._runs_data.get_run_list(task)
+        all_runs = self._runs_data.run_lists[task]
         our_runs = filter(lambda run: run.solver == self._solver_name, all_runs)
 
         assert len(our_runs) > 0
@@ -93,6 +93,8 @@ class FakeDomain(object):
     name = "fake"
 
     def __init__(self, domain):
+        """Initialize."""
+
         self.extensions = [x for x in domain.extensions]
 
     @contextlib.contextmanager
@@ -102,6 +104,7 @@ class FakeDomain(object):
     def compute_features(self, task):
         """Read or compute features of an instance."""
 
+        # XXX just pull it out of the training data storage instance
         # grab precomputed feature data
         csv_path = task + ".features.csv"
 
@@ -119,13 +122,17 @@ class FakeDomain(object):
         return (names[1:], features[1:])
 
     def is_final(self, task, answer):
+        """Does this answer imply success?"""
+
         return bool(answer)
 
 class FakeSuite(object):
     """Mimic a solver suite, using simulated solvers."""
 
     def __init__(self, suite, test_paths, suffix):
-        self.runs_data = borg.storage.TrainingData(test_paths, suite.domain, suffix)
+        """Initialize."""
+
+        self.runs_data = borg.TrainingData.from_paths(test_paths, suite.domain, suffix)
         self.domain = FakeDomain(suite.domain)
         self.solvers = dict((k, FakeSolverFactory(k, self.runs_data)) for k in suite.solvers)
 

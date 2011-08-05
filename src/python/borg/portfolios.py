@@ -1,6 +1,4 @@
-"""
-@author: Bryan Silverthorn <bcs@cargo-cult.org>
-"""
+"""@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import os.path
 import uuid
@@ -273,29 +271,23 @@ class ClassifierPortfolio(object):
 class MixturePortfolio(object):
     """Hybrid mixture-model portfolio."""
 
-    runs_limit = 256
+    RUNS_LIMIT = 256
+    BUDGET_INTERVAL = 100
 
-    def __init__(self, bundle, training, budget_interval):
+    def __init__(self, bundle, model):
         """Initialize."""
 
-        # acquire running time data
         self._solver_names = list(bundle.solvers)
         self._solver_name_index = dict(map(reversed, enumerate(self._solver_names)))
 
-        logger.info("solvers: %s", dict(enumerate(self._solver_names)))
-
-        # fit our model
-        self._model = \
-            borg.models.KernelModel.fit(
-                self._solver_name_index,
-                training.get_run_lists().values(),
-                borg.models.DeltaKernel(),
-                )
+        self._model = model
         self._planner = \
             borg.planners.KnapsackMultiversePlanner(
                 self._solver_name_index,
-                budget_interval,
+                self.BUDGET_INTERVAL,
                 )
+
+        logger.info("solvers: %s", dict(enumerate(self._solver_names)))
 
     def __call__(self, task, bundle, budget, cores = 1):
         """Run the portfolio."""
@@ -314,7 +306,7 @@ class MixturePortfolio(object):
         failed = []
         answer = None
 
-        for i in xrange(self.runs_limit):
+        for i in xrange(self.RUNS_LIMIT):
             # obtain model predictions
             failures = []
 

@@ -1,6 +1,5 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
-import math
 import numpy
 
 class KnapsackMultiversePlanner(object):
@@ -16,8 +15,11 @@ class KnapsackMultiversePlanner(object):
         """Compute a plan."""
 
         # convert model predictions to a log CMF
+        budgets_B = numpy.r_[self._budget_interval:remaining + 1:self._budget_interval]
+
         log_weights_W = posterior.get_weights()
-        log_fail_cmf_WSB = self.get_fail_cmf_matrix(posterior, remaining)
+        log_cmf_WSB = posterior.get_log_cdf_array(budgets_B)
+        log_fail_cmf_WSB = numpy.log(1.0 - numpy.exp(log_cmf_WSB)) # XXX avoid exponentiation
 
         # generate the value table and associated policy
         (W, S, B) = log_fail_cmf_WSB.shape
@@ -46,7 +48,8 @@ class KnapsackMultiversePlanner(object):
         # heuristically reorder the plan
         log_mean_fail_cmf_SB = numpy.logaddexp.reduce(log_fail_cmf_WSB + log_weights_W[:, None, None], axis = 0)
 
-        def heuristic((s, budget)):
+        def heuristic(pair):
+            (s, budget) = pair
             c = int(budget / self._budget_interval) - 1
 
             assert c >= 0
@@ -57,33 +60,4 @@ class KnapsackMultiversePlanner(object):
 
         # ...
         return plan
-
-    def get_fail_cmf_matrix(self, posterior, remaining):
-        """Populate a failure-CMF matrix via discretization."""
-
-        W = posterior.components
-        S = len(self._solver_index)
-        B = int(math.floor(remaining / self._budget_interval))
-
-        log_fail_cmf_WSB = numpy.empty((W, S, B))
-
-        for b in xrange(B):
-            budget = self._budget_interval * (b + 1)
-
-            for s in xrange(S):
-                for w in xrange(W):
-                    # XXX avoid the exponentiation
-                    p = numpy.exp(posterior.get_log_cdf(w, s, budget))
-
-                    assert not numpy.isnan(p)
-
-                    if p == 1.0:
-                        log_fail_cmf_WSB[w, s, b] = -numpy.inf
-                    else:
-                        log_fail_cmf_WSB[w, s, b] = numpy.log(1.0 - p)
-
-                    if b > 0:
-                        assert log_fail_cmf_WSB[w, s, b] <= log_fail_cmf_WSB[w, s, b - 1]
-
-        return log_fail_cmf_WSB
 

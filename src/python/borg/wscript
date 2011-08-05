@@ -28,12 +28,17 @@ def configure(context):
 def build(context):
     install_path = "${PYTHONDIR}/borg"
 
-    context(
-        features = "c cshlib pyext",
-        source = "models.pyx",
-        target = "models",
-        install_path = install_path,
-        )
+    def cython_build(base):
+        context(
+            features = "c cshlib pyext",
+            source = "{0}.pyx".format(base),
+            target = base,
+            install_path = install_path,
+            )
+
+    cython_build("models")
+    cython_build("planners")
+
     context(
         source = [
             "__init__.py",
@@ -44,9 +49,15 @@ def build(context):
             "solver_io.py",
             "storage.py",
             "fake.py",
-            "planners.py",
             ],
         install_path = install_path,
+        )
+
+    context.install_files(
+        install_path,
+        [
+            "models.pxd",
+            ],
         )
 
     context.recurse("domains")

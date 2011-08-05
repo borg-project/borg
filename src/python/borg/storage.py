@@ -19,52 +19,57 @@ class RunRecord(object):
 class TrainingData(object):
     """Load and access portfolio training data."""
 
-    def __init__(self, task_paths, domain, suffix):
-        """Collect training data from task paths."""
+    def __init__(self):
+        """Initialize."""
 
-        self._run_lists = {}
-        self._feature_vectors = {}
+        self.run_lists = {}
+        self.feature_vectors = {}
 
-        for path in task_paths:
-            # load run records
-            run_list = []
-            run_data = numpy.recfromcsv(path + suffix, usemask = True)
-            rows = run_data.tolist()
+    def add_run(self, id_, run):
+        """Add a run to these data."""
 
-            if run_data.shape == ():
-                rows = [rows]
+        runs = self.run_lists.get(id_)
 
-            for (run_solver, run_budget, run_cost, run_succeeded, run_answer) in rows:
-                record = RunRecord(run_solver, run_budget, run_cost, run_succeeded)
+        if runs is None:
+            self.run_lists[id_] = [run]
+        else:
+            runs.append(run)
 
-                run_list.append(record)
+    def get_run_count(self):
+        """Return the number of runs stored."""
 
-            self._run_lists[path] = run_list
+        return sum(map(len, self.run_lists.values()))
 
-            # load feature data
-            feature_vector = numpy.recfromcsv("{0}.features.csv".format(path)).tolist()
+    def add_feature_vector(self, id_, vector):
+        """Add a feature vector to these data."""
 
-            self._feature_vectors[path] = feature_vector
+        assert id_ not in self.feature_vectors
 
-    def get_run_list(self, id_):
-        """Retrieve runs made on a task."""
-
-        return self._run_lists[id_]
-
-    def get_run_lists(self):
-        """Retrieve runs made on all tasks."""
-
-        return self._run_lists
+        self.feature_vectors[id_] = vector
 
     def get_feature_vector(self, id_):
         """Retrieve features of a task."""
 
-        return self._feature_vectors[id_]
+        return self.feature_vectors[id_]
 
     def get_feature_vectors(self):
         """Retrieve features of all tasks."""
 
-        return self._feature_vectors
+        return self.feature_vectors
+
+    def get_common_budget(self):
+        """Retrieve the common run budget, if any."""
+
+        budget = None
+
+        for runs in self.run_lists.values():
+            for run in runs:
+                if budget is None:
+                    budget = run.budget
+                elif run.budget != budget:
+                    raise Exception("collected runs include multiple run budgets")
+
+        return budget
 
     @staticmethod
     def from_roots(tasks_roots, domain, suffix = ".runs.csv"):
@@ -75,7 +80,33 @@ class TrainingData(object):
         for tasks_root in tasks_roots:
             task_paths.extend(cargo.files_under(tasks_root, domain.extensions))
 
-        return TrainingData(task_paths)
+        return TrainingData.from_paths(task_paths, domain, suffix)
+
+    @staticmethod
+    def from_paths(task_paths, domain, suffix = ".runs.csv"):
+        """Collect training data from task paths."""
+
+        training = TrainingData()
+
+        for path in task_paths:
+            # load run records
+            run_data = numpy.recfromcsv(path + suffix, usemask = True)
+            rows = run_data.tolist()
+
+            if run_data.shape == ():
+                rows = [rows]
+
+            for (run_solver, run_budget, run_cost, run_succeeded, run_answer) in rows:
+                record = RunRecord(run_solver, run_budget, run_cost, run_succeeded)
+
+                training.add_run(path, record)
+
+            # load feature data
+            vector = numpy.recfromcsv("{0}.features.csv".format(path)).tolist()
+
+            training.add_feature_vector(path, vector)
+
+        return training
 
 def outcome_matrices_from_runs(solver_index, budgets, run_lists):
     """Build run-outcome matrices from records."""

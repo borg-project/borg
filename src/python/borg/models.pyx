@@ -6,7 +6,14 @@ import numpy
 import borg
 import cargo
 
-logger = cargo.get_logger(__name__, default_level = "DETAIL")
+cimport cython
+cimport libc.math
+cimport numpy
+
+logger = cargo.get_logger(__name__, default_level = "DEBUG")
+
+cdef extern from "math.h":
+    double INFINITY
 
 def assert_probabilities(array):
     """Assert that an array contains only valid probabilities."""
@@ -24,297 +31,210 @@ def assert_weights(array, axis = None):
 
     assert numpy.all(numpy.abs(numpy.sum(array, axis = axis) - 1.0 ) < 1e-6)
 
-def fit_binomial_mixture(observed, counts, K):
-    """Use EM to fit a discrete mixture."""
+cdef class Kernel(object):
+    cdef double integrate(self, double x):
+        pass
 
-    concentration = 1e-8
-    N = observed.shape[0]
-    rates = (observed + concentration / 2.0) / (counts + concentration)
-    components = rates[numpy.random.randint(N, size = K)]
-    responsibilities = numpy.empty((K, N))
-    old_ll = -numpy.inf
+cdef class DeltaKernel(Kernel):
+    """Delta-function kernel."""
 
-    for i in xrange(512):
-        # compute new responsibilities
-        raw_mass = scipy.stats.binom.logpmf(observed[None, ...], counts[None, ...], components[:, None, ...])
-        log_mass = numpy.sum(raw_mass, axis = 2)
-        responsibilities = log_mass - numpy.logaddexp.reduce(log_mass, axis = 0)
-        responsibilities = numpy.exp(responsibilities)
-        weights = numpy.sum(responsibilities, axis = 1)
-        weights /= numpy.sum(weights)
-        ll = numpy.sum(numpy.logaddexp.reduce(numpy.log(weights)[:, None] + log_mass, axis = 0))
+    cdef double integrate(self, double x):
+        """Integrate over the kernel function."""
 
-        # check for termination
-        logger.debug("l-l at iteration %i is %f", i, ll)
+        if x <= 0.0:
+            return 1.0
+        else:
+            return 0.0
 
-        if numpy.abs(ll - old_ll) <= 1e-3:
-            break
+cdef class GaussianKernel(Kernel):
+    """Truncated normal kernel."""
 
-        old_ll = ll
+    def __init__(self, bandwidth, bound):
+        """Initialize."""
 
-        # compute new components
-        map_observed = observed[None, ...] * responsibilities[..., None]
-        map_counts = counts[None, ...] * responsibilities[..., None]
-        components = numpy.sum(map_observed, axis = 1) + concentration / 2.0
-        components /= numpy.sum(map_counts, axis = 1) + concentration
+    cdef double integrate(self, double x):
+        pass
 
-        # split duplicates
-        for j in xrange(K):
-            for k in xrange(K):
-                if j != k and numpy.sum(numpy.abs(components[j] - components[k])) < 1e-6:
-                    components[j] = rates[numpy.random.randint(N)]
-                    old_ll = -numpy.inf
+class KernelModel(object):
+    """Kernel density estimation model."""
 
-    assert numpy.all(components >= 0.0)
-    assert numpy.all(components <= 1.0)
+    def __init__(self, costs, attempts, kernel):
+        """Initialize."""
 
-    return (components, weights, responsibilities, ll)
+        self._costs_csr_SNR = costs
+        self._attempts_NS = attempts
+        self._kernel = kernel
 
-def inverse_digamma(x):
-    """Return the (approximate) inverse of the digamma function."""
+    def condition(self, failures):
+        """Return an RTD model conditioned on past runs."""
 
-    if x >= -2.22:
-        y0 = numpy.exp(x) + 0.5
-    else:
-        y0 = -1.0 / (x - scipy.special.digamma(1.0))
+        cdef Kernel kernel = self._kernel
 
-    f = lambda y: scipy.special.digamma(y) - x
-    f_ = lambda y: scipy.special.polygamma(1, y)
+        (N, S) = self._attempts_NS.shape
+        log_weights_N = -numpy.ones(N) * numpy.log(N)
 
-    return scipy.optimize.newton(f, y0, fprime = f_)
+        for (s, budget) in failures:
+            costs_sNR = self._costs_csr_SNR[s]
 
-def fit_dirichlet(vectors, weights):
-    """Compute the maximum-likelihood Dirichlet distribution."""
+            for n in xrange(N):
+                estimate = 0.0
 
-    log_pbar_k = numpy.sum(weights[:, None, None] * numpy.log(vectors), axis = 0) / numpy.sum(weights)
-    alpha = numpy.random.random(vectors.shape[1:])
-    alpha /= numpy.sum(alpha, axis = 1)[:, None]
-    last_alpha = alpha
+                if self._attempts_NS[n, s] > 0:
+                    i = costs_sNR.indptr[n]
+                    j = costs_sNR.indptr[n + 1]
 
-    for i in xrange(64):
-        psi_total = scipy.special.digamma(numpy.sum(alpha, axis = 1))
-        psi_alpha = psi_total[:, None] + log_pbar_k
+                    for k in xrange(i, j):
+                        estimate += kernel.integrate(costs_sNR.data[k] - budget)
 
-        alpha = numpy.array([[inverse_digamma(x) for x in row.flatten()] for row in psi_alpha])
-        alpha = alpha.reshape(psi_alpha.shape)
+                    estimate /= self._attempts_NS[n, s]
 
-        if numpy.sum(numpy.abs(alpha - last_alpha)) <= 1e-10:
-            break
+                if estimate < 1.0:
+                    log_weights_N[n] += numpy.log(1.0 - estimate)
+                else:
+                    log_weights_N[n] = -numpy.inf
 
-        last_alpha = alpha
+        normalization = numpy.logaddexp.reduce(log_weights_N)
 
-    return alpha
+        if normalization > -numpy.inf:
+            log_weights_N -= normalization
+        else:
+            # if nothing applies, revert to our prior
+            log_weights_N = -numpy.ones(N) * numpy.log(N)
 
-def fit_dirichlet_vfixed(vectors, weights, variance):
-    """Compute the maximum-likelihood Dirichlet distribution with fixed concentration."""
+        assert not numpy.any(numpy.isnan(log_weights_N))
 
-    log_pbar_k = numpy.sum(weights[:, None, None] * numpy.log(vectors), axis = 0) / numpy.sum(weights)
-    alpha = numpy.random.random(vectors.shape[1:])
-    alpha /= numpy.sum(alpha, axis = 1)[:, None]
-    last_alpha = alpha
+        return KernelPosterior(self, log_weights_N)
 
-    for i in xrange(64):
-        psi_full = scipy.special.digamma(variance * alpha)
-        psi_sigma = numpy.sum(alpha * (log_pbar_k - psi_full), axis = -1)
-        psi_alpha = log_pbar_k - psi_sigma[..., None]
+    @staticmethod
+    def fit(solver_names, training, kernel):
+        """Fit a kernel-density model."""
 
-        alpha = numpy.array([[inverse_digamma(x) for x in row.flatten()] for row in psi_alpha])
-        alpha = alpha.reshape(psi_alpha.shape)
-        alpha /= numpy.sum(alpha, axis = -1)[..., None]
+        logger.info("fitting kernel-density model")
 
-        if numpy.sum(numpy.abs(alpha - last_alpha)) <= 1e-10:
-            break
+        S = len(solver_names)
+        N = len(training.run_lists)
 
-        last_alpha = alpha
+        solver_names = list(solver_names)
 
-    return alpha * variance
+        budget = None
+        coo_data = map(lambda _: [], xrange(S))
+        coo_n_indices = map(lambda _: [], xrange(S))
+        coo_r_indices = map(lambda _: [], xrange(S))
+        attempts_NS = numpy.zeros((N, S), int)
 
-def dirichlet_log_pdf(vectors, alphas):
-    """Compute the Dirichlet log PDF."""
+        for (n, runs) in enumerate(training.run_lists.values()):
+            for run in runs:
+                if budget is None:
+                    budget = run.budget
+                else:
+                    assert budget == run.budget
 
-    vectors = numpy.asarray(vectors)
-    alphas = numpy.asarray(alphas)
+                s = solver_names.index(run.solver)
+                r = attempts_NS[n, s]
 
-    term_a = scipy.special.gammaln(numpy.sum(alphas, axis = -1))
-    term_b = numpy.sum(scipy.special.gammaln(alphas), axis = -1)
-    term_c = numpy.sum((alphas - 1.0) * numpy.log(vectors), axis = -1)
+                if run.success:
+                    coo_data[s].append(run.cost)
+                    coo_n_indices[s].append(n)
+                    coo_r_indices[s].append(r)
 
-    return term_a - term_b + term_c
+                attempts_NS[n, s] = r + 1
 
-def dcm_pdf(vector, alpha):
-    """Compute the DCM PDF."""
-
-    sum_alpha = numpy.sum(alpha, axis = -1)
-    sum_vector = numpy.sum(vector, axis = -1)
-
-    term_l = scipy.special.gamma(sum_alpha) / scipy.special.gamma(sum_alpha + sum_vector)
-    term_r = numpy.prod(scipy.special.gamma(vector + alpha) / scipy.special.gamma(alpha), axis = -1)
-
-    return term_l * term_r
-
-def dcm_draw_pdf(k, alpha):
-    """Compute the DCM PDF of a single draw."""
-
-    sum_alpha = numpy.sum(alpha, axis = -1)
-    alpha_plus = numpy.copy(alpha)
-
-    alpha_plus[k] += 1.0
-
-    term_l = scipy.special.gamma(sum_alpha) / scipy.special.gamma(sum_alpha + 1.0)
-    term_r = numpy.prod(scipy.special.gamma(alpha_plus) / scipy.special.gamma(alpha), axis = -1)
-
-    return term_l * term_r
-
-def fit_dirichlet_mixture(vectors, K):
-    """Use EM to fit a Dirichlet mixture."""
-
-    # hackishly regularize our input vectors
-    vectors = vectors + 1e-6
-    vectors /= numpy.sum(vectors, axis = -1)[..., None]
-
-    # then do EM
-    N = vectors.shape[0]
-    components = vectors[numpy.random.randint(N, size = K)]
-    responsibilities = numpy.empty((K, N))
-    old_ll = -numpy.inf
-
-    for i in xrange(512):
-        # compute new responsibilities
-        raw_mass = dirichlet_log_pdf(vectors[None, ...], components[:, None, ...])
-        log_mass = numpy.sum(raw_mass, axis = 2)
-        responsibilities = log_mass - numpy.logaddexp.reduce(log_mass, axis = 0)
-        responsibilities = numpy.exp(responsibilities)
-        weights = numpy.sum(responsibilities, axis = 1)
-        weights /= numpy.sum(weights)
-        ll = numpy.sum(numpy.logaddexp.reduce(numpy.log(weights)[:, None] + log_mass, axis = 0))
-
-        logger.detail("l-l at EM iteration %i is %f", i, ll)
-
-        # check for termination
-        if numpy.abs(ll - old_ll) <= 1e-3:
-            break
-        if ll < old_ll:
-            logger.warning("l-l decreased from %f to %f", old_ll, ll)
-
-        old_ll = ll
-
-        # compute new components
-        for k in xrange(K):
-            components[k] = fit_dirichlet(vectors, responsibilities[k])
-
-        for j in xrange(K):
-            for k in xrange(K):
-                if j != k and numpy.sum(numpy.abs(components[j] - components[k])) < 1e-6:
-                    components[j] = vectors[numpy.random.randint(N)]
-                    old_ll = -numpy.inf
-
-    return (components, weights)
-
-class BilevelModel(object):
-    """Two-level mixture model."""
-
-    def __init__(self, successes, attempts):
-        """Fit the model to data."""
-
-        # mise en place
-        (N, S, B) = successes.shape
-
-        successes_NSB = successes
-        attempts_NSB = attempts
-
-        # fit the per-solver mixture models
-        logger.detail("fitting solver behavior classes")
-
-        K = 8
-        task_mixes_NSK = numpy.empty((N, S, K))
-        self._inner_SKB = numpy.empty((S, K, B))
+        costs_SNR = []
+        coo_widths_S = numpy.max(attempts_NS, axis = 0)
 
         for s in xrange(S):
-            fit = lambda: fit_binomial_mixture(successes_NSB[:, s], attempts_NSB[:, s], K)
-            (self._inner_SKB[s], _, responsibilities_KN, _) = \
-                max(
-                    [fit() for _ in xrange(4)],
-                    key = lambda x: x[-1],
-                    )
-            task_mixes_NSK[:, s] = responsibilities_KN.T
+            if coo_widths_S[s] > 0:
+                coo = \
+                    scipy.sparse.coo_matrix(
+                        (coo_data[s], (coo_n_indices[s], coo_r_indices[s])),
+                        shape = (N, coo_widths_S[s]),
+                        )
+                csr = coo.tocsr()
 
-            logger.detail(
-                "behavior classes for solver %i:\n%s",
-                s,
-                cargo.pretty_probability_matrix(self._inner_SKB[s]),
-                )
+                assert not numpy.any(numpy.isnan(csr.data))
+            else:
+                csr = None
 
-        # fit the outer dirichlet mixture
-        logger.detail("fitting instance classes (Dirichlet mixture layer)")
+            costs_SNR.append(csr)
 
-        L = 16
-        (self._outer_LSK, self._outer_weights_L) = fit_dirichlet_mixture(task_mixes_NSK, L)
+        return KernelModel(costs_SNR, attempts_NS, kernel)
 
-        with cargo.numpy_printing(precision = 2, suppress = True, linewidth = 160):
-            logger.detail("task classes:\n%s", str(self._outer_LSK))
-            logger.detail("task weights:\n%s", str(self._outer_weights_L))
+cdef class Posterior(object):
+    pass
 
-    def predict(self, failures):
-        """Return probabilistic predictions of success."""
+cdef class KernelPosterior(Posterior):
+    """Conditioned kernel density model."""
 
-        # mise en place
-        F = len(failures)
-        (L, S, K) = self._outer_LSK.shape
+    cdef object _model
+    cdef object _log_weights_N
 
-        # compute task class likelihoods
-        tclass_weights_L = numpy.log(self._outer_weights_L)
+    def __init__(self, model, log_weights_N):
+        """Initialize."""
 
-        for l in xrange(L):
-            tclass_weights_L[l] += self._lnp_failures_tclass(failures, l)
+        self._model = model
+        self._log_weights_N = log_weights_N
 
-        tclass_weights_L = numpy.exp(tclass_weights_L - numpy.logaddexp.reduce(tclass_weights_L))
+    @property
+    def components(self):
+        """The number of mixture components."""
 
-        assert_probabilities(tclass_weights_L)
-        assert_weights(tclass_weights_L)
+        return self._log_weights_N.size
 
-        # condition the task classes
-        conditioned_LSK = numpy.copy(self._outer_LSK)
+    def get_weights(self):
+        """The weights of mixture components in the model."""
 
-        for l in xrange(L):
-            for f in xrange(F):
-                (s, b) = failures[f]
-                conditioning_K = numpy.zeros(K)
+        return self._log_weights_N
 
-                for k in xrange(K):
-                    p_f = 1.0 - self._inner_SKB[s, k, b]
-                    p_z = dcm_draw_pdf(k, self._outer_LSK[l, s])
+    def get_log_cdf_array(self, budgets):
+        """Compute the log CDF."""
 
-                    conditioning_K[k] += p_f * p_z
+        cdef Kernel kernel = self._model._kernel
 
-                conditioning_K /= numpy.sum(conditioning_K)
-                conditioned_LSK[l, s] += conditioning_K
+        cdef int N = self._model._attempts_NS.shape[0]
+        cdef int S = self._model._attempts_NS.shape[1]
+        cdef int B = budgets.shape[0]
 
-        # compute posterior probabilities
-        tclass_means_LSK = conditioned_LSK / numpy.sum(conditioned_LSK, axis = -1)[..., None]
-        tclass_rates_LSB = numpy.sum(tclass_means_LSK[..., None] * self._inner_SKB[None, ...], axis = -2)
-        posterior_mean_SK = numpy.sum(tclass_weights_L[:, None, None] * tclass_means_LSK, axis = 0)
-        posterior_rates_SB = numpy.sum(posterior_mean_SK[..., None] * self._inner_SKB, axis = 1)
+        cdef numpy.ndarray[long, ndim = 2] attempts_NS = self._model._attempts_NS
+        cdef numpy.ndarray[double, ndim = 1] budgets_B = budgets
+        cdef numpy.ndarray[double, ndim = 3] log_cdf_NSB = numpy.empty((N, S, B))
 
-        return (posterior_rates_SB, tclass_weights_L, tclass_rates_LSB)
+        cdef int i
+        cdef int j
+        cdef int k
+        cdef int n
+        cdef double estimate = 0.0
 
-    def _lnp_failures_tclass(self, failures, l):
-        """Return p(failures | task class l)."""
+        cdef numpy.ndarray[int] costs_csr_sNR_indptr
+        cdef numpy.ndarray[double] costs_csr_sNR_data
 
-        return sum(self._lnp_failure_tclass(failure, l) for failure in failures)
+        for s in xrange(S):
+            costs_csr_sNR = self._model._costs_csr_SNR[s]
 
-    def _lnp_failure_tclass(self, failure, l):
-        """Return p(s@c failed | task class l)."""
+            if costs_csr_sNR is None:
+                log_cdf_NSB[:, s, :] = -INFINITY
+            else:
+                costs_csr_sNR_indptr = costs_csr_sNR.indptr
+                costs_csr_sNR_data = costs_csr_sNR.data
 
-        (s, b) = failure
-        (_, _, K) = self._outer_LSK.shape
-        sigma = -numpy.inf
+                for n in xrange(N):
+                    i = costs_csr_sNR_indptr[n]
+                    j = costs_csr_sNR_indptr[n + 1]
 
-        for k in xrange(K):
-            lnp_l = numpy.log(1.0 - self._inner_SKB[s, k, b])
-            lnp_r = numpy.log(dcm_draw_pdf(k, self._outer_LSK[l, s]))
-            sigma = numpy.logaddexp(sigma, lnp_l + lnp_r)
+                    for b in xrange(B):
+                        estimate = 0.0
 
-        return sigma
+                        if attempts_NS[n, s] > 0:
+                            for k in xrange(i, j):
+                                estimate += kernel.integrate(costs_csr_sNR_data[k] - budgets_B[b])
+
+                            estimate /= attempts_NS[n, s]
+
+                        if estimate > 0.0:
+                            log_cdf_NSB[n, s, b] = libc.math.log(estimate)
+                        else:
+                            log_cdf_NSB[n, s, b] = -INFINITY
+
+        return log_cdf_NSB
 
 def multinomial_log_mass(counts, total_counts, beta):
     """Compute multinomial log probability."""
@@ -349,7 +269,7 @@ def multinomial_log_mass_implied(counts, total_counts, beta):
     return log_mass
 
 def fit_multinomial_mixture(successes, attempts, K):
-    """Fit a discrete mixture using EM."""
+    """Fit a multinomial mixture using EM."""
 
     # mise en place
     (N, B) = successes.shape
@@ -357,8 +277,7 @@ def fit_multinomial_mixture(successes, attempts, K):
     successes_NB = successes
     attempts_N = attempts
 
-    # expectation maximization
-    previous_ll = -numpy.inf
+    # initialization
     prior_alpha = 1.0 + 1e-2 
     prior_beta = 1.0 + 1e-1 
     prior_upper = prior_alpha - 1.0
@@ -367,14 +286,15 @@ def fit_multinomial_mixture(successes, attempts, K):
     components_KB = successes_NB[initial_n_K] + prior_upper
     components_KB /= (attempts_N[initial_n_K] + prior_lower)[:, None]
 
+    # expectation maximization
+    old_ll = -numpy.inf
+
     for i in xrange(512):
         # compute new responsibilities
         log_mass_KN = multinomial_log_mass_implied(successes_NB[None, ...], attempts_N[None, ...], components_KB[:, None, ...])
 
         log_responsibilities_KN = numpy.copy(log_mass_KN)
         log_responsibilities_KN -= numpy.logaddexp.reduce(log_responsibilities_KN, axis = 0)
-
-        responsibilities_KN = numpy.exp(log_responsibilities_KN)
 
         log_weights_K = numpy.logaddexp.reduce(log_responsibilities_KN, axis = 1)
         log_weights_K -= numpy.log(N)
@@ -383,14 +303,16 @@ def fit_multinomial_mixture(successes, attempts, K):
         ll = numpy.logaddexp.reduce(log_weights_K[:, None] + log_mass_KN, axis = 0)
         ll = numpy.sum(ll)
 
-        logger.debug("ll at EM iteration %i is %f", i, ll)
+        logger.debug("log likelihood at EM iteration %i is %f", i, ll)
 
-        if numpy.abs(ll - previous_ll) <= 1e-4:
+        if numpy.abs(ll - old_ll) <= 1e-4:
             break
 
-        previous_ll = ll
+        old_ll = ll
 
         # compute new components
+        responsibilities_KN = numpy.exp(log_responsibilities_KN)
+
         weighted_successes_KNB = successes_NB[None, ...] * responsibilities_KN[..., None]
         weighted_attempts_KN = attempts_N[None, ...] * responsibilities_KN
 
@@ -408,365 +330,195 @@ def fit_multinomial_mixture(successes, attempts, K):
 
     assert_probabilities(components_KB)
 
-    return (components_KB, responsibilities_KN, log_mass_KN, ll)
+    return (components_KB, log_weights_K)
 
-def fit_multinomial_outer_mixture(rclass_res, rclass_mass, L):
-    """Fit a discrete mixture using EM."""
+def fit_multinomial_matrix_mixture(outcomes, attempts, K):
+    """Fit a multinomial matrix mixture using EM."""
 
     # mise en place
-    (S, K, N) = rclass_res.shape
+    (N, S, B) = outcomes.shape
 
-    rclass_res_SKN = rclass_res
-    rclass_res_NSK = rclass_res_SKN.swapaxes(0, 2).swapaxes(1, 2)
-    rclass_log_mass_SKN = rclass_mass
-    rclass_log_mass_NSK = rclass_log_mass_SKN.swapaxes(0, 2).swapaxes(1, 2)
+    outcomes_NSB = outcomes
+    attempts_NS = attempts
+
+    # initialization
+    initial_n_K = numpy.random.randint(N, size = K)
+
+    components_KSB = outcomes_NSB[initial_n_K] + 1e-4
+    components_KSB /= numpy.sum(components_KSB, axis = -1)[..., None]
 
     # expectation maximization
-    previous_ll = -numpy.inf
-    prior_alpha = 1.0 + 1e-2
-    initial_n_L = numpy.random.randint(N, size = L)
-    components_LSK = rclass_res_NSK[initial_n_L]
+    old_ll = -numpy.inf
 
-    for i in xrange(1024):
+    for i in xrange(512):
         # compute new responsibilities
-        log_components_LSK = numpy.log(components_LSK)
+        log_mass_KNS = \
+            multinomial_log_mass(
+                outcomes_NSB[None, ...],
+                attempts_NS[None, ...],
+                components_KSB[:, None, ...],
+                )
 
-        log_mass_LNS = numpy.logaddexp.reduce(rclass_log_mass_NSK[None, ...] + log_components_LSK[:, None, ...], axis = -1)
-        log_mass_LN = numpy.sum(log_mass_LNS, axis = -1)
+        log_responsibilities_KN = numpy.sum(log_mass_KNS, axis = -1)
+        log_responsibilities_KN -= numpy.logaddexp.reduce(log_responsibilities_KN, axis = 0)
 
-        log_responsibilities_LN = numpy.copy(log_mass_LN)
-        log_responsibilities_LN -= numpy.logaddexp.reduce(log_responsibilities_LN, axis = 0)
-
-        responsibilities_LN = numpy.exp(log_responsibilities_LN)
-
-        log_weights_L = numpy.logaddexp.reduce(log_responsibilities_LN, axis = 1)
-        log_weights_L -= numpy.log(N)
+        log_weights_K = numpy.logaddexp.reduce(log_responsibilities_KN, axis = 1)
+        log_weights_K -= numpy.log(N)
 
         # compute ll and check for convergence
-        ll = numpy.sum(numpy.logaddexp.reduce(log_weights_L[:, None] + log_mass_LN, axis = 0))
+        ll = numpy.logaddexp.reduce(log_weights_K[:, None, None] + log_mass_KNS, axis = 0)
+        ll = numpy.sum(ll)
 
-        logger.debug("ll at EM iteration %i is %f", i, ll)
+        logger.debug("log likelihood at EM iteration %i is %f", i, ll)
 
-        if numpy.abs(ll - previous_ll) < 1e-6:
+        if numpy.abs(ll - old_ll) <= 1e-4:
             break
 
-        previous_ll = ll
+        old_ll = ll
 
         # compute new components
-        weighted_rclass_res_LNSK = rclass_res_NSK[None, ...] * responsibilities_LN[..., None, None]
+        responsibilities_KN = numpy.exp(log_responsibilities_KN)
 
-        components_LSK = numpy.sum(weighted_rclass_res_LNSK, axis = 1) + prior_alpha - 1.0
-        components_LSK /= numpy.sum(components_LSK, axis = -1)[..., None]
+        weighted_successes_KNSB = outcomes_NSB[None, ...] * responsibilities_KN[..., None, None]
+        weighted_attempts_KNS = attempts_NS[None, ...] * responsibilities_KN[..., None]
+
+        components_KSB = numpy.sum(weighted_successes_KNSB, axis = 1) + 1e-4
+        components_KSB /= numpy.sum(components_KSB, axis = -1)[..., None]
 
         # split duplicates
-        for l in xrange(L):
-            for m in xrange(L):
-                if l != m and numpy.sum(numpy.abs(components_LSK[l] - components_LSK[m])) < 1e-6:
-                    previous_ll = -numpy.inf
+        for j in xrange(K):
+            for k in xrange(K):
+                if j != k and numpy.sum(numpy.abs(components_KSB[j] - components_KSB[k])) < 1e-6:
                     n = numpy.random.randint(N)
-                    components_LSK[l] = rclass_res_NSK[n]
 
-    weights_L = numpy.exp(log_weights_L)
+                    components_KSB[k] = outcomes_NSB[n] + 1e-4
+                    components_KSB[k] /= numpy.sum(components_KSB[k], axis = -1)[..., None]
 
-    return (components_LSK, weights_L, responsibilities_LN, ll)
+                    old_ll = -numpy.inf
 
-class BilevelMultinomialModel(object):
-    """Two-level multinomial mixture model."""
+    assert_probabilities(components_KSB)
+    assert_weights(components_KSB, axis = -1)
 
-    def __init__(self, successes, attempts, features = None):
-        """Fit the model to data."""
+    return (components_KSB, log_weights_K)
 
-        # mise en place
-        (N, S, B) = successes.shape
+class MultinomialModel(object):
+    """Multinomial mixture model."""
 
-        successes_NSB = successes
-        attempts_NS = attempts
-
-        # fit the solver behavior classes
-        logger.info("fitting run classes")
-
-        K = 8
-        self._rclass_SKB = numpy.empty((S, K, B))
-        rclass_res = numpy.empty((S, K, N))
-        rclass_mass = numpy.empty((S, K, N))
-
-        for s in xrange(S):
-            fit = lambda: fit_multinomial_mixture(successes_NSB[:, s], attempts_NS[:, s], K)
-            (self._rclass_SKB[s], rclass_res[s], rclass_mass[s], _) = \
-                max(
-                    [fit() for _ in xrange(4)],
-                    key = lambda x: x[-1],
-                    )
-
-            logger.detail(
-                "rclasses for solver %i:\n%s",
-                s,
-                cargo.pretty_probability_matrix(self._rclass_SKB[s]),
-                )
-
-        # fit the task mixture classes
-        logger.info("fitting task classes")
-
-        L = 15
-        (self._tclass_LSK, self._tclass_weights_L, self._tclass_res_LN, _) = \
-            fit_multinomial_outer_mixture(
-                rclass_res,
-                rclass_mass,
-                L,
-                )
-
-        # fit the classifier
-        if features is None:
-            logger.info("no features; skipping classifier construction")
-
-            self._classifier = None
-        else:
-            logger.info("generating training data for logistic regression")
-
-            train_x = []
-            train_y = []
-
-            for (n, task_features) in enumerate(features):
-                assert numpy.all(numpy.isfinite(task_features))
-
-                counts_L = numpy.round(self._tclass_res_LN[:, n] * 100.0).astype(int)
-
-                train_x.extend([task_features] * numpy.sum(counts_L))
-
-                for l in xrange(L):
-                    train_y.extend([l] * counts_L[l])
-
-            train_x = numpy.array(train_x)
-            train_y = numpy.array(train_y)
-
-            logger.info("fitting classifier to %i examples", len(train_y))
-
-            self._classifier = scikits.learn.linear_model.LogisticRegression()
-
-            self._classifier.fit(train_x, train_y)
-
-    def predict(self, failures, features = ()):
-        """Return probabilistic predictions of success."""
-
-        # mise en place
-        F = len(failures)
-        (L, S, K) = self._tclass_LSK.shape
-
-        # let the classifier seed our cluster probabilities
-        if len(features) > 1:
-            (tclass_lr_weights_L,) = self._classifier.predict_proba([features])
-
-            tclass_lr_weights_L += 1e-6
-            tclass_lr_weights_L /= numpy.sum(tclass_lr_weights_L)
-        else:
-            tclass_lr_weights_L = self._tclass_weights_L
-
-        # compute conditional tclass probabilities
-        # XXX is the line below correct? should it not be 1.0 - numpy.cumsum(self...)?
-        rclass_fail_cmf_SKB = numpy.cumsum(1.0 - self._rclass_SKB, axis = -1)
-        tclass_post_weights_L = numpy.log(tclass_lr_weights_L)
-
-        for l in xrange(L):
-            for (s, b) in failures:
-                p = numpy.sum(rclass_fail_cmf_SKB[s, :, b] * self._tclass_LSK[l, s])
-
-                tclass_post_weights_L[l] += numpy.log(p)
-
-        tclass_post_weights_L -= numpy.logaddexp.reduce(tclass_post_weights_L)
-        tclass_post_weights_L = numpy.exp(tclass_post_weights_L)
-
-        # compute per-tclass conditional rclass probabilities
-        conditional_LSK = numpy.log(self._tclass_LSK)
-
-        for l in xrange(L):
-            for (s, b) in failures:
-                conditional_LSK[l, s, :] += rclass_fail_cmf_SKB[s, :, b]
-
-        conditional_LSK -= numpy.logaddexp.reduce(conditional_LSK, axis = -1)[..., None]
-        conditional_LSK = numpy.exp(conditional_LSK)
-
-        # compute posterior probabilities
-        tclass_post_rates_LSB = numpy.sum(conditional_LSK[..., None] * self._rclass_SKB[None, ...], axis = -2)
-        mean_post_rates_SB = numpy.sum(tclass_post_weights_L[:, None, None] * tclass_post_rates_LSB, axis = 0)
-
-        return (tclass_post_weights_L, tclass_post_rates_LSB)
-
-class DeltaKernel(object):
-    """Delta-function kernel."""
-
-    def evaluate(self, x):
-        if x == 0.0:
-            return numpy.inf
-        else:
-            return 0.0
-
-    def integrate(self, x):
-        if x <= 0.0:
-            return 1.0
-        else:
-            return 0.0
-
-class GaussianKernel(object):
-    """Normal kernel."""
-
-    def __init__(self, h):
-        pass
-
-    def evaluate(self, v, x):
-        pass
-
-    def integrate(self, v, x):
-        pass
-
-class KernelModel(object):
-    """Kernel density estimation model."""
-
-    def __init__(self, costs, attempts, kernel):
+    def __init__(self, interval, components_KSC, log_weights_K):
         """Initialize."""
 
-        self._costs_csr_SNR = costs
-        self._attempts_NS = attempts
-        self._kernel = kernel
-
-        for costs_csr_sNR in self._costs_csr_SNR:
-            assert not numpy.any(numpy.isnan(costs_csr_sNR.data))
+        self._interval = interval
+        self._components_KSC = components_KSC
+        self._log_weights_K = log_weights_K
 
     def condition(self, failures):
         """Return an RTD model conditioned on past runs."""
 
-        (N, S) = self._attempts_NS.shape
-        log_weights_N = -numpy.ones(N) * numpy.log(N)
+        log_post_weights_K = numpy.copy(self._log_weights_K)
+        components_cdf_KSC = numpy.cumsum(self._components_KSC, axis = -1)
 
         for (s, budget) in failures:
-            costs_sNR = self._costs_csr_SNR[s]
+            c = int(budget / self._interval)
 
-            for n in xrange(N):
-                i = costs_sNR.indptr[n]
-                j = costs_sNR.indptr[n + 1]
+            if c > 0:
+                log_post_weights_K += numpy.log(1.0 - components_cdf_KSC[:, s, c - 1])
 
-                estimate = 0.0
+        log_post_weights_K -= numpy.logaddexp.reduce(log_post_weights_K)
 
-                for k in xrange(i, j):
-                    estimate += self._kernel.integrate(costs_sNR.data[k] - budget)
+        assert not numpy.any(numpy.isnan(log_post_weights_K))
 
-                estimate /= self._attempts_NS[n, s]
-
-                if estimate < 1.0:
-                    log_weights_N[n] += numpy.log(1.0 - estimate)
-                else:
-                    log_weights_N[n] = -numpy.inf
-
-        log_weights_N -= numpy.logaddexp.reduce(log_weights_N)
-
-        assert not numpy.any(numpy.isnan(log_weights_N))
-
-        return KernelPosterior(self, log_weights_N)
+        return MultinomialPosterior(self, log_post_weights_K, components_cdf_KSC)
 
     @staticmethod
-    def fit(solver_index, grouped_runs, kernel):
+    def fit(solver_names, training, cutoff, K, B):
         """Fit a kernel-density model."""
 
-        logger.info("fitting kernel-density model")
+        # XXX just accept a discretization interval; find the max budget from data
 
-        S = len(solver_index)
-        N = len(grouped_runs)
+        logger.info("fitting multinomial mixture model")
 
-        budget = None
-        coo_data = map(lambda _: [], xrange(S))
-        coo_n_indices = map(lambda _: [], xrange(S))
-        coo_r_indices = map(lambda _: [], xrange(S))
-        attempts_NS = numpy.zeros((N, S), int)
+        # mise en place
+        C = B + 1
+        S = len(solver_names)
+        T = len(training.run_lists)
 
-        for (n, runs) in enumerate(grouped_runs):
+        solver_names = list(solver_names)
+
+        # discretize run data
+        interval = cutoff / B
+        outcomes_TSC = numpy.zeros((T, S, C))
+
+        for (t, runs) in enumerate(training.run_lists.values()):
             for run in runs:
-                if budget is None:
-                    budget = run.budget
+                s = solver_names.index(run.solver)
+
+                if run.success and run.cost < cutoff:
+                    c = int(run.cost / interval)
+
+                    outcomes_TSC[t, s, c] += 1
                 else:
-                    assert budget == run.budget
+                    outcomes_TSC[t, s, B] += 1
 
-                s = solver_index[run.solver]
-                r = attempts_NS[n, s]
+        # fit the mixture model
+        attempts_TS = numpy.sum(outcomes_TSC, axis = -1)
 
-                if run.success:
-                    coo_data[s].append(run.cost)
-                    coo_n_indices[s].append(n)
-                    coo_r_indices[s].append(r)
+        (components_KSC, log_weights_K) = \
+            fit_multinomial_matrix_mixture(
+                outcomes_TSC,
+                attempts_TS,
+                K,
+                )
 
-                attempts_NS[n, s] = r + 1
+        return MultinomialModel(interval, components_KSC, log_weights_K)
 
-        costs_SNR = []
-        coo_widths_S = numpy.max(attempts_NS, axis = 0)
+cdef class MultinomialPosterior(Posterior):
+    """Conditioned multinomial mixture model."""
 
-        for s in xrange(S):
-            coo = \
-                scipy.sparse.coo_matrix(
-                    (coo_data[s], (coo_n_indices[s], coo_r_indices[s])),
-                    shape = (N, coo_widths_S[s]),
-                    )
+    cdef object _model
+    cdef object _log_weights_K
+    cdef object _components_cdf_KSC
 
-            costs_SNR.append(coo.tocsr())
-
-        return KernelModel(costs_SNR, attempts_NS, kernel)
-
-class KernelPosterior(object):
-    """Conditioned kernel density model."""
-
-    def __init__(self, model, log_weights_N):
+    def __init__(self, model, log_weights_K, components_cdf_KSC):
         """Initialize."""
 
         self._model = model
-        self._log_weights_N = log_weights_N
+        self._log_weights_K = log_weights_K
+        self._components_cdf_KSC = numpy.cumsum(model._components_KSC, axis = -1)
 
     @property
     def components(self):
         """The number of mixture components."""
 
-        return self._log_weights_N.size
+        return self._log_weights_K.size
 
     def get_weights(self):
         """The weights of mixture components in the model."""
 
-        return self._log_weights_N
+        return self._log_weights_K
 
-    def get_log_pdf(self, n, s, budget):
-        """Compute the log PDF."""
-
-        # XXX are failures being correctly accounted for?
-
-        costs_csr_sNR = self._model._costs_csr_SNR[s]
-
-        i = costs_csr_sNR.indptr[n]
-        j = costs_csr_sNR.indptr[n + 1]
-
-        estimate = 0.0
-
-        for k in xrange(i, j):
-            estimate += self._model._kernel.evaluate(costs_csr_sNR.data[k] - budget)
-
-        estimate /= self._model._attempts_NS[n, s]
-
-        if estimate > 0.0:
-            return numpy.log(estimate)
-        else:
-            return -numpy.inf
-
-    def get_log_cdf(self, n, s, budget):
+    def get_log_cdf_array(self, budgets):
         """Compute the log CDF."""
 
-        costs_csr_sNR = self._model._costs_csr_SNR[s]
+        budgets_B = budgets
 
-        i = costs_csr_sNR.indptr[n]
-        j = costs_csr_sNR.indptr[n + 1]
+        K = self._components_cdf_KSC.shape[0]
+        S = self._components_cdf_KSC.shape[1]
+        B = budgets.shape[0]
 
-        estimate = 0.0
-
-        for k in xrange(i, j):
-            estimate += self._model._kernel.integrate(costs_csr_sNR.data[k] - budget)
-
-        estimate /= self._model._attempts_NS[n, s]
-
-        if estimate > 0.0:
-            return numpy.log(estimate)
+        if B == 0:
+            return numpy.empty((K, S, B))
         else:
-            return -numpy.inf
+            indices_B = numpy.array(budgets_B / self._model._interval, numpy.intc)
+
+            log_cdf_KSB = numpy.empty((K, S, B))
+
+            log_cdf_KSB[:, :, indices_B == 0] = -numpy.inf
+            log_cdf_KSB[:, :, indices_B > 0] = numpy.log(self._components_cdf_KSC[:, :, indices_B[indices_B > 0] - 1])
+
+            return log_cdf_KSB
+
+named = {
+    "kernel": KernelModel,
+    "multinomial": MultinomialModel,
+    }
 

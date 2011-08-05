@@ -138,8 +138,6 @@ def main(
 
     cargo.enable_default_logging()
 
-    cargo.get_logger("borg.portfolios", level = "DETAIL")
-
     # prepare solver makers
     suite = borg.load_solvers(suite_path)
 
