@@ -31,12 +31,42 @@ def assert_weights(array, axis = None):
 
     assert numpy.all(numpy.abs(numpy.sum(array, axis = axis) - 1.0 ) < 1e-6)
 
+cdef double log_plus(double x, double y):
+    """
+    Return log(x + y) given log(x) and log(y); see [1].
+
+    [1] Digital Filtering Using Logarithmic Arithmetic. Kingsbury and Rayner, 1970.
+    """
+
+    if x == -INFINITY and y == -INFINITY:
+        return -INFINITY
+    elif x >= y:
+        return x + libc.math.log(1.0 + libc.math.exp(y - x))
+    else:
+        return y + libc.math.log(1.0 + libc.math.exp(x - y))
+
+#cdef double log_plus(double x, double y):
+    #print x, "ln+", y, "==", log_plus_(x, y)
+
+    #return log_plus_(x, y)
+
 cdef class Kernel(object):
+    cdef double log_density(self, double x):
+        pass
+
     cdef double integrate(self, double x):
         pass
 
 cdef class DeltaKernel(Kernel):
     """Delta-function kernel."""
+
+    cdef double log_density(self, double x):
+        """Evaluate the kernel function."""
+
+        if x == 0.0:
+            return 0.0
+        else:
+            return -INFINITY
 
     cdef double integrate(self, double x):
         """Integrate over the kernel function."""
@@ -58,52 +88,93 @@ cdef class GaussianKernel(Kernel):
 class KernelModel(object):
     """Kernel density estimation model."""
 
-    def __init__(self, costs, attempts, kernel):
+    def __init__(self, counts, outcomes, kernel):
         """Initialize."""
 
-        self._costs_csr_SNR = costs
-        self._attempts_NS = attempts
+        self._counts_NS = counts
+        self._outcomes_NSR = outcomes
         self._kernel = kernel
 
-    def condition(self, failures):
-        """Return an RTD model conditioned on past runs."""
+    #def condition(self, failures):
+        #"""Return an RTD model conditioned on past runs."""
+
+        #cdef Kernel kernel = self._kernel
+
+        #(N, S) = self._attempts_NS.shape
+        #log_weights_N = -numpy.ones(N) * numpy.log(N)
+
+        #for (s, budget) in failures:
+            #costs_sNR = self._costs_csr_SNR[s]
+
+            #for n in xrange(N):
+                #estimate = 0.0
+
+                #if self._attempts_NS[n, s] > 0:
+                    #i = costs_sNR.indptr[n]
+                    #j = costs_sNR.indptr[n + 1]
+
+                    #for k in xrange(i, j):
+                        #estimate += kernel.integrate(costs_sNR.data[k] - budget)
+
+                    #estimate /= self._attempts_NS[n, s]
+
+                #if estimate < 1.0:
+                    #log_weights_N[n] += numpy.log(1.0 - estimate)
+                #else:
+                    #log_weights_N[n] = -numpy.inf
+
+        #normalization = numpy.logaddexp.reduce(log_weights_N)
+
+        #if normalization > -numpy.inf:
+            #log_weights_N -= normalization
+        #else:
+            ## if nothing applies, revert to our prior
+            #log_weights_N = -numpy.ones(N) * numpy.log(N)
+
+        #assert not numpy.any(numpy.isnan(log_weights_N))
+
+        #return KernelPosterior(self, log_weights_N)
+
+    def get_run_log_probabilities(self, test_counts, test_outcomes):
+        """Return the log probablities of an array of runs."""
 
         cdef Kernel kernel = self._kernel
 
-        (N, S) = self._attempts_NS.shape
-        log_weights_N = -numpy.ones(N) * numpy.log(N)
+        (N, _) = self._counts_NS.shape
+        (M, S, Q) = test_outcomes.shape
 
-        for (s, budget) in failures:
-            costs_sNR = self._costs_csr_SNR[s]
+        test_counts_MS = test_counts
+        test_outcomes_MSQ = test_outcomes
 
-            for n in xrange(N):
-                estimate = 0.0
+        densities_MSQ = numpy.ones((M, S, Q), numpy.double) * numpy.nan
+        total_density = 0.0
 
-                if self._attempts_NS[n, s] > 0:
-                    i = costs_sNR.indptr[n]
-                    j = costs_sNR.indptr[n + 1]
+        for s in xrange(S):
+            for m in xrange(M):
+                for q in xrange(test_counts_MS[m, s]):
+                    test_value = -INFINITY
+                    test_outcome = test_outcomes_MSQ[m, s, q]
 
-                    for k in xrange(i, j):
-                        estimate += kernel.integrate(costs_sNR.data[k] - budget)
+                    for n in xrange(N):
+                        value = -INFINITY
+                        count = self._counts_NS[n, s]
 
-                    estimate /= self._attempts_NS[n, s]
+                        for r in xrange(count):
+                            outcome = self._outcomes_NSR[n, s, r]
 
-                if estimate < 1.0:
-                    log_weights_N[n] += numpy.log(1.0 - estimate)
-                else:
-                    log_weights_N[n] = -numpy.inf
+                            if test_outcome < 0.0 and outcome < 0.0:
+                                value = log_plus(value, -libc.math.log(count))
+                            elif test_outcome >= 0.0 and outcome >= 0.0:
+                                log_density = kernel.log_density(test_outcome - outcome)
+                                value = log_plus(value, log_density - libc.math.log(count))
 
-        normalization = numpy.logaddexp.reduce(log_weights_N)
+                        test_value = log_plus(test_value, value - libc.math.log(N))
 
-        if normalization > -numpy.inf:
-            log_weights_N -= normalization
-        else:
-            # if nothing applies, revert to our prior
-            log_weights_N = -numpy.ones(N) * numpy.log(N)
+                    densities_MSQ[m, s, q] = test_value
 
-        assert not numpy.any(numpy.isnan(log_weights_N))
+                    total_density += test_value
 
-        return KernelPosterior(self, log_weights_N)
+        return (total_density, densities_MSQ)
 
     @staticmethod
     def fit(solver_names, training, kernel):
@@ -111,53 +182,9 @@ class KernelModel(object):
 
         logger.info("fitting kernel-density model")
 
-        S = len(solver_names)
-        N = len(training.run_lists)
+        (counts_NS, outcomes_NSR) = training.to_array(solver_names)
 
-        solver_names = list(solver_names)
-
-        budget = None
-        coo_data = map(lambda _: [], xrange(S))
-        coo_n_indices = map(lambda _: [], xrange(S))
-        coo_r_indices = map(lambda _: [], xrange(S))
-        attempts_NS = numpy.zeros((N, S), int)
-
-        for (n, runs) in enumerate(training.run_lists.values()):
-            for run in runs:
-                if budget is None:
-                    budget = run.budget
-                else:
-                    assert budget == run.budget
-
-                s = solver_names.index(run.solver)
-                r = attempts_NS[n, s]
-
-                if run.success:
-                    coo_data[s].append(run.cost)
-                    coo_n_indices[s].append(n)
-                    coo_r_indices[s].append(r)
-
-                attempts_NS[n, s] = r + 1
-
-        costs_SNR = []
-        coo_widths_S = numpy.max(attempts_NS, axis = 0)
-
-        for s in xrange(S):
-            if coo_widths_S[s] > 0:
-                coo = \
-                    scipy.sparse.coo_matrix(
-                        (coo_data[s], (coo_n_indices[s], coo_r_indices[s])),
-                        shape = (N, coo_widths_S[s]),
-                        )
-                csr = coo.tocsr()
-
-                assert not numpy.any(numpy.isnan(csr.data))
-            else:
-                csr = None
-
-            costs_SNR.append(csr)
-
-        return KernelModel(costs_SNR, attempts_NS, kernel)
+        return KernelModel(counts_NS, outcomes_NSR, kernel)
 
 cdef class Posterior(object):
     pass
@@ -342,7 +369,11 @@ def fit_multinomial_matrix_mixture(outcomes, attempts, K):
     attempts_NS = attempts
 
     # initialization
-    initial_n_K = numpy.random.randint(N, size = K)
+    initial_n_K = numpy.arange(N)
+
+    numpy.random.shuffle(initial_n_K)
+
+    initial_n_K = initial_n_K[:K]
 
     components_KSB = outcomes_NSB[initial_n_K] + 1e-4
     components_KSB /= numpy.sum(components_KSB, axis = -1)[..., None]
@@ -385,16 +416,16 @@ def fit_multinomial_matrix_mixture(outcomes, attempts, K):
         components_KSB = numpy.sum(weighted_successes_KNSB, axis = 1) + 1e-4
         components_KSB /= numpy.sum(components_KSB, axis = -1)[..., None]
 
-        # split duplicates
-        for j in xrange(K):
-            for k in xrange(K):
-                if j != k and numpy.sum(numpy.abs(components_KSB[j] - components_KSB[k])) < 1e-6:
-                    n = numpy.random.randint(N)
+        ## split duplicates
+        #for j in xrange(K):
+            #for k in xrange(K):
+                #if j != k and numpy.sum(numpy.abs(components_KSB[j] - components_KSB[k])) < 1e-6:
+                    #n = numpy.random.randint(N)
 
-                    components_KSB[k] = outcomes_NSB[n] + 1e-4
-                    components_KSB[k] /= numpy.sum(components_KSB[k], axis = -1)[..., None]
+                    #components_KSB[k] = outcomes_NSB[n] + 1e-4
+                    #components_KSB[k] /= numpy.sum(components_KSB[k], axis = -1)[..., None]
 
-                    old_ll = -numpy.inf
+                    #old_ll = -numpy.inf
 
     assert_probabilities(components_KSB)
     assert_weights(components_KSB, axis = -1)

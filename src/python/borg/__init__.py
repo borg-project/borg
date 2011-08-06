@@ -81,5 +81,8 @@ from . import planners
 from . import domains
 
 from borg.expenses import *
-from borg.storage import TrainingData
+from borg.storage import (
+    RunData,
+    TrainingData,
+    )
 

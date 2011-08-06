@@ -16,7 +16,7 @@ class RunRecord(object):
         self.cost = cost
         self.success = success
 
-class TrainingData(object):
+class RunData(object):
     """Load and access portfolio training data."""
 
     def __init__(self):
@@ -24,6 +24,7 @@ class TrainingData(object):
 
         self.run_lists = {}
         self.feature_vectors = {}
+        self.common_budget = None
 
     def add_run(self, id_, run):
         """Add a run to these data."""
@@ -34,6 +35,11 @@ class TrainingData(object):
             self.run_lists[id_] = [run]
         else:
             runs.append(run)
+
+        if self.common_budget is None:
+            self.common_budget = run.budget
+        else:
+            assert run.budget == self.common_budget
 
     def get_run_count(self):
         """Return the number of runs stored."""
@@ -71,6 +77,43 @@ class TrainingData(object):
 
         return budget
 
+    def to_array(self, solver_names):
+        """Return run durations as a partially-filled array."""
+
+        S = len(solver_names)
+        N = len(self.run_lists)
+
+        # compute the maximum run count
+        counts_NS = numpy.zeros((N, S), numpy.intc)
+        solver_names_S = list(solver_names)
+
+        for (n, runs) in enumerate(self.run_lists.itervalues()):
+            for run in runs:
+                s = solver_names_S.index(run.solver)
+
+                counts_NS[n, s] += 1
+
+        R = numpy.max(counts_NS)
+
+        # fill in run durations
+        durations_NSR = numpy.ones((N, S, R), numpy.double) * numpy.nan
+
+        counts_NS[...] = 0
+
+        for (n, runs) in enumerate(self.run_lists.itervalues()):
+            for run in runs:
+                s = solver_names_S.index(run.solver)
+                r = counts_NS[n, s]
+
+                if run.success:
+                    durations_NSR[n, s, r] = run.cost
+                else:
+                    durations_NSR[n, s, r] = -1.0
+
+                counts_NS[n, s] = r + 1
+
+        return (counts_NS, durations_NSR)
+
     @staticmethod
     def from_roots(tasks_roots, domain, suffix = ".runs.csv"):
         """Collect training data by scanning for tasks."""
@@ -80,13 +123,13 @@ class TrainingData(object):
         for tasks_root in tasks_roots:
             task_paths.extend(cargo.files_under(tasks_root, domain.extensions))
 
-        return TrainingData.from_paths(task_paths, domain, suffix)
+        return RunData.from_paths(task_paths, domain, suffix)
 
     @staticmethod
     def from_paths(task_paths, domain, suffix = ".runs.csv"):
         """Collect training data from task paths."""
 
-        training = TrainingData()
+        training = RunData()
 
         for path in task_paths:
             # load run records
@@ -107,6 +150,8 @@ class TrainingData(object):
             training.add_feature_vector(path, vector)
 
         return training
+
+TrainingData = RunData
 
 def outcome_matrices_from_runs(solver_index, budgets, run_lists):
     """Build run-outcome matrices from records."""

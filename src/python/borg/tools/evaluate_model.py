@@ -9,14 +9,14 @@ if __name__ == "__main__":
 
 import os.path
 import csv
-import random
+import numpy
 import cargo
 import borg
 
 logger = cargo.get_logger(__name__, default_level = "INFO")
 
 def simulate_split(model_name, suite_path, training, test_paths, suffix):
-    """Make a validation run."""
+    """Simulate portfolio performance."""
 
     # build the portfolio
     logger.info("building portfolio given %i training runs", training.get_run_count())
@@ -60,15 +60,51 @@ def simulate_split(model_name, suite_path, training, test_paths, suffix):
 
     return [training.get_run_count(), successes]
 
+def evaluate_split(model_name, solver_names, training, testing, suffix):
+    """Evaluate model generalization."""
+
+    # build the model
+    logger.info("building %s model given %i training runs", model_name, training.get_run_count())
+
+    if model_name == "multinomial":
+        model = \
+            borg.models.MultinomialModel.fit(
+                solver_names,
+                training,
+                6000.0,
+                len(training.run_lists),
+                60,
+                )
+    elif model_name == "kernel":
+        model = \
+            borg.models.KernelModel.fit(
+                solver_names,
+                training,
+                borg.models.DeltaKernel(),
+                )
+    else:
+        raise Exception("unrecognized model name")
+
+    logger.info("solver names are: %s", solver_names)
+
+    # evaluate the model
+    logger.info("evaluating model on %i test runs", testing.get_run_count())
+
+    (test_counts, test_outcomes) = testing.to_array(solver_names)
+
+    (total, _) = model.get_run_log_probabilities(test_counts, test_outcomes)
+
+    return [training.get_run_count(), total]
+
 def get_training_systematic(training, run_count):
     """Get a systematic subset of training data."""
 
-    run_lists = sorted(training.run_lists.items(), key = lambda _: random.random())
-    subset = borg.TrainingData()
+    run_lists = sorted(training.run_lists.items(), key = lambda _: numpy.random.rand())
+    subset = borg.RunData()
     added = 0
 
     for (id_, runs) in run_lists:
-        for run in sorted(runs, key = lambda _: random.random()):
+        for run in sorted(runs, key = lambda _: numpy.random.rand()):
             subset.add_run(id_, run)
 
             added += 1
@@ -103,24 +139,26 @@ def main(
         logger.info("found %i instance(s) under %s", len(paths), instances_root)
 
         for _ in xrange(4):
-            shuffled_paths = sorted(paths, key = lambda _: random.random())
+            shuffled_paths = sorted(paths, key = lambda _: numpy.random.rand())
             split_size = int(len(paths) / 2)
             train_paths = shuffled_paths[:split_size]
             test_paths = shuffled_paths[split_size:]
-            training = borg.TrainingData.from_paths(train_paths, suite.domain, suffix)
+            training = borg.RunData.from_paths(train_paths, suite.domain, suffix)
+            testing = borg.RunData.from_paths(test_paths, suite.domain, suffix)
+            run_counts = numpy.unique(numpy.exp(numpy.r_[0.0:numpy.log(training.get_run_count()):24j]).astype(int))
 
-            for run_count in xrange(1, training.get_run_count(), 20):
+            for run_count in run_counts:
                 subset = get_training_systematic(training, run_count)
 
                 yield (
-                    simulate_split,
-                    [model_name, suite_path, subset, test_paths, suffix],
+                    evaluate_split,
+                    [model_name, suite.solvers.keys(), subset, testing, suffix],
                     )
 
     with open(out_path, "w") as out_file:
         writer = csv.writer(out_file)
 
-        writer.writerow(["training_runs", "solved"])
+        writer.writerow(["training_runs", "log_density"])
 
         cargo.do_or_distribute(yield_jobs(), workers, lambda _, r: writer.writerow(r))
 
