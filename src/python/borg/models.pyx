@@ -45,54 +45,115 @@ cdef double log_plus(double x, double y):
     else:
         return y + libc.math.log(1.0 + libc.math.exp(x - y))
 
-#cdef double log_plus(double x, double y):
-    #print x, "ln+", y, "==", log_plus_(x, y)
+cdef double log_minus(double x, double y):
+    """
+    Return log(x - y) given log(x) and log(y); see [1].
 
-    #return log_plus_(x, y)
+    [1] Digital Filtering Using Logarithmic Arithmetic. Kingsbury and Rayner, 1970.
+    """
+
+    if x == -INFINITY and y == -INFINITY:
+        return -INFINITY
+    elif x >= y:
+        return x + libc.math.log(1.0 - libc.math.exp(y - x))
+    else:
+        return y + libc.math.log(1.0 - libc.math.exp(x - y))
 
 cdef class Kernel(object):
-    cdef double log_density(self, double x):
-        pass
+    """Kernel function interface."""
 
-    cdef double integrate(self, double x):
-        pass
+    cdef double log_density(self, double x, double v):
+        """Evaluate the kernel function."""
+
+    cdef double integrate(self, double x, double v):
+        """Integrate over the kernel function."""
 
 cdef class DeltaKernel(Kernel):
     """Delta-function kernel."""
 
-    cdef double log_density(self, double x):
+    cdef double log_density(self, double x, double v):
         """Evaluate the kernel function."""
 
-        if x == 0.0:
+        if x == v:
             return 0.0
         else:
             return -INFINITY
 
-    cdef double integrate(self, double x):
+    cdef double integrate(self, double x, double v):
         """Integrate over the kernel function."""
 
-        if x <= 0.0:
+        if x <= v:
             return 1.0
         else:
             return 0.0
 
-cdef class GaussianKernel(Kernel):
-    """Truncated normal kernel."""
+cdef double standard_normal_log_pdf(double x):
+    """Compute the log of the standard normal PDF."""
 
-    def __init__(self, bandwidth, bound):
+    return -(x * x) / 2.0 - libc.math.log(libc.math.M_2_PI) / 2.0
+
+cdef double standard_normal_log_cdf(double x):
+    """Compute the log of the standard normal CDF."""
+
+    return libc.math.log((1.0 + libc.math.erf(x / libc.math.M_SQRT2)) / 2.0)
+
+cdef double normal_log_pdf(double mu, double sigma, double x):
+    """Compute the log of the normal PDF."""
+
+    cdef double lhs = ((x - mu) * (x - mu)) / (2.0 * sigma * sigma)
+    cdef double rhs = libc.math.log(libc.math.M_2_PI * sigma * sigma) / 2.0
+
+    return lhs - rhs
+
+cdef double normal_log_cdf(double mu, double sigma, double x):
+    """Compute the log of the normal CDF."""
+
+    cdef double erf_term = libc.math.erf((x - mu) / libc.math.sqrt(2.0 * sigma * sigma))
+
+    return libc.math.log((1.0 + erf_term) / 2.0)
+
+cdef double truncated_normal_log_pdf(double a, double b, double mu, double sigma, double x):
+    """Compute the log of the truncated normal PDF."""
+
+    cdef double upper = standard_normal_log_pdf((x - mu) / sigma) - libc.math.log(sigma)
+    cdef double lower_lhs = standard_normal_log_cdf((b - mu) / sigma)
+    cdef double lower_rhs = standard_normal_log_cdf((a - mu) / sigma)
+
+    return upper - log_minus(lower_lhs, lower_rhs)
+
+cdef class TruncatedNormalKernel(Kernel):
+    """Truncated Gaussian kernel."""
+
+    cdef double _a
+    cdef double _b
+    cdef double _sigma
+
+    def __init__(self, a, b, sigma = 1.0):
         """Initialize."""
 
-    cdef double integrate(self, double x):
-        pass
+        self._a = a
+        self._b = b
+        self._sigma = sigma
+
+    cdef double log_density(self, double x, double v):
+        """Evaluate the kernel function."""
+
+        return truncated_normal_log_pdf(self._a, self._b, x, self._sigma, v)
+
+    cdef double integrate(self, double x, double v):
+        """Integrate over the kernel function."""
+
+        raise NotImplementedError()
 
 class KernelModel(object):
     """Kernel density estimation model."""
 
-    def __init__(self, counts, outcomes, kernel):
+    def __init__(self, counts, outcomes, success_p, kernel):
         """Initialize."""
 
         self._counts_NS = counts
         self._outcomes_NSR = outcomes
+        self._success_p_NS = success_p
         self._kernel = kernel
 
     #def condition(self, failures):
@@ -152,39 +213,52 @@ class KernelModel(object):
         for s in xrange(S):
             for m in xrange(M):
                 for q in xrange(test_counts_MS[m, s]):
-                    test_value = -INFINITY
-                    test_outcome = test_outcomes_MSQ[m, s, q]
+                    value_msq = -INFINITY
+                    outcome_msq = test_outcomes_MSQ[m, s, q]
 
                     for n in xrange(N):
-                        value = -INFINITY
                         count = self._counts_NS[n, s]
 
-                        for r in xrange(count):
-                            outcome = self._outcomes_NSR[n, s, r]
+                        if outcome_msq < 0.0:
+                            value = libc.math.log(1.0 - self._success_p_NS[n, s])
+                        else:
+                            value = -INFINITY
+                            kernels = 0
 
-                            if test_outcome < 0.0 and outcome < 0.0:
-                                value = log_plus(value, -libc.math.log(count))
-                            elif test_outcome >= 0.0 and outcome >= 0.0:
-                                log_density = kernel.log_density(test_outcome - outcome)
-                                value = log_plus(value, log_density - libc.math.log(count))
+                            for r in xrange(count):
+                                outcome = self._outcomes_NSR[n, s, r]
 
-                        test_value = log_plus(test_value, value - libc.math.log(N))
+                                if outcome >= 0.0:
+                                    kernels += 1
+                                    log_density = kernel.log_density(outcome, outcome_msq)
+                                    value = log_plus(value, log_density)
 
-                    densities_MSQ[m, s, q] = test_value
+                            if kernels > 0:
+                                value += libc.math.log(self._success_p_NS[n, s]) - libc.math.log(kernels)
+                            else:
+                                # XXX
+                                value = libc.math.log(self._success_p_NS[n, s]) - libc.math.log(6000.0)
 
-                    total_density += test_value
+                        value_msq = log_plus(value_msq, value)
+
+                    densities_MSQ[m, s, q] = value_msq - libc.math.log(N)
+
+                    total_density += value_msq
 
         return (total_density, densities_MSQ)
 
     @staticmethod
-    def fit(solver_names, training, kernel):
+    def fit(solver_names, training, kernel, alpha = 1.0 + 1e-6, beta = 1.0 + 1e-6):
         """Fit a kernel-density model."""
 
         logger.info("fitting kernel-density model")
 
         (counts_NS, outcomes_NSR) = training.to_array(solver_names)
 
-        return KernelModel(counts_NS, outcomes_NSR, kernel)
+        failures_NS = numpy.sum(outcomes_NSR < 0.0, axis = -1)
+        success_p_NS = (counts_NS - failures_NS + alpha - 1.0) / (counts_NS + alpha + beta - 2.0)
+
+        return KernelModel(counts_NS, outcomes_NSR, success_p_NS, kernel)
 
 cdef class Posterior(object):
     pass
@@ -252,7 +326,7 @@ cdef class KernelPosterior(Posterior):
 
                         if attempts_NS[n, s] > 0:
                             for k in xrange(i, j):
-                                estimate += kernel.integrate(costs_csr_sNR_data[k] - budgets_B[b])
+                                estimate += kernel.integrate(costs_csr_sNR_data[k], budgets_B[b])
 
                             estimate /= attempts_NS[n, s]
 

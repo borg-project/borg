@@ -80,7 +80,8 @@ def evaluate_split(model_name, solver_names, training, testing, suffix):
             borg.models.KernelModel.fit(
                 solver_names,
                 training,
-                borg.models.DeltaKernel(),
+                #borg.models.DeltaKernel(),
+                borg.models.TruncatedNormalKernel(0.0, 6000.0, 50.0),
                 )
     else:
         raise Exception("unrecognized model name")
@@ -94,7 +95,7 @@ def evaluate_split(model_name, solver_names, training, testing, suffix):
 
     (total, _) = model.get_run_log_probabilities(test_counts, test_outcomes)
 
-    return [training.get_run_count(), total]
+    return [training.get_run_count(), total / numpy.sum(test_counts)]
 
 def get_training_systematic(training, run_count):
     """Get a systematic subset of training data."""
@@ -158,7 +159,7 @@ def main(
     with open(out_path, "w") as out_file:
         writer = csv.writer(out_file)
 
-        writer.writerow(["training_runs", "log_density"])
+        writer.writerow(["training_runs", "mean_log_density"])
 
         cargo.do_or_distribute(yield_jobs(), workers, lambda _, r: writer.writerow(r))
 
