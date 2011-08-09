@@ -2,6 +2,7 @@ def build(context):
     context(
         source = [
             "__init__.py",
+            "test_models.py",
             ],
         install_path = "${PYTHONDIR}/borg/test",
         )

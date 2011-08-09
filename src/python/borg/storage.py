@@ -83,42 +83,47 @@ class RunData(object):
         S = len(solver_names)
         N = len(self.run_lists)
 
-        # compute the maximum run count
-        counts_NS = numpy.zeros((N, S), numpy.intc)
+        # accumulate the success and failure counts
+        successes_NS = numpy.zeros((N, S), numpy.intc)
+        failures_NS = numpy.zeros((N, S), numpy.intc)
         solver_names_S = list(solver_names)
 
         for (n, runs) in enumerate(self.run_lists.itervalues()):
             for run in runs:
                 s = solver_names_S.index(run.solver)
 
-                counts_NS[n, s] += 1
+                if run.success:
+                    successes_NS[n, s] += 1
+                else:
+                    failures_NS[n, s] += 1
 
-        R = numpy.max(counts_NS)
+        R = numpy.max(successes_NS)
 
         # fill in run durations
         durations_NSR = numpy.ones((N, S, R), numpy.double) * numpy.nan
 
-        counts_NS[...] = 0
+        successes_NS[...] = 0
 
         for (n, runs) in enumerate(self.run_lists.itervalues()):
             for run in runs:
                 s = solver_names_S.index(run.solver)
-                r = counts_NS[n, s]
+                r = successes_NS[n, s]
 
                 if run.success:
                     durations_NSR[n, s, r] = run.cost
                 else:
                     durations_NSR[n, s, r] = -1.0
 
-                counts_NS[n, s] = r + 1
+                successes_NS[n, s] = r + 1
 
-        return (counts_NS, durations_NSR)
+        return (successes_NS, failures_NS, durations_NSR)
 
     def to_bins_array(self, solver_names, B):
         """Return discretized run duration counts."""
 
         S = len(solver_names)
         N = len(self.run_lists)
+        C = B + 1
 
         successes_NSB = numpy.zeros((N, S, B), numpy.intc)
         failures_NS = numpy.zeros((N, S), numpy.intc)
@@ -137,7 +142,7 @@ class RunData(object):
                 else:
                     failures_NS[n, s] += 1
 
-        return (successes_NSB, failures_NS)
+        return counts_NSC
 
     @staticmethod
     def from_roots(tasks_roots, domain, suffix = ".runs.csv"):
@@ -177,27 +182,4 @@ class RunData(object):
         return training
 
 TrainingData = RunData
-
-def outcome_matrices_from_runs(solver_index, budgets, run_lists):
-    """Build run-outcome matrices from records."""
-
-    S = len(solver_index)
-    B = len(budgets)
-    N = len(run_lists)
-    successes = numpy.zeros((N, S, B))
-    attempts = numpy.zeros((N, S))
-
-    for (n, (_, runs)) in enumerate(run_lists.items()):
-        for run in runs:
-            s = solver_index.get(run.solver)
-
-            if s is not None and run.budget >= budgets[-1]:
-                b = numpy.digitize([run.cost], budgets)
-
-                attempts[n, s] += 1.0
-
-                if b < B and run.success:
-                    successes[n, s, b] += 1.0
-
-    return (successes, attempts)
 

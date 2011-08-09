@@ -38,6 +38,7 @@ def build(context):
 
     cython_build("models")
     cython_build("planners")
+    cython_build("statistics")
 
     context(
         source = [

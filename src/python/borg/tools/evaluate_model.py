@@ -71,9 +71,7 @@ def evaluate_split(model_name, solver_names, training, testing, suffix):
             borg.models.MultinomialModel.fit(
                 solver_names,
                 training,
-                6000.0,
-                len(training.run_lists),
-                60,
+                1000,
                 )
     elif model_name == "kernel":
         model = \
@@ -81,7 +79,7 @@ def evaluate_split(model_name, solver_names, training, testing, suffix):
                 solver_names,
                 training,
                 #borg.models.DeltaKernel(),
-                borg.models.TruncatedNormalKernel(0.0, 6000.0, 10.0),
+                borg.models.TruncatedNormalKernel(0.0, training.get_common_budget(), 2000.0),
                 )
     else:
         raise Exception("unrecognized model name")
@@ -89,11 +87,11 @@ def evaluate_split(model_name, solver_names, training, testing, suffix):
     logger.info("solver names are: %s", solver_names)
 
     # evaluate the model
-    logger.info("evaluating model on %i test runs", testing.get_run_count())
+    logger.info("evaluating model on %i test instances", len(testing.run_lists))
 
-    (successes, failures) = testing.to_bins_array(solver_names, 1000)
-    log_probabilities = model.get_log_probabilities(successes, failures)
-    mean_log_probability = numpy.sum(log_probabilities) / (failures.shape[0] * failures.shape[1])
+    counts = testing.to_bins_array(solver_names, 1000)
+    log_probabilities = borg.models.sampled_pmfs_log_pmf(counts)
+    mean_log_probability = numpy.mean(log_probabilities)
 
     return [training.get_run_count(), mean_log_probability]
 
@@ -139,7 +137,7 @@ def main(
 
         logger.info("found %i instance(s) under %s", len(paths), instances_root)
 
-        for _ in xrange(4):
+        for _ in xrange(6):
             shuffled_paths = sorted(paths, key = lambda _: numpy.random.rand())
             split_size = int(len(paths) / 2)
             train_paths = shuffled_paths[:split_size]

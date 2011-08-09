@@ -78,9 +78,9 @@ cdef class DeltaKernel(Kernel):
         """Integrate over the kernel function."""
 
         if x <= v:
-            return 1.0
-        else:
             return 0.0
+        else:
+            return -INFINITY
 
 cdef double log_erf_approximate(double x):
     """Return an approximation to the log of the error function."""
@@ -166,13 +166,14 @@ cdef class TruncatedNormalKernel(Kernel):
 class KernelModel(object):
     """Kernel density estimation model."""
 
-    def __init__(self, counts, outcomes, success_p, bound, kernel):
+    def __init__(self, successes, failures, durations, bound, alpha, kernel):
         """Initialize."""
 
-        self._counts_NS = counts
-        self._outcomes_NSR = outcomes
-        self._success_p_NS = success_p
+        self._successes_NS = successes
+        self._failures_NS = failures
+        self._durations_NSR = durations
         self._bound = bound
+        self._alpha = alpha
         self._kernel = kernel
 
     #def condition(self, failures):
@@ -215,6 +216,49 @@ class KernelModel(object):
 
         #return KernelPosterior(self, log_weights_N)
 
+    def sample(self, M, B):
+        """Return sampled runtime distributions."""
+
+        cdef Kernel kernel = self._kernel
+
+        cdef int N = self._successes_NS.shape[0]
+        cdef int S = self._successes_NS.shape[1]
+        cdef int C = B + 1
+
+        cdef numpy.ndarray[int, ndim = 2] successes_NS = self._successes_NS
+        cdef numpy.ndarray[int, ndim = 2] failures_NS = self._failures_NS
+        cdef numpy.ndarray[double, ndim = 3] durations_NSR = self._durations_NSR
+        cdef numpy.ndarray[double, ndim = 3] log_rtds_NSC = numpy.empty((N, S, C), numpy.double)
+
+        cdef double alpha = self._alpha
+        cdef double resolution = self._bound / B
+
+        for n in xrange(N):
+            for s in xrange(S):
+                # fill in bins
+                log_rtds_NSC[n, s, -1] = libc.math.log(failures_NS[n, s] + alpha - 1.0)
+
+                for b in xrange(B):
+                    log_rtds_NSC[n, s, b] = libc.math.log(alpha - 1.0)
+
+                for r in xrange(successes_NS[n, s]):
+                    for b in xrange(B):
+                        new_mass = \
+                            log_minus(
+                                kernel.integrate(durations_NSR[n, s, r], (b + 1) * resolution),
+                                kernel.integrate(durations_NSR[n, s, r], (b + 0) * resolution),
+                                )
+
+                        log_rtds_NSC[n, s, b] = log_plus(log_rtds_NSC[n, s, b], new_mass)
+
+                # then normalize
+                normalization = libc.math.log(failures_NS[n, s] + successes_NS[n, s] + C * alpha - C)
+
+                for c in xrange(C):
+                    log_rtds_NSC[n, s, c] -= normalization
+
+        return log_rtds_NSC[numpy.random.randint(N, size = M)]
+
     def get_log_probabilities(self, successes, failures):
         """Return the discretized log probablities of runs."""
 
@@ -230,7 +274,7 @@ class KernelModel(object):
         cdef numpy.ndarray[double, ndim = 3] outcomes_NSR = self._outcomes_NSR
         cdef numpy.ndarray[int, ndim = 3] successes_MSB = successes
         cdef numpy.ndarray[int, ndim = 2] failures_MS = failures
-        cdef numpy.ndarray[double, ndim = 2] logs_MS = numpy.ones((M, S), numpy.double) * numpy.nan
+        cdef numpy.ndarray[double, ndim = 1] logs_M = numpy.empty(M, numpy.double)
 
         cdef int s
         cdef int m
@@ -250,18 +294,22 @@ class KernelModel(object):
         cdef double log_cdf_upper
         cdef double log_cumulative
 
-        for s in xrange(S):
-            for m in xrange(M):
-                log_ms = -INFINITY
+        #print self._counts_NS
+        #print self._success_p_NS
+        #print self._outcomes_NSR
 
-                for n in xrange(N):
+        for m in xrange(M):
+            log_m = -INFINITY
+
+            for n in xrange(N):
+                log_mn = 0.0
+
+                for s in xrange(S):
                     # score any failures
                     count = failures_MS[m, s]
 
-                    log_msn = failures_MS[m, s] * libc.math.log(1.0 - success_p_NS[n, s])
-                    log_msn -= libc.math.lgamma(1.0 + failures_MS[m, s])
-
-                    assert log_msn > -INFINITY
+                    log_mn += failures_MS[m, s] * libc.math.log(1.0 - success_p_NS[n, s])
+                    log_mn -= libc.math.lgamma(1.0 + failures_MS[m, s])
 
                     # score any successes
                     for b in xrange(B):
@@ -289,36 +337,34 @@ class KernelModel(object):
 
                         log_cumulative = log_minus(log_cdf_upper, log_cdf_lower)
                         log_cumulative += libc.math.log(success_p_NS[n, s])
-                        log_cumulative -= libc.math.log(kernels + 1e-2)
+                        log_cumulative -= libc.math.log(kernels + B * 1e-2 / bound)
 
-                        log_msn += successes_MSB[m, s, b] * log_cumulative
-                        log_msn -= libc.math.lgamma(1.0 + successes_MSB[m, s, b])
+                        log_mn += successes_MSB[m, s, b] * log_cumulative
+                        log_mn -= libc.math.lgamma(1.0 + successes_MSB[m, s, b])
 
-                    log_msn += libc.math.lgamma(1.0 + count)
+                    log_mn += libc.math.lgamma(1.0 + count)
 
-                    log_ms = log_plus(log_ms, log_msn)
+                log_m = log_plus(log_m, log_mn)
 
-                log_ms -= libc.math.log(N)
+            log_m -= libc.math.log(N)
 
-                logs_MS[m, s] = log_ms
+            logs_M[m] = log_m
 
-        assert_positive_log_probabilities(logs_MS)
+        assert_positive_log_probabilities(logs_M)
 
-        return logs_MS
+        return logs_M
 
     @staticmethod
-    def fit(solver_names, training, kernel, alpha = 1.0 + 1e-6, beta = 1.0 + 1e-6):
+    def fit(solver_names, training, kernel, alpha = 1.0 + 1e-8):
         """Fit a kernel-density model."""
 
         logger.info("fitting kernel-density model")
 
-        (counts_NS, outcomes_NSR) = training.to_runs_array(solver_names)
+        (successes_NS, failures_NS, durations_NSR) = training.to_runs_array(solver_names)
 
         bound = training.get_common_budget()
-        failures_NS = numpy.sum(outcomes_NSR < 0.0, axis = -1)
-        success_p_NS = (counts_NS - failures_NS + alpha - 1.0) / (counts_NS + alpha + beta - 2.0)
 
-        return KernelModel(counts_NS, outcomes_NSR, success_p_NS, bound, kernel)
+        return KernelModel(successes_NS, failures_NS, durations_NSR, bound, alpha, kernel)
 
 cdef class Posterior(object):
     pass
@@ -569,12 +615,12 @@ def fit_multinomial_matrix_mixture(outcomes, attempts, K):
 class MultinomialModel(object):
     """Multinomial mixture model."""
 
-    def __init__(self, interval, components_KSC, log_weights_K):
+    def __init__(self, interval, budget, components_NSC):
         """Initialize."""
 
         self._interval = interval
-        self._components_KSC = components_KSC
-        self._log_weights_K = log_weights_K
+        self._budget = budget
+        self._components_NSC = components_NSC
 
     def condition(self, failures):
         """Return an RTD model conditioned on past runs."""
@@ -594,47 +640,59 @@ class MultinomialModel(object):
 
         return MultinomialPosterior(self, log_post_weights_K, components_cdf_KSC)
 
-    @staticmethod
-    def fit(solver_names, training, cutoff, K, B):
-        """Fit a kernel-density model."""
+    #def get_log_probabilities(self, successes, failures):
+        #"""Return the discretized log probablities of runs."""
 
-        # XXX just accept a discretization interval; find the max budget from data
+        #(N, S, C) = self._components_NSC.shape
+        #(M, _, D) = successes.shape
+
+        #successes_MSD = successes
+        #failures_MS = failures
+        #outcomes_MSC = numpy.zeros((M, S, B + 1), numpy.intc)
+
+        #outcomes_MSC[..., -1] = failures_MS
+
+        #d_interval = self._budget / D
+
+        #for d in xrange(D):
+            #c = int((d + 1) * d_interval / self._interval)
+
+        #return logs_M
+
+    @staticmethod
+    def fit(solver_names, training, B):
+        """Fit a kernel-density model."""
 
         logger.info("fitting multinomial mixture model")
 
         # mise en place
         C = B + 1
         S = len(solver_names)
-        T = len(training.run_lists)
+        N = len(training.run_lists)
 
         solver_names = list(solver_names)
 
         # discretize run data
-        interval = cutoff / B
-        outcomes_TSC = numpy.zeros((T, S, C))
+        common_budget = training.get_common_budget()
+        interval = common_budget / B
+        outcomes_NSC = numpy.zeros((N, S, C))
 
         for (t, runs) in enumerate(training.run_lists.values()):
             for run in runs:
                 s = solver_names.index(run.solver)
 
-                if run.success and run.cost < cutoff:
+                if run.success and run.cost < common_budget:
                     c = int(run.cost / interval)
 
-                    outcomes_TSC[t, s, c] += 1
+                    outcomes_NSC[t, s, c] += 1
                 else:
-                    outcomes_TSC[t, s, B] += 1
+                    outcomes_NSC[t, s, B] += 1
 
         # fit the mixture model
-        attempts_TS = numpy.sum(outcomes_TSC, axis = -1)
+        attempts_NS = numpy.sum(outcomes_NSC, axis = -1)
+        components_NSC = outcomes_NSC / attempts_NS[..., None]
 
-        (components_KSC, log_weights_K) = \
-            fit_multinomial_matrix_mixture(
-                outcomes_TSC,
-                attempts_TS,
-                K,
-                )
-
-        return MultinomialModel(interval, components_KSC, log_weights_K)
+        return MultinomialModel(interval, common_budget, components_NSC)
 
 cdef class MultinomialPosterior(Posterior):
     """Conditioned multinomial mixture model."""
@@ -681,6 +739,44 @@ cdef class MultinomialPosterior(Posterior):
             log_cdf_KSB[:, :, indices_B > 0] = numpy.log(self._components_cdf_KSC[:, :, indices_B[indices_B > 0] - 1])
 
             return log_cdf_KSB
+
+def sampled_pmfs_log_pmf(pmfs, counts):
+    """Compute the log probabilities of instance runs given discrete CDFs."""
+
+    pmfs_NSC = pmfs
+    counts_MSC = counts
+
+    (N, S, C) = pmfs_NSC.shape
+    (M, _, _) = counts_MSC.shape
+
+    logs_M = numpy.empty(M, numpy.double)
+
+    for m in xrange(M):
+        log_m = -INFINITY
+
+        for n in xrange(N):
+            log_mn = 0.0
+
+            for s in xrange(S):
+                sum_counts_ms = 0
+
+                for c in xrange(C):
+                    counts_msc = counts_MSC[m, s, c]
+
+                    sum_counts_ms += counts_msc
+
+                    log_mn += counts_msc * libc.math.log(pmfs_NSC[n, s, c])
+                    log_mn -= libc.math.lgamma(1.0 + counts_msc)
+
+                log_mn += libc.math.lgamma(1.0 + sum_counts_ms)
+
+            log_m = log_plus(log_m, log_mn)
+
+        log_m -= libc.math.log(N)
+
+        logs_M[m] = log_m
+
+    return logs_M
 
 named = {
     "kernel": KernelModel,
