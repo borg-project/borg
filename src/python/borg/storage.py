@@ -77,7 +77,7 @@ class RunData(object):
 
         return budget
 
-    def to_array(self, solver_names):
+    def to_runs_array(self, solver_names):
         """Return run durations as a partially-filled array."""
 
         S = len(solver_names)
@@ -113,6 +113,31 @@ class RunData(object):
                 counts_NS[n, s] = r + 1
 
         return (counts_NS, durations_NSR)
+
+    def to_bins_array(self, solver_names, B):
+        """Return discretized run duration counts."""
+
+        S = len(solver_names)
+        N = len(self.run_lists)
+
+        successes_NSB = numpy.zeros((N, S, B), numpy.intc)
+        failures_NS = numpy.zeros((N, S), numpy.intc)
+
+        cutoff = self.get_common_budget()
+        interval = cutoff / B
+
+        for (n, runs) in enumerate(self.run_lists.values()):
+            for run in runs:
+                s = solver_names.index(run.solver)
+
+                if run.success and run.cost < cutoff:
+                    b = int(run.cost / interval)
+
+                    successes_NSB[n, s, b] += 1
+                else:
+                    failures_NS[n, s] += 1
+
+        return (successes_NSB, failures_NS)
 
     @staticmethod
     def from_roots(tasks_roots, domain, suffix = ".runs.csv"):

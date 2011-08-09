@@ -81,7 +81,7 @@ def evaluate_split(model_name, solver_names, training, testing, suffix):
                 solver_names,
                 training,
                 #borg.models.DeltaKernel(),
-                borg.models.TruncatedNormalKernel(0.0, 6000.0, 50.0),
+                borg.models.TruncatedNormalKernel(0.0, 6000.0, 10.0),
                 )
     else:
         raise Exception("unrecognized model name")
@@ -91,11 +91,11 @@ def evaluate_split(model_name, solver_names, training, testing, suffix):
     # evaluate the model
     logger.info("evaluating model on %i test runs", testing.get_run_count())
 
-    (test_counts, test_outcomes) = testing.to_array(solver_names)
+    (successes, failures) = testing.to_bins_array(solver_names, 1000)
+    log_probabilities = model.get_log_probabilities(successes, failures)
+    mean_log_probability = numpy.sum(log_probabilities) / (failures.shape[0] * failures.shape[1])
 
-    (total, _) = model.get_run_log_probabilities(test_counts, test_outcomes)
-
-    return [training.get_run_count(), total / numpy.sum(test_counts)]
+    return [training.get_run_count(), mean_log_probability]
 
 def get_training_systematic(training, run_count):
     """Get a systematic subset of training data."""

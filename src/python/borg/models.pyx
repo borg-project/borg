@@ -26,6 +26,12 @@ def assert_log_probabilities(array):
 
     assert numpy.all(array <= 0.0)
 
+def assert_positive_log_probabilities(array):
+    """Assert that an array contains only valid positive probabilities."""
+
+    assert numpy.all(array <= 0.0)
+    assert numpy.all(array > -numpy.inf)
+
 def assert_weights(array, axis = None):
     """Assert than an array sums to one over a particular axis."""
 
@@ -62,22 +68,11 @@ cdef double log_minus(double x, double y):
 cdef class Kernel(object):
     """Kernel function interface."""
 
-    cdef double log_density(self, double x, double v):
-        """Evaluate the kernel function."""
-
     cdef double integrate(self, double x, double v):
         """Integrate over the kernel function."""
 
 cdef class DeltaKernel(Kernel):
     """Delta-function kernel."""
-
-    cdef double log_density(self, double x, double v):
-        """Evaluate the kernel function."""
-
-        if x == v:
-            return 0.0
-        else:
-            return -INFINITY
 
     cdef double integrate(self, double x, double v):
         """Integrate over the kernel function."""
@@ -87,6 +82,17 @@ cdef class DeltaKernel(Kernel):
         else:
             return 0.0
 
+cdef double log_erf_approximate(double x):
+    """Return an approximation to the log of the error function."""
+
+    if x < 0.0:
+        return libc.math.NAN
+
+    a = (8.0 * (libc.math.M_PI - 3.0)) / (3.0 * libc.math.M_PI * (4.0 - libc.math.M_PI))
+    v = x * x * (4.0 / libc.math.M_PI + a * x * x) / (1.0 + a * x * x)
+
+    return log_minus(0.0, v) / 2.0
+
 cdef double standard_normal_log_pdf(double x):
     """Compute the log of the standard normal PDF."""
 
@@ -95,6 +101,9 @@ cdef double standard_normal_log_pdf(double x):
 cdef double standard_normal_log_cdf(double x):
     """Compute the log of the standard normal CDF."""
 
+    #if libc.math.abs(x) > 8.0:
+        #return log_plus(0.0, log_erf_approximate(x / libc.math.M_SQRT2)) - libc.math.log(2.0)
+    #else:
     return libc.math.log((1.0 + libc.math.erf(x / libc.math.M_SQRT2)) / 2.0)
 
 cdef double normal_log_pdf(double mu, double sigma, double x):
@@ -121,6 +130,20 @@ cdef double truncated_normal_log_pdf(double a, double b, double mu, double sigma
 
     return upper - log_minus(lower_lhs, lower_rhs)
 
+cdef double truncated_normal_log_cdf(double a, double b, double mu, double sigma, double x):
+    """Compute the log of the truncated normal CDF."""
+
+    cdef double upper_lhs = standard_normal_log_cdf((x - mu) / sigma)
+    cdef double upper_rhs = standard_normal_log_cdf((a - mu) / sigma)
+    cdef double lower_lhs = standard_normal_log_cdf((b - mu) / sigma)
+    cdef double lower_rhs = upper_rhs
+    cdef double value = log_minus(upper_lhs, upper_rhs) - log_minus(lower_lhs, lower_rhs)
+
+    #if value == -INFINITY:
+        #print "cdf({0}, {1}, {2}) = {3}".format(mu, sigma, x, value)
+
+    return value
+
 cdef class TruncatedNormalKernel(Kernel):
     """Truncated Gaussian kernel."""
 
@@ -135,25 +158,21 @@ cdef class TruncatedNormalKernel(Kernel):
         self._b = b
         self._sigma = sigma
 
-    cdef double log_density(self, double x, double v):
-        """Evaluate the kernel function."""
-
-        return truncated_normal_log_pdf(self._a, self._b, x, self._sigma, v)
-
     cdef double integrate(self, double x, double v):
         """Integrate over the kernel function."""
 
-        raise NotImplementedError()
+        return truncated_normal_log_cdf(self._a, self._b, x, self._sigma, v)
 
 class KernelModel(object):
     """Kernel density estimation model."""
 
-    def __init__(self, counts, outcomes, success_p, kernel):
+    def __init__(self, counts, outcomes, success_p, bound, kernel):
         """Initialize."""
 
         self._counts_NS = counts
         self._outcomes_NSR = outcomes
         self._success_p_NS = success_p
+        self._bound = bound
         self._kernel = kernel
 
     #def condition(self, failures):
@@ -196,56 +215,96 @@ class KernelModel(object):
 
         #return KernelPosterior(self, log_weights_N)
 
-    def get_run_log_probabilities(self, test_counts, test_outcomes):
-        """Return the log probablities of an array of runs."""
+    def get_log_probabilities(self, successes, failures):
+        """Return the discretized log probablities of runs."""
 
         cdef Kernel kernel = self._kernel
 
-        (N, _) = self._counts_NS.shape
-        (M, S, Q) = test_outcomes.shape
+        cdef int N = self._counts_NS.shape[0]
+        cdef int S = self._counts_NS.shape[1]
+        cdef int M = successes.shape[0]
+        cdef int B = successes.shape[2]
 
-        test_counts_MS = test_counts
-        test_outcomes_MSQ = test_outcomes
+        cdef numpy.ndarray[int, ndim = 2] counts_NS = self._counts_NS
+        cdef numpy.ndarray[double, ndim = 2] success_p_NS = self._success_p_NS
+        cdef numpy.ndarray[double, ndim = 3] outcomes_NSR = self._outcomes_NSR
+        cdef numpy.ndarray[int, ndim = 3] successes_MSB = successes
+        cdef numpy.ndarray[int, ndim = 2] failures_MS = failures
+        cdef numpy.ndarray[double, ndim = 2] logs_MS = numpy.ones((M, S), numpy.double) * numpy.nan
 
-        densities_MSQ = numpy.ones((M, S, Q), numpy.double) * numpy.nan
-        total_density = 0.0
+        cdef int s
+        cdef int m
+        cdef int n
+        cdef int b
+        cdef int r
+
+        cdef int count
+        cdef int kernels
+        cdef double bound = self._bound
+        cdef double outcome
+        cdef double log_ms
+        cdef double log_msn
+        cdef double bin_lower
+        cdef double bin_upper
+        cdef double log_cdf_lower
+        cdef double log_cdf_upper
+        cdef double log_cumulative
 
         for s in xrange(S):
             for m in xrange(M):
-                for q in xrange(test_counts_MS[m, s]):
-                    value_msq = -INFINITY
-                    outcome_msq = test_outcomes_MSQ[m, s, q]
+                log_ms = -INFINITY
 
-                    for n in xrange(N):
-                        count = self._counts_NS[n, s]
+                for n in xrange(N):
+                    # score any failures
+                    count = failures_MS[m, s]
 
-                        if outcome_msq < 0.0:
-                            value = libc.math.log(1.0 - self._success_p_NS[n, s])
-                        else:
-                            value = -INFINITY
-                            kernels = 0
+                    log_msn = failures_MS[m, s] * libc.math.log(1.0 - success_p_NS[n, s])
+                    log_msn -= libc.math.lgamma(1.0 + failures_MS[m, s])
 
-                            for r in xrange(count):
-                                outcome = self._outcomes_NSR[n, s, r]
+                    assert log_msn > -INFINITY
 
-                                if outcome >= 0.0:
-                                    kernels += 1
-                                    log_density = kernel.log_density(outcome, outcome_msq)
-                                    value = log_plus(value, log_density)
+                    # score any successes
+                    for b in xrange(B):
+                        if successes_MSB[m, s, b] == 0:
+                            continue
 
-                            if kernels > 0:
-                                value += libc.math.log(self._success_p_NS[n, s]) - libc.math.log(kernels)
-                            else:
-                                # XXX
-                                value = libc.math.log(self._success_p_NS[n, s]) - libc.math.log(6000.0)
+                        count += successes_MSB[m, s, b]
 
-                        value_msq = log_plus(value_msq, value)
+                        bin_lower = (bound / B) * b
+                        bin_upper = (bound / B) * (b + 1)
 
-                    densities_MSQ[m, s, q] = value_msq - libc.math.log(N)
+                        log_cdf_lower = -INFINITY
+                        log_cdf_upper = libc.math.log(1e-2 / bound)
 
-                    total_density += value_msq
+                        kernels = 0
 
-        return (total_density, densities_MSQ)
+                        for r in xrange(counts_NS[n, s]):
+                            outcome = outcomes_NSR[n, s, r]
+
+                            if outcome >= 0.0:
+                                kernels += 1
+
+                                log_cdf_lower = log_plus(log_cdf_lower, kernel.integrate(outcome, bin_lower))
+                                log_cdf_upper = log_plus(log_cdf_upper, kernel.integrate(outcome, bin_upper))
+
+                        log_cumulative = log_minus(log_cdf_upper, log_cdf_lower)
+                        log_cumulative += libc.math.log(success_p_NS[n, s])
+                        log_cumulative -= libc.math.log(kernels + 1e-2)
+
+                        log_msn += successes_MSB[m, s, b] * log_cumulative
+                        log_msn -= libc.math.lgamma(1.0 + successes_MSB[m, s, b])
+
+                    log_msn += libc.math.lgamma(1.0 + count)
+
+                    log_ms = log_plus(log_ms, log_msn)
+
+                log_ms -= libc.math.log(N)
+
+                logs_MS[m, s] = log_ms
+
+        assert_positive_log_probabilities(logs_MS)
+
+        return logs_MS
 
     @staticmethod
     def fit(solver_names, training, kernel, alpha = 1.0 + 1e-6, beta = 1.0 + 1e-6):
@@ -253,12 +312,13 @@ class KernelModel(object):
 
         logger.info("fitting kernel-density model")
 
-        (counts_NS, outcomes_NSR) = training.to_array(solver_names)
+        (counts_NS, outcomes_NSR) = training.to_runs_array(solver_names)
 
+        bound = training.get_common_budget()
         failures_NS = numpy.sum(outcomes_NSR < 0.0, axis = -1)
         success_p_NS = (counts_NS - failures_NS + alpha - 1.0) / (counts_NS + alpha + beta - 2.0)
 
-        return KernelModel(counts_NS, outcomes_NSR, success_p_NS, kernel)
+        return KernelModel(counts_NS, outcomes_NSR, success_p_NS, bound, kernel)
 
 cdef class Posterior(object):
     pass
