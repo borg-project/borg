@@ -36,9 +36,13 @@ def test_kernel_model_sample():
             [[numpy.nan], [numpy.nan]],
             ])
     kernel = borg.models.DeltaKernel()
-    model = borg.models.KernelModel(successes, failures, durations, 100.0, 1.0 + 1e-8, kernel)
-    samples = model.sample(10, 4)
+    alpha = 1.0 + 1e-8
+    model = borg.models.KernelModel(successes, failures, durations, 100.0, alpha, kernel)
+    samples = model.sample(16, 4)
 
-    nose.tools.assert_equal(samples.shape[0], 10)
     nose.tools.assert_true(numpy.all(numpy.logaddexp.reduce(samples, axis = -1) < 1e-10))
+    nose.tools.assert_true(numpy.any(numpy.abs(samples[..., 0] - numpy.log((alpha) / (5 * alpha - 4))) < 1e-10))
+    nose.tools.assert_true(numpy.any(numpy.abs(samples[..., -1] - numpy.log(1.0 / 5)) < 1e-10))
+    nose.tools.assert_true(numpy.any(numpy.abs(samples[..., -1] - numpy.log((alpha) / (5 * alpha - 4))) < 1e-10))
+    nose.tools.assert_true(numpy.any(numpy.abs(samples[..., -1] - numpy.log((alpha - 1) / (5 * alpha - 4))) < 1e-10))
 
