@@ -22,26 +22,7 @@ def simulate_split(model_name, suite_path, training, test_paths, suffix):
     logger.info("building portfolio given %i training runs", training.get_run_count())
 
     suite = borg.fake.FakeSuite(borg.load_solvers(suite_path), test_paths, suffix)
-
-    if model_name == "multinomial":
-        model = \
-            borg.models.MultinomialModel.fit(
-                suite.solvers,
-                training,
-                6000.0,
-                len(training.run_lists),
-                60,
-                )
-    elif model_name == "kernel":
-        model = \
-            borg.models.KernelModel.fit(
-                suite.solvers,
-                training,
-                borg.models.DeltaKernel(),
-                )
-    else:
-        raise Exception("unrecognized model name")
-
+    # XXX instantiate model
     portfolio = borg.portfolios.MixturePortfolio(suite, model)
     solver = borg.solver_io.RunningPortfolioFactory(portfolio, suite)
 
@@ -81,7 +62,7 @@ def evaluate_split(model_name, solver_names, training, testing):
 
     if model_name == "multinomial":
         model = \
-            borg.models.MultinomialModel.fit(
+            borg.models.SolverPriorMultinomialModel.fit(
                 solver_names,
                 training,
                 resolution,
@@ -91,8 +72,8 @@ def evaluate_split(model_name, solver_names, training, testing):
             borg.models.KernelModel.fit(
                 solver_names,
                 training,
-                borg.models.DeltaKernel(),
-                #borg.models.TruncatedNormalKernel(0.0, training.get_common_budget(), 100.0),
+                #borg.models.DeltaKernel(),
+                borg.models.TruncatedNormalKernel(0.0, training.get_common_budget(), 2000.0),
                 )
     else:
         raise Exception("unrecognized model name")
@@ -144,7 +125,7 @@ def main(
 
         logger.info("found %i instance(s) under %s", len(paths), instances_root)
 
-        for _ in xrange(1):
+        for _ in xrange(6):
             shuffled_paths = sorted(paths, key = lambda _: numpy.random.rand())
             split_size = int(len(paths) / 2)
             train_paths = shuffled_paths[:split_size]

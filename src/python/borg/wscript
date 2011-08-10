@@ -58,6 +58,7 @@ def build(context):
         install_path,
         [
             "models.pxd",
+            "statistics.pxd",
             ],
         )
 
