@@ -60,40 +60,47 @@ def simulate_split(model_name, suite_path, training, test_paths, suffix):
 
     return [training.get_run_count(), successes]
 
-def evaluate_split(model_name, solver_names, training, testing, suffix):
+def score_model_log_probability(model, resolution, testing, solver_names):
+    """Return a score for this model."""
+
+    logger.info("considering %i instances under model", len(testing.run_lists))
+
+    counts = testing.to_bins_array(solver_names, resolution)
+    samples = model.sample(128, resolution)
+    log_probabilities = borg.models.sampled_pmfs_log_pmf(samples, counts)
+
+    return numpy.mean(log_probabilities)
+
+def evaluate_split(model_name, solver_names, training, testing):
     """Evaluate model generalization."""
 
     # build the model
     logger.info("building %s model given %i training runs", model_name, training.get_run_count())
+
+    resolution = 10
 
     if model_name == "multinomial":
         model = \
             borg.models.MultinomialModel.fit(
                 solver_names,
                 training,
-                1000,
+                resolution,
                 )
     elif model_name == "kernel":
         model = \
             borg.models.KernelModel.fit(
                 solver_names,
                 training,
-                #borg.models.DeltaKernel(),
-                borg.models.TruncatedNormalKernel(0.0, training.get_common_budget(), 2000.0),
+                borg.models.DeltaKernel(),
+                #borg.models.TruncatedNormalKernel(0.0, training.get_common_budget(), 100.0),
                 )
     else:
         raise Exception("unrecognized model name")
 
-    logger.info("solver names are: %s", solver_names)
-
     # evaluate the model
-    logger.info("evaluating model on %i test instances", len(testing.run_lists))
+    score = score_model_log_probability(model, resolution, testing, solver_names)
 
-    counts = testing.to_bins_array(solver_names, 1000)
-    log_probabilities = borg.models.sampled_pmfs_log_pmf(counts)
-    mean_log_probability = numpy.mean(log_probabilities)
-
-    return [training.get_run_count(), mean_log_probability]
+    return [training.get_run_count(), score]
 
 def get_training_systematic(training, run_count):
     """Get a systematic subset of training data."""
@@ -137,7 +144,7 @@ def main(
 
         logger.info("found %i instance(s) under %s", len(paths), instances_root)
 
-        for _ in xrange(6):
+        for _ in xrange(1):
             shuffled_paths = sorted(paths, key = lambda _: numpy.random.rand())
             split_size = int(len(paths) / 2)
             train_paths = shuffled_paths[:split_size]
@@ -151,7 +158,7 @@ def main(
 
                 yield (
                     evaluate_split,
-                    [model_name, suite.solvers.keys(), subset, testing, suffix],
+                    [model_name, suite.solvers.keys(), subset, testing],
                     )
 
     with open(out_path, "w") as out_file:

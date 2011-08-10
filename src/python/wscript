@@ -5,10 +5,14 @@ def options(context):
 
 def configure(context):
     context.load("compiler_c")
+
     context.load("python")
     context.check_python_headers()
     context.check_python_version((2, 6))
+
     context.load("cython")
+
+    context.env.append_unique("CFLAGS", ["-O3"])
 
     context.recurse("borg")
 

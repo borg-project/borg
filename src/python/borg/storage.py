@@ -107,14 +107,13 @@ class RunData(object):
         for (n, runs) in enumerate(self.run_lists.itervalues()):
             for run in runs:
                 s = solver_names_S.index(run.solver)
-                r = successes_NS[n, s]
 
                 if run.success:
-                    durations_NSR[n, s, r] = run.cost
-                else:
-                    durations_NSR[n, s, r] = -1.0
+                    r = successes_NS[n, s]
 
-                successes_NS[n, s] = r + 1
+                    durations_NSR[n, s, r] = run.cost
+
+                    successes_NS[n, s] = r + 1
 
         return (successes_NS, failures_NS, durations_NSR)
 
@@ -125,24 +124,23 @@ class RunData(object):
         N = len(self.run_lists)
         C = B + 1
 
-        successes_NSB = numpy.zeros((N, S, B), numpy.intc)
-        failures_NS = numpy.zeros((N, S), numpy.intc)
-
+        solver_name_index = list(solver_names)
+        outcomes_NSC = numpy.zeros((N, S, C), numpy.intc)
         cutoff = self.get_common_budget()
         interval = cutoff / B
 
         for (n, runs) in enumerate(self.run_lists.values()):
             for run in runs:
-                s = solver_names.index(run.solver)
+                s = solver_name_index.index(run.solver)
 
                 if run.success and run.cost < cutoff:
                     b = int(run.cost / interval)
 
-                    successes_NSB[n, s, b] += 1
+                    outcomes_NSC[n, s, b] += 1
                 else:
-                    failures_NS[n, s] += 1
+                    outcomes_NSC[n, s, B] += 1
 
-        return counts_NSC
+        return outcomes_NSC
 
     @staticmethod
     def from_roots(tasks_roots, domain, suffix = ".runs.csv"):

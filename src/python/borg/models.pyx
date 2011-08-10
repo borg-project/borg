@@ -217,7 +217,7 @@ class KernelModel(object):
         #return KernelPosterior(self, log_weights_N)
 
     def sample(self, M, B):
-        """Return sampled runtime distributions."""
+        """Sample discrete RTDs from this distribution."""
 
         cdef Kernel kernel = self._kernel
 
@@ -259,101 +259,6 @@ class KernelModel(object):
 
         return log_rtds_NSC[numpy.random.randint(N, size = M)]
 
-    def get_log_probabilities(self, successes, failures):
-        """Return the discretized log probablities of runs."""
-
-        cdef Kernel kernel = self._kernel
-
-        cdef int N = self._counts_NS.shape[0]
-        cdef int S = self._counts_NS.shape[1]
-        cdef int M = successes.shape[0]
-        cdef int B = successes.shape[2]
-
-        cdef numpy.ndarray[int, ndim = 2] counts_NS = self._counts_NS
-        cdef numpy.ndarray[double, ndim = 2] success_p_NS = self._success_p_NS
-        cdef numpy.ndarray[double, ndim = 3] outcomes_NSR = self._outcomes_NSR
-        cdef numpy.ndarray[int, ndim = 3] successes_MSB = successes
-        cdef numpy.ndarray[int, ndim = 2] failures_MS = failures
-        cdef numpy.ndarray[double, ndim = 1] logs_M = numpy.empty(M, numpy.double)
-
-        cdef int s
-        cdef int m
-        cdef int n
-        cdef int b
-        cdef int r
-
-        cdef int count
-        cdef int kernels
-        cdef double bound = self._bound
-        cdef double outcome
-        cdef double log_ms
-        cdef double log_msn
-        cdef double bin_lower
-        cdef double bin_upper
-        cdef double log_cdf_lower
-        cdef double log_cdf_upper
-        cdef double log_cumulative
-
-        #print self._counts_NS
-        #print self._success_p_NS
-        #print self._outcomes_NSR
-
-        for m in xrange(M):
-            log_m = -INFINITY
-
-            for n in xrange(N):
-                log_mn = 0.0
-
-                for s in xrange(S):
-                    # score any failures
-                    count = failures_MS[m, s]
-
-                    log_mn += failures_MS[m, s] * libc.math.log(1.0 - success_p_NS[n, s])
-                    log_mn -= libc.math.lgamma(1.0 + failures_MS[m, s])
-
-                    # score any successes
-                    for b in xrange(B):
-                        if successes_MSB[m, s, b] == 0:
-                            continue
-
-                        count += successes_MSB[m, s, b]
-
-                        bin_lower = (bound / B) * b
-                        bin_upper = (bound / B) * (b + 1)
-
-                        log_cdf_lower = -INFINITY
-                        log_cdf_upper = libc.math.log(1e-2 / bound)
-
-                        kernels = 0
-
-                        for r in xrange(counts_NS[n, s]):
-                            outcome = outcomes_NSR[n, s, r]
-
-                            if outcome >= 0.0:
-                                kernels += 1
-
-                                log_cdf_lower = log_plus(log_cdf_lower, kernel.integrate(outcome, bin_lower))
-                                log_cdf_upper = log_plus(log_cdf_upper, kernel.integrate(outcome, bin_upper))
-
-                        log_cumulative = log_minus(log_cdf_upper, log_cdf_lower)
-                        log_cumulative += libc.math.log(success_p_NS[n, s])
-                        log_cumulative -= libc.math.log(kernels + B * 1e-2 / bound)
-
-                        log_mn += successes_MSB[m, s, b] * log_cumulative
-                        log_mn -= libc.math.lgamma(1.0 + successes_MSB[m, s, b])
-
-                    log_mn += libc.math.lgamma(1.0 + count)
-
-                log_m = log_plus(log_m, log_mn)
-
-            log_m -= libc.math.log(N)
-
-            logs_M[m] = log_m
-
-        assert_positive_log_probabilities(logs_M)
-
-        return logs_M
-
     @staticmethod
     def fit(solver_names, training, kernel, alpha = 1.0 + 1e-8):
         """Fit a kernel-density model."""
@@ -365,83 +270,6 @@ class KernelModel(object):
         bound = training.get_common_budget()
 
         return KernelModel(successes_NS, failures_NS, durations_NSR, bound, alpha, kernel)
-
-cdef class Posterior(object):
-    pass
-
-cdef class KernelPosterior(Posterior):
-    """Conditioned kernel density model."""
-
-    cdef object _model
-    cdef object _log_weights_N
-
-    def __init__(self, model, log_weights_N):
-        """Initialize."""
-
-        self._model = model
-        self._log_weights_N = log_weights_N
-
-    @property
-    def components(self):
-        """The number of mixture components."""
-
-        return self._log_weights_N.size
-
-    def get_weights(self):
-        """The weights of mixture components in the model."""
-
-        return self._log_weights_N
-
-    def get_log_cdf_array(self, budgets):
-        """Compute the log CDF."""
-
-        cdef Kernel kernel = self._model._kernel
-
-        cdef int N = self._model._attempts_NS.shape[0]
-        cdef int S = self._model._attempts_NS.shape[1]
-        cdef int B = budgets.shape[0]
-
-        cdef numpy.ndarray[long, ndim = 2] attempts_NS = self._model._attempts_NS
-        cdef numpy.ndarray[double, ndim = 1] budgets_B = budgets
-        cdef numpy.ndarray[double, ndim = 3] log_cdf_NSB = numpy.empty((N, S, B))
-
-        cdef int i
-        cdef int j
-        cdef int k
-        cdef int n
-        cdef double estimate = 0.0
-
-        cdef numpy.ndarray[int] costs_csr_sNR_indptr
-        cdef numpy.ndarray[double] costs_csr_sNR_data
-
-        for s in xrange(S):
-            costs_csr_sNR = self._model._costs_csr_SNR[s]
-
-            if costs_csr_sNR is None:
-                log_cdf_NSB[:, s, :] = -INFINITY
-            else:
-                costs_csr_sNR_indptr = costs_csr_sNR.indptr
-                costs_csr_sNR_data = costs_csr_sNR.data
-
-                for n in xrange(N):
-                    i = costs_csr_sNR_indptr[n]
-                    j = costs_csr_sNR_indptr[n + 1]
-
-                    for b in xrange(B):
-                        estimate = 0.0
-
-                        if attempts_NS[n, s] > 0:
-                            for k in xrange(i, j):
-                                estimate += kernel.integrate(costs_csr_sNR_data[k], budgets_B[b])
-
-                            estimate /= attempts_NS[n, s]
-
-                        if estimate > 0.0:
-                            log_cdf_NSB[n, s, b] = libc.math.log(estimate)
-                        else:
-                            log_cdf_NSB[n, s, b] = -INFINITY
-
-        return log_cdf_NSB
 
 def multinomial_log_mass(counts, total_counts, beta):
     """Compute multinomial log probability."""
@@ -615,141 +443,82 @@ def fit_multinomial_matrix_mixture(outcomes, attempts, K):
 class MultinomialModel(object):
     """Multinomial mixture model."""
 
-    def __init__(self, interval, budget, components_NSC):
+    def __init__(self, log_components_NSC):
         """Initialize."""
 
-        self._interval = interval
-        self._budget = budget
-        self._components_NSC = components_NSC
+        self._log_components_NSC = log_components_NSC
 
-    def condition(self, failures):
-        """Return an RTD model conditioned on past runs."""
+    #def condition(self, failures):
+        #"""Return an RTD model conditioned on past runs."""
 
-        log_post_weights_K = numpy.copy(self._log_weights_K)
-        components_cdf_KSC = numpy.cumsum(self._components_KSC, axis = -1)
+        #log_post_weights_K = numpy.copy(self._log_weights_K)
+        #components_cdf_KSC = numpy.cumsum(self._components_KSC, axis = -1)
 
-        for (s, budget) in failures:
-            c = int(budget / self._interval)
+        #for (s, budget) in failures:
+            #c = int(budget / self._interval)
 
-            if c > 0:
-                log_post_weights_K += numpy.log(1.0 - components_cdf_KSC[:, s, c - 1])
+            #if c > 0:
+                #log_post_weights_K += numpy.log(1.0 - components_cdf_KSC[:, s, c - 1])
 
-        log_post_weights_K -= numpy.logaddexp.reduce(log_post_weights_K)
+        #log_post_weights_K -= numpy.logaddexp.reduce(log_post_weights_K)
 
-        assert not numpy.any(numpy.isnan(log_post_weights_K))
+        #assert not numpy.any(numpy.isnan(log_post_weights_K))
 
-        return MultinomialPosterior(self, log_post_weights_K, components_cdf_KSC)
+        #return MultinomialPosterior(self, log_post_weights_K, components_cdf_KSC)
 
-    #def get_log_probabilities(self, successes, failures):
-        #"""Return the discretized log probablities of runs."""
+    def sample(self, M, B):
+        """Sample discrete RTDs from this distribution."""
 
-        #(N, S, C) = self._components_NSC.shape
-        #(M, _, D) = successes.shape
+        (N, _, C) = self._log_components_NSC.shape
 
-        #successes_MSD = successes
-        #failures_MS = failures
-        #outcomes_MSC = numpy.zeros((M, S, B + 1), numpy.intc)
+        if B + 1 != C:
+            raise ValueError("discretization mismatch")
 
-        #outcomes_MSC[..., -1] = failures_MS
+        return self._log_components_NSC[numpy.random.randint(N, size = M)]
 
-        #d_interval = self._budget / D
+    @property
+    def log_components(self):
+        """Multinomial components of the model."""
 
-        #for d in xrange(D):
-            #c = int((d + 1) * d_interval / self._interval)
-
-        #return logs_M
+        return self._log_components_NSC
 
     @staticmethod
-    def fit(solver_names, training, B):
+    def fit(solver_names, training, B, alpha = 1.0 + 1e-8):
         """Fit a kernel-density model."""
 
         logger.info("fitting multinomial mixture model")
 
-        # mise en place
         C = B + 1
-        S = len(solver_names)
-        N = len(training.run_lists)
 
-        solver_names = list(solver_names)
+        outcomes_NSC = training.to_bins_array(solver_names, B)
+        attempts_NSC = numpy.sum(outcomes_NSC, axis = -1)[..., None]
 
-        # discretize run data
-        common_budget = training.get_common_budget()
-        interval = common_budget / B
-        outcomes_NSC = numpy.zeros((N, S, C))
+        log_components_NSC = numpy.log(outcomes_NSC + alpha - 1.0)
+        log_components_NSC -= numpy.log(attempts_NSC + C * alpha - C)
 
-        for (t, runs) in enumerate(training.run_lists.values()):
-            for run in runs:
-                s = solver_names.index(run.solver)
-
-                if run.success and run.cost < common_budget:
-                    c = int(run.cost / interval)
-
-                    outcomes_NSC[t, s, c] += 1
-                else:
-                    outcomes_NSC[t, s, B] += 1
-
-        # fit the mixture model
-        attempts_NS = numpy.sum(outcomes_NSC, axis = -1)
-        components_NSC = outcomes_NSC / attempts_NS[..., None]
-
-        return MultinomialModel(interval, common_budget, components_NSC)
-
-cdef class MultinomialPosterior(Posterior):
-    """Conditioned multinomial mixture model."""
-
-    cdef object _model
-    cdef object _log_weights_K
-    cdef object _components_cdf_KSC
-
-    def __init__(self, model, log_weights_K, components_cdf_KSC):
-        """Initialize."""
-
-        self._model = model
-        self._log_weights_K = log_weights_K
-        self._components_cdf_KSC = numpy.cumsum(model._components_KSC, axis = -1)
-
-    @property
-    def components(self):
-        """The number of mixture components."""
-
-        return self._log_weights_K.size
-
-    def get_weights(self):
-        """The weights of mixture components in the model."""
-
-        return self._log_weights_K
-
-    def get_log_cdf_array(self, budgets):
-        """Compute the log CDF."""
-
-        budgets_B = budgets
-
-        K = self._components_cdf_KSC.shape[0]
-        S = self._components_cdf_KSC.shape[1]
-        B = budgets.shape[0]
-
-        if B == 0:
-            return numpy.empty((K, S, B))
-        else:
-            indices_B = numpy.array(budgets_B / self._model._interval, numpy.intc)
-
-            log_cdf_KSB = numpy.empty((K, S, B))
-
-            log_cdf_KSB[:, :, indices_B == 0] = -numpy.inf
-            log_cdf_KSB[:, :, indices_B > 0] = numpy.log(self._components_cdf_KSC[:, :, indices_B[indices_B > 0] - 1])
-
-            return log_cdf_KSB
+        return MultinomialModel(log_components_NSC)
 
 def sampled_pmfs_log_pmf(pmfs, counts):
-    """Compute the log probabilities of instance runs given discrete CDFs."""
+    """Compute the log probabilities of instance runs given discrete log PMFs."""
 
-    pmfs_NSC = pmfs
-    counts_MSC = counts
+    cdef int N = pmfs.shape[0]
+    cdef int S = pmfs.shape[1]
+    cdef int C = pmfs.shape[2]
+    cdef int M = counts.shape[0]
 
-    (N, S, C) = pmfs_NSC.shape
-    (M, _, _) = counts_MSC.shape
+    cdef numpy.ndarray[double, ndim = 3] pmfs_NSC = pmfs
+    cdef numpy.ndarray[int, ndim = 3] counts_MSC = counts
+    cdef numpy.ndarray[double, ndim = 1] logs_M = numpy.empty(M, numpy.double)
 
-    logs_M = numpy.empty(M, numpy.double)
+    cdef int m
+    cdef int n
+    cdef int s
+    cdef int c
+
+    cdef double log_m
+    cdef double log_mn
+    cdef int counts_msc
+    cdef int sum_counts_ms
 
     for m in xrange(M):
         log_m = -INFINITY
@@ -763,10 +532,11 @@ def sampled_pmfs_log_pmf(pmfs, counts):
                 for c in xrange(C):
                     counts_msc = counts_MSC[m, s, c]
 
-                    sum_counts_ms += counts_msc
+                    if counts_msc > 0:
+                        sum_counts_ms += counts_msc
 
-                    log_mn += counts_msc * libc.math.log(pmfs_NSC[n, s, c])
-                    log_mn -= libc.math.lgamma(1.0 + counts_msc)
+                        log_mn += counts_msc * pmfs_NSC[n, s, c]
+                        log_mn -= libc.math.lgamma(1.0 + counts_msc)
 
                 log_mn += libc.math.lgamma(1.0 + sum_counts_ms)
 

@@ -5,19 +5,22 @@ import nose.tools
 import borg
 
 def test_sampled_pmfs_log_pmf():
-    """Test log-PMF computation over sampled PMFs."""
+    """Test borg.models.sampled_pmfs_log_pmf()."""
 
     cdfs = \
-        numpy.array([
+        numpy.log([
             [[0.1, 0.9], [0.9, 0.1]],
             [[0.1, 0.9], [0.9, 0.1]],
             ])
     counts = \
-        numpy.array([
-            [[1, 0], [0, 0]],
-            [[0, 0], [2, 0]],
-            [[1, 0], [2, 0]],
-            ])
+        numpy.array(
+            [
+                [[1, 0], [0, 0]],
+                [[0, 0], [2, 0]],
+                [[1, 0], [2, 0]],
+                ],
+            numpy.intc,
+            )
     logs = borg.models.sampled_pmfs_log_pmf(cdfs, counts)
 
     nose.tools.assert_almost_equal(numpy.exp(logs[0]), 0.1)
@@ -25,7 +28,7 @@ def test_sampled_pmfs_log_pmf():
     nose.tools.assert_almost_equal(numpy.exp(logs[2]), 0.1 * 0.9**2)
 
 def test_kernel_model_sample():
-    """Test sampling from a KDE model."""
+    """Test borg.models.KernelModel.sample()."""
 
     successes = numpy.array([[0, 1], [1, 0], [0, 0]], numpy.intc)
     failures = numpy.array([[0, 0], [0, 0], [0, 1]], numpy.intc)
@@ -45,4 +48,33 @@ def test_kernel_model_sample():
     nose.tools.assert_true(numpy.any(numpy.abs(samples[..., -1] - numpy.log(1.0 / 5)) < 1e-10))
     nose.tools.assert_true(numpy.any(numpy.abs(samples[..., -1] - numpy.log((alpha) / (5 * alpha - 4))) < 1e-10))
     nose.tools.assert_true(numpy.any(numpy.abs(samples[..., -1] - numpy.log((alpha - 1) / (5 * alpha - 4))) < 1e-10))
+
+def test_multinomial_model_fit():
+    """Test borg.models.MultinomialModel.fit()."""
+
+    runs = [
+        ("solver_a", 100.0, 1.0, True),
+        ("solver_a", 100.0, 48.0, True),
+        ("solver_a", 100.0, 100.0, False),
+        ("solver_b", 100.0, 66.0, True),
+        ("solver_b", 100.0, 77.0, True),
+        ("solver_b", 100.0, 100.0, False),
+        ]
+
+    training = borg.RunData()
+
+    for run in runs:
+        training.add_run("foo", borg.storage.RunRecord(*run))
+        training.add_run("bar", borg.storage.RunRecord(*run))
+
+    alpha = 1.0 + 1e-8
+    model = borg.models.MultinomialModel.fit(["solver_a", "solver_b"], training, 4, alpha)
+    components = numpy.exp(model.log_components)
+
+    nose.tools.assert_true(numpy.all(numpy.abs(components[0] - components[1]) == 0.0))
+    nose.tools.assert_true(numpy.all(numpy.abs(numpy.sum(components, axis = -1) - 1.0) < 1e-10))
+    nose.tools.assert_true(numpy.all(components[:, 0, 0] == components[:, 0, 1]))
+    nose.tools.assert_true(numpy.all(components[:, 0, 1] > components[:, 0, 2]))
+    nose.tools.assert_true(numpy.all(components[:, 1, 0] == components[:, 1, 1]))
+    nose.tools.assert_true(numpy.all(components[:, 1, 1] < components[:, 1, 2]))
 
