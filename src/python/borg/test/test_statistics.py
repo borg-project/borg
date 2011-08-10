@@ -8,12 +8,11 @@ import borg
 def test_digamma():
     """Test borg.statistics.digamma()."""
 
-    # XXX move to the cephes implementation?
-    nose.tools.assert_almost_equal(borg.statistics.digamma(1e-2), scipy.special.digamma(1e-2), places = 2)
-    nose.tools.assert_almost_equal(borg.statistics.digamma(1e-1), scipy.special.digamma(1e-1), places = 2)
-    nose.tools.assert_almost_equal(borg.statistics.digamma(1e-0), scipy.special.digamma(1e-0), places = 2)
-    nose.tools.assert_almost_equal(borg.statistics.digamma(1e+1), scipy.special.digamma(1e+1), places = 2)
-    nose.tools.assert_almost_equal(borg.statistics.digamma(1e+2), scipy.special.digamma(1e+2), places = 2)
+    nose.tools.assert_almost_equal(borg.statistics.digamma(1e-2), scipy.special.digamma(1e-2))
+    nose.tools.assert_almost_equal(borg.statistics.digamma(1e-1), scipy.special.digamma(1e-1))
+    nose.tools.assert_almost_equal(borg.statistics.digamma(1e-0), scipy.special.digamma(1e-0))
+    nose.tools.assert_almost_equal(borg.statistics.digamma(1e+1), scipy.special.digamma(1e+1))
+    nose.tools.assert_almost_equal(borg.statistics.digamma(1e+2), scipy.special.digamma(1e+2))
 
 def test_dcm_fit():
     """Test borg.statistics.dcm_estimate_ml()."""

@@ -101,7 +101,6 @@ cpdef double digamma(double x) except? -1.0:
     cdef double d1 = -0.5772156649
 
     cdef double r
-    cdef double rr
     cdef double y
     cdef double v
 
@@ -116,7 +115,7 @@ cpdef double digamma(double x) except? -1.0:
         r = 1.0 / y
         v += libc.math.log(y) - r / 2.0
         r = 1.0 / (y * y)
-        v -= rr * (s3 - rr * (s4 - rr * s5))
+        v -= r * (s3 - r * (s4 - r * s5))
     else:
         v = d1 - 1.0 / x
 
