@@ -11,7 +11,7 @@ cdef double log_minus(double x, double y)
 
 cdef double log_erf_approximate(double x)
 cpdef double digamma(double x) except? -1.0
-cdef double inverse_digamma(double x)
+cpdef double inverse_digamma(double x)
 
 cdef double standard_normal_log_pdf(double x)
 cdef double standard_normal_log_cdf(double x)

@@ -62,7 +62,8 @@ def evaluate_split(model_name, solver_names, training, testing):
 
     if model_name == "multinomial":
         model = \
-            borg.models.SolverPriorMultinomialModel.fit(
+            borg.models.SolverPriorMultinomialGibbsModel.fit(
+            #borg.models.SolverPriorMultinomialModel.fit(
                 solver_names,
                 training,
                 resolution,
@@ -106,6 +107,7 @@ def get_training_systematic(training, run_count):
     instances_root = ("path to instances", "positional", None, os.path.abspath),
     suffix = ("runs data file suffix", "option"),
     workers = ("submit jobs?", "option", "w", int),
+    local = ("workers are local?", "flag"),
     )
 def main(
     out_path,
@@ -114,6 +116,7 @@ def main(
     instances_root,
     suffix = ".runs.csv",
     workers = 0,
+    local = False,
     ):
     """Evaluate portfolio performance under a specified model."""
 
@@ -147,5 +150,5 @@ def main(
 
         writer.writerow(["training_runs", "mean_log_density"])
 
-        cargo.do_or_distribute(yield_jobs(), workers, lambda _, r: writer.writerow(r))
+        cargo.do_or_distribute(yield_jobs(), workers, lambda _, r: writer.writerow(r), local)
 

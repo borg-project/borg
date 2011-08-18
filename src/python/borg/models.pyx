@@ -294,11 +294,79 @@ class SolverPriorMultinomialModel(MultinomialModel):
             log_components_NSC[:, s, :] = numpy.log(outcomes_NSC[:, s, :] + prior_s)
             log_components_NSC[:, s, :] -= numpy.log(attempts_NSC[:, s, :] + numpy.sum(prior_s))
 
-            #print prior_s
-            #print numpy.exp(log_components_NSC[:, s, :])
-            #print "..."
-
         return MultinomialModel(log_components_NSC)
+
+def dcm_sample_gibbs(counts):
+    """Sample parameters of the DCM model using Gibbs."""
+
+    I = 512
+    (N, D) = counts.shape
+
+    counts_ND = counts
+    alpha_D = numpy.ones(D, numpy.double)
+    thetas_IND = numpy.empty((I, N, D), numpy.double)
+
+    for i in xrange(I):
+        # sample multinomial components
+        for n in xrange(N):
+            thetas_IND[i, n, :] = numpy.random.dirichlet(alpha_D + counts_ND[n, :])
+
+        # optimize the Dirichlet
+        alpha_D[:] = borg.statistics.dirichlet_estimate_ml(thetas_IND[i, ...])
+
+        print alpha_D
+
+    return thetas_IND
+
+class SolverPriorMultinomialGibbsModel(object):
+    """Multinomial mixture model with a per-solver prior."""
+
+    @staticmethod
+    def fit(solver_names, training, B):
+        """Fit a kernel-density model."""
+
+        logger.info("fitting multinomial mixture model")
+
+        N = len(training.run_lists)
+        S = len(solver_names)
+        C = B + 1
+
+        outcomes_NSC = training.to_bins_array(solver_names, B)
+        attempts_NSC = numpy.sum(outcomes_NSC, axis = -1)[..., None]
+
+        for s in xrange(S):
+            print "------------- {0} ({1}) -----------------".format(s, solver_names[s])
+            print outcomes_NSC[:, s, :]
+            dcm_sample_gibbs(outcomes_NSC[:, s, :])
+
+#class SolverPriorMixtureMultinomialModel(MultinomialModel):
+    #"""Multinomial mixture model with a per-solver prior mixture."""
+
+    #@staticmethod
+    #def fit(solver_names, training, B, K):
+        #"""Fit a kernel-density model."""
+
+        #logger.info("fitting multinomial mixture model")
+
+        #N = len(training.run_lists)
+        #S = len(solver_names)
+        #C = B + 1
+
+        #outcomes_NSC = training.to_bins_array(solver_names, B)
+        #attempts_NSC = numpy.sum(outcomes_NSC, axis = -1)[..., None]
+        #log_components_NSC = numpy.empty((N, S, C), numpy.double)
+
+        #for s in xrange(S):
+            #prior_s_KC = borg.statistics.dcm_mixture_estimate_ml(outcomes_NSC[:, s, :], K)
+
+            ## XXX hackish regularization
+            #prior_s_KC += 1e-8
+
+            ## XXX not exactly the correct MAP estimate...?
+            #log_components_NSC[:, s, :] = numpy.log(outcomes_NSC[:, s, :] + prior_s)
+            #log_components_NSC[:, s, :] -= numpy.log(attempts_NSC[:, s, :] + numpy.sum(prior_s))
+
+        #return MultinomialModel(log_components_NSC)
 
 named = {
     "kernel": KernelModel,
