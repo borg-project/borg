@@ -4,6 +4,7 @@ def build(context):
             "__init__.py",
             "test_models.py",
             "test_statistics.py",
+            "test_planners.py",
             ],
         install_path = "${PYTHONDIR}/borg/test",
         )

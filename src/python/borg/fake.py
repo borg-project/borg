@@ -1,93 +1,98 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import os.path
-import uuid
-import random
 import contextlib
-import multiprocessing
 import numpy
 import borg
 import cargo
 
 logger = cargo.get_logger(__name__, default_level = "DETAIL")
 
-class FakeSolver(object):
+class FakeSolverProcess(object):
     """Provide a solver interface to stored run data."""
 
-    def __init__(self, runs, stm_queue = None, solver_id = None):
-        # prepare communication channels
-        if stm_queue is None:
-            self._stm_queue = multiprocessing.Queue()
-        else:
-            self._stm_queue = stm_queue
+    def __init__(self, run):
+        """Initialize."""
 
-        if solver_id is None:
-            self._solver_id = uuid.uuid4()
-        else:
-            self._solver_id = solver_id
+        self._run = run
+        self._elapsed = 0.0
+        self._terminated = False
 
-        # gather candidate runs, and select one
-        candidate_runs = []
-
-        for run in runs:
-            candidate_runs.append(run)
-
-        self._run = candidate_runs[random.randrange(len(candidate_runs))]
-        self._position = 0.0
-
-        logger.debug("replaying %s run: %s in %.0f", self._run.solver, self._run.success, self._run.cost)
-
-    def __call__(self, budget):
-        """Unpause the solver, block for some limit, and terminate it."""
-
-        self.unpause_for(budget)
-
-        (solver_id, run_cpu_cost, answer, terminated) = self._stm_queue.get()
-
-        assert solver_id == self._solver_id
-
-        self.stop()
-
-        borg.get_accountant().charge_cpu(run_cpu_cost)
-
-        return answer
-
-    def unpause_for(self, budget):
+    def run_then_stop(self, budget):
         """Unpause the solver for the specified duration."""
 
-        assert self._position is not None
-        assert self._position <= self._run.budget
+        try:
+            return self.run_then_pause(budget)
+        finally:
+            self.stop()
 
-        new_position = self._position + budget
+    def run_then_pause(self, budget):
+        """Unpause the solver for the specified duration."""
 
-        logger.detail("moving to %.0f of %.0f in %s run", new_position, self._run.cost, self._run.solver)
+        assert not self._terminated
 
-        if new_position >= self._run.cost:
-            self._stm_queue.put((self._solver_id, self._run.cost - self._position, self._run.success, True))
+        position = self._elapsed + budget
 
-            self._position = None
+        logger.detail(
+            "moving %s run to %.0f of %.0f (from %.0f)",
+            self._run.solver,
+            position,
+            self._run.cost,
+            self._elapsed,
+            )
+
+        if position >= self._run.cost:
+            borg.get_accountant().charge_cpu(self._run.cost - self._elapsed)
+
+            self._elapsed = self._run.cost
+            self._terminated = True
+
+            return self._run.success
         else:
-            self._stm_queue.put((self._solver_id, budget, None, False))
+            borg.get_accountant().charge_cpu(budget)
 
-            self._position = new_position
+            self._elapsed = position
+
+            return None
 
     def stop(self):
         """Terminate the solver."""
 
         self._position = None
 
+    @property
+    def name(self):
+        """Name of the running solver."""
+
+        return self._run.solver
+
+    @property
+    def elapsed(self):
+        """Number of CPU seconds used by this process (or processes)."""
+
+        return self._elapsed
+
+    @property
+    def terminated(self):
+        """Has this process terminated?"""
+
+        return self._terminated
+
 class FakeSolverFactory(object):
     def __init__(self, solver_name, runs_data):
         self._solver_name = solver_name
         self._runs_data = runs_data
 
-    def __call__(self, task, stm_queue = None, solver_id = None):
+    def start(self, task):
+        """Return a fake solver process."""
+
         all_runs = self._runs_data.run_lists[task]
         our_runs = filter(lambda run: run.solver == self._solver_name, all_runs)
 
-        assert len(our_runs) > 0
+        if len(our_runs) == 0:
+            raise Exception("no candidate runs for fake solver")
 
-        return FakeSolver(our_runs, stm_queue = stm_queue, solver_id = solver_id)
+        return FakeSolverProcess(cargo.grab(our_runs))
 
 class FakeDomain(object):
     name = "fake"

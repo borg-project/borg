@@ -23,9 +23,23 @@ class PortfolioMaker(object):
         self.interval = interval
 
     def __call__(self, suite, train_paths, suffix):
-        training = borg.storage.TrainingData(train_paths, suite.domain, suffix = suffix)
-        factory = borg.portfolios.named[self.name]
-        portfolio = factory(suite, training, self.interval)
+        """Construct the specified portfolio."""
+
+        training = borg.storage.RunData.from_paths(train_paths, suite.domain, suffix = suffix)
+
+        if self.name == "random":
+            portfolio = borg.portfolios.RandomPortfolio()
+        elif self.name == "baseline":
+            portfolio = borg.portfolios.BaselinePortfolio(suite, training)
+        elif self.name == "oracle":
+            portfolio = borg.portfolios.OraclePortfolio()
+        elif self.name == "preplanning":
+            portfolio = borg.portfolios.PreplanningPortfolio(suite, training)
+        elif self.name == "pure_model":
+            model = borg.models.Mul_ModelFactory().fit(list(suite.solvers), training, 10)
+            #model = borg.models.Mul_Dir_ModelFactory().fit(list(suite.solvers), training, B = 4, T = 16)
+            #model = borg.models.Mul_DirMix_ModelFactory().fit(list(suite.solvers), training, B = 4, T = 4)
+            portfolio = borg.portfolios.PureModelPortfolio(suite, model)
 
         return borg.solver_io.RunningPortfolioFactory(portfolio, suite)
 
@@ -43,12 +57,13 @@ def simulate_split(maker, suite_path, train_paths, test_paths, suffix, budget, s
     solver = maker(suite, train_paths, suffix)
     rows = []
 
+    #for test_path in test_paths[6:7]: # XXX
     for test_path in test_paths:
         logger.info("simulating run on %s", test_path)
 
         with suite.domain.task_from_path(test_path) as test_task:
             with borg.accounting() as accountant:
-                answer = solver(test_task)(budget)
+                answer = solver.start(test_task).run_then_stop(budget)
 
             succeeded = suite.domain.is_final(test_task, answer)
             cpu_cost = accountant.total.cpu_seconds

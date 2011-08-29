@@ -227,7 +227,7 @@ class RunningPortfolio(object):
         self.suite = suite
         self.task = task
 
-    def __call__(self, budget):
+    def run_then_stop(self, budget):
         """Attempt to solve the associated task."""
 
         return self.portfolio(self.task, self.suite, borg.Cost(cpu_seconds = budget))
@@ -241,7 +241,7 @@ class RunningPortfolioFactory(object):
         self.portfolio = portfolio
         self.suite = suite
 
-    def __call__(self, task):
+    def start(self, task):
         """Return an instance of this portfolio running on the task."""
 
         return RunningPortfolio(self.portfolio, self.suite, task)

@@ -53,6 +53,17 @@ class RunData(object):
 
         self.feature_vectors[id_] = vector
 
+    def filter(self, id_):
+        """Return a filtered set of run data."""
+
+        data = RunData()
+        
+        data.run_lists = {id_: self.run_lists[id_]}
+        data.feature_vectors = {id_: self.feature_vectors[id_]}
+        data.common_budget = self.common_budget
+
+        return data
+
     def get_feature_vector(self, id_):
         """Retrieve features of a task."""
 

@@ -4,6 +4,7 @@ import numpy
 import scipy.special
 import cargo
 
+cimport cython
 cimport libc.math
 cimport numpy
 
@@ -37,7 +38,36 @@ def assert_positive_log_probabilities(array):
 def assert_weights(array, axis = None):
     """Assert than an array sums to one over a particular axis."""
 
-    assert numpy.all(numpy.abs(numpy.sum(array, axis = axis) - 1.0 ) < 1e-6)
+    assert_probabilities(array)
+
+    assert numpy.all(numpy.abs(numpy.sum(array, axis = axis) - 1.0 ) < 1e-8)
+
+def assert_log_weights(array, axis = None):
+    """Assert than an array sums to one over a particular axis."""
+
+    assert_log_probabilities(array)
+
+    assert numpy.all(numpy.abs(numpy.sum(numpy.exp(array), axis = axis) - 1.0) < 1e-8)
+
+def assert_survival(array, axis):
+    """Assert that an array contains a (discrete) survival function."""
+
+    assert_probabilities(array)
+
+    lhs = array.swapaxes(0, axis)[1:, ...].swapaxes(0, axis)
+    rhs = array.swapaxes(0, axis)[:-1, ...].swapaxes(0, axis)
+
+    assert numpy.all(lhs <= rhs)
+
+def assert_log_survival(array, axis):
+    """Assert that an array contains a (discrete) survival function."""
+
+    assert_log_probabilities(array)
+
+    lhs = array.swapaxes(0, axis)[1:, ...].swapaxes(0, axis)
+    rhs = array.swapaxes(0, axis)[:-1, ...].swapaxes(0, axis)
+
+    assert numpy.all(lhs <= rhs)
 
 #
 # UTILITIES
@@ -71,6 +101,15 @@ cdef double log_minus(double x, double y):
     else:
         return y + libc.math.log(1.0 - libc.math.exp(x - y))
 
+def to_log_survival(probabilities, axis):
+    """Convert a discrete distribution to log survival-function values."""
+
+    survival = 1.0 - numpy.cumsum(probabilities, axis = axis)
+
+    survival[survival <= 0.0] = 1e-64
+
+    return numpy.log(survival)
+
 #
 # SPECIAL FUNCTIONS
 #
@@ -86,15 +125,16 @@ cdef double log_erf_approximate(double x):
 
     return log_minus(0.0, v) / 2.0
 
-cpdef double digamma(double x) except? -1.0:
+@cython.cdivision(True)
+cpdef double digamma(double x):
     """
     Compute the digamma function.
 
     Implementation adapted from that of Bernardo (1976).
     """
 
-    if x < 0.0:
-        raise ValueError("negative x passed to digamma()")
+    #if x <= 0.0:
+        #raise ValueError("x <= 0 passed to digamma()")
 
     cdef double s = 1e-5
     cdef double c = 8.5
@@ -191,6 +231,29 @@ cdef double truncated_normal_log_cdf(double a, double b, double mu, double sigma
 
     return log_minus(upper_lhs, upper_rhs) - log_minus(lower_lhs, lower_rhs)
 
+cpdef double multinomial_log_pdf(numpy.ndarray theta, numpy.ndarray counts):
+    """Compute the log of the multinomial PDF."""
+
+    cdef int D = theta.shape[0]
+
+    cdef numpy.ndarray[double, ndim = 1] theta_D = theta
+    cdef numpy.ndarray[int, ndim = 1] counts_D = counts
+
+    cdef double theta_D_sum = 0.0
+
+    cdef int d
+
+    for d in xrange(D):
+        theta_D_sum += theta_D[d]
+
+    cdef double log_pdf = libc.math.lgamma(1.0 + theta_D_sum)
+
+    for d in xrange(D):
+        log_pdf += counts_D[d] * libc.math.log(theta_D[d])
+        log_pdf -= libc.math.log(1.0 + counts_D[d])
+
+    return log_pdf
+
 cpdef gamma_log_pdf(double x, double shape, double scale):
     """Compute the log of the gamma PDF."""
 
@@ -209,6 +272,7 @@ def dirichlet_log_pdf(alpha, vectors):
 
     return term_a - term_b + term_c
 
+@cython.cdivision(True)
 cdef double _inverse_digamma_minus(double x, double N, double c) except? -1.0:
     """Compute a (numeric) inverse for Dirichlet estimation."""
 
@@ -219,7 +283,7 @@ cdef double _inverse_digamma_minus(double x, double N, double c) except? -1.0:
     if y == 0.0:
         return 0.0
 
-    while d > 1e-16:
+    while d > 1e-8:
         v = N * digamma(y) - (c - 1.0) / y
 
         if v < x:
@@ -229,19 +293,19 @@ cdef double _inverse_digamma_minus(double x, double N, double c) except? -1.0:
 
         d /= 2.0
 
-    if libc.math.fabs(v - x) > 1e-8:
-        logger.warning(
-            "modified-digamma inversion failed to converge: f(%f, %f, %f) = %f != %f",
-            y,
-            N,
-            c,
-            v,
-            x,
-            )
+    #if libc.math.fabs(v - x) > 1e-8:
+        #logger.warning(
+            #"modified-digamma inversion did not converge: f(%f, %f, %f) = %f != %f",
+            #y,
+            #N,
+            #c,
+            #v,
+            #x,
+            #)
 
     return y
 
-def dirichlet_estimate_map(vectors, shape = 1.0, scale = 1e8):
+def dirichlet_estimate_map(vectors, double shape = 1.0, double scale = 1e8):
     """
     Compute the maximum-likelihood Dirichlet distribution.
 
@@ -249,29 +313,56 @@ def dirichlet_estimate_map(vectors, shape = 1.0, scale = 1e8):
     incorporate a gamma prior.
     """
 
-    (N, D) = vectors.shape
+    # XXX attempt to derive an approach that uses Wallach's digamma recurrence?
 
-    vectors_ND = numpy.asarray(vectors, numpy.double)
-    log_pbar_D = numpy.zeros(D, numpy.double)
-    alpha_D = numpy.ones(D, numpy.double) * 1e-1
+    cdef int N = vectors.shape[0]
+    cdef int D = vectors.shape[1]
+
+    cdef numpy.ndarray[double, ndim = 2] vectors_ND = numpy.asarray(vectors, numpy.double)
+    cdef numpy.ndarray[double, ndim = 1] log_pbar_D = numpy.zeros(D, numpy.double)
+    cdef numpy.ndarray[double, ndim = 1] alpha_D = numpy.ones(D, numpy.double) * 1e-1
+    cdef numpy.ndarray[double, ndim = 1] last_alpha_D = numpy.empty(D, numpy.double)
+
+    cdef int d
+    cdef int n
+    cdef int i
+
+    cdef double constant_term
 
     for d in xrange(D):
         for n in xrange(N):
             log_pbar_D[d] += libc.math.log(vectors_ND[n, d])
 
-        log_pbar_D[d] /= N
-
     for i in xrange(32768):
-        last_alpha_D = numpy.copy(alpha_D)
-        psi_alpha_D = N * digamma(numpy.sum(alpha_D)) + N * log_pbar_D - 1.0 / scale
+        for d in xrange(D):
+            last_alpha_D[d] = alpha_D[d]
+
+        constant_term = 0.0
 
         for d in xrange(D):
-            alpha_D[d] = _inverse_digamma_minus(psi_alpha_D[d], N, shape)
+            constant_term += alpha_D[d]
 
-        if numpy.sum(numpy.abs(alpha_D - last_alpha_D)) <= 1e-16:
+        # XXX
+        #print "alpha_D =", alpha_D
+
+        if constant_term == 0.0:
+            with cargo.numpy_printing(precision = 2, suppress = True, threshold = 1000000, linewidth = 160):
+                print vectors
+
+        constant_term = N * digamma(constant_term) - 1.0 / scale
+
+        for d in xrange(D):
+            alpha_D[d] = _inverse_digamma_minus(log_pbar_D[d] + constant_term, N, shape)
+
+        alpha_change = 0.0
+
+        for d in xrange(D):
+            alpha_change += libc.math.fabs(alpha_D[d] - last_alpha_D[d])
+
+        if alpha_change <= 1e-10:
             return alpha_D
 
-    logger.warning("Dirichlet MAP estimation terminated before convergence")
+    logger.warning("Dirichlet MAP estimation did not converge; alpha = %s", alpha_D)
 
     return alpha_D
 

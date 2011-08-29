@@ -52,7 +52,7 @@ def score_model_log_probability(model, resolution, testing, solver_names):
 
     return numpy.mean(log_probabilities)
 
-def evaluate_split(model_name, solver_names, training, testing):
+def evaluate_split(model_name, samples, solver_names, training, testing):
     """Evaluate model generalization."""
 
     # build the model
@@ -60,13 +60,44 @@ def evaluate_split(model_name, solver_names, training, testing):
 
     resolution = 10
 
-    if model_name == "multinomial":
+    if model_name == "multinomial-map":
         model = \
-            borg.models.SolverPriorMultinomialGibbsModel.fit(
-            #borg.models.SolverPriorMultinomialModel.fit(
+            borg.models.SolverPriorMultinomialModel.fit(
                 solver_names,
                 training,
                 resolution,
+                )
+    elif model_name == "fixed-multinomial-gibbs":
+        model = \
+            borg.models.MultinomialGibbsModel.fit(
+                solver_names,
+                training,
+                resolution,
+                samples,
+                )
+    elif model_name == "multinomial-gibbs":
+        model = \
+            borg.models.SolverPriorMultinomialGibbsModel.fit(
+                solver_names,
+                training,
+                resolution,
+                samples,
+                )
+    elif model_name == "dcm-mixture-gibbs":
+        model = \
+            borg.models.SolverMixturePriorMultinomialGibbsModel.fit(
+                solver_names,
+                training,
+                resolution,
+                samples,
+                )
+    elif model_name == "dcm-matrices-gibbs":
+        model = \
+            borg.models.MatrixMixturePriorMultinomialGibbsModel.fit(
+                solver_names,
+                training,
+                resolution,
+                samples,
                 )
     elif model_name == "kernel":
         model = \
@@ -82,7 +113,7 @@ def evaluate_split(model_name, solver_names, training, testing):
     # evaluate the model
     score = score_model_log_probability(model, resolution, testing, solver_names)
 
-    return [training.get_run_count(), score]
+    return [training.get_run_count(), samples, score]
 
 def get_training_systematic(training, run_count):
     """Get a systematic subset of training data."""
@@ -122,6 +153,10 @@ def main(
 
     cargo.enable_default_logging()
 
+    #import random
+    #numpy.random.seed(42)
+    #random.seed(42)
+
     def yield_jobs():
         suite = borg.load_solvers(suite_path)
         paths = list(cargo.files_under(instances_root, suite.domain.extensions))
@@ -138,17 +173,21 @@ def main(
             run_counts = numpy.unique(numpy.exp(numpy.r_[0.0:numpy.log(training.get_run_count()):24j]).astype(int))
 
             for run_count in run_counts:
+            #for run_count in run_counts[-1:]:
                 subset = get_training_systematic(training, run_count)
 
-                yield (
-                    evaluate_split,
-                    [model_name, suite.solvers.keys(), subset, testing],
-                    )
+                for samples in [16]:
+                #for samples in xrange(1, 17):
+                    for _ in xrange(1):
+                        yield (
+                            evaluate_split,
+                            [model_name, samples, suite.solvers.keys(), subset, testing],
+                            )
 
     with open(out_path, "w") as out_file:
         writer = csv.writer(out_file)
 
-        writer.writerow(["training_runs", "mean_log_density"])
+        writer.writerow(["training_runs", "samples", "mean_log_density"])
 
         cargo.do_or_distribute(yield_jobs(), workers, lambda _, r: writer.writerow(r), local)
 
