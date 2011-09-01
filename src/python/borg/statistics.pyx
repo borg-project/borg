@@ -1,3 +1,4 @@
+# cython: profile=False
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import numpy
@@ -73,6 +74,7 @@ def assert_log_survival(array, axis):
 # UTILITIES
 #
 
+@cython.profile(False)
 cdef double log_plus(double x, double y):
     """
     Return log(x + y) given log(x) and log(y); see [1].

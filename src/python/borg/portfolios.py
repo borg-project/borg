@@ -1,11 +1,7 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
-import os.path
-import uuid
-import contextlib
-import multiprocessing
+import itertools
 import numpy
-import scikits.learn.linear_model
 import cargo
 import borg
 
@@ -17,10 +13,36 @@ class RandomPortfolio(object):
     def __call__(self, task, suite, budget):
         """Run the portfolio."""
 
-        return cargo.grab(suite.solvers.values())(task)(budget.cpu_seconds)
+        return cargo.grab(suite.solvers.values()).start(task).run_then_stop(budget.cpu_seconds)
+
+class UniformPortfolio(object):
+    """Portfolio that runs every solver once."""
+
+    def __call__(self, task, suite, budget):
+        """Run the portfolio."""
+
+        budget_each = budget.cpu_seconds / (len(suite.solvers) * 100)
+        processes = [s.start(task) for s in suite.solvers.values()]
+        next_process = itertools.cycle(processes)
+
+        def finished():
+            return \
+                budget.cpu_seconds - sum(p.elapsed for p in processes) < budget_each \
+                or all(p.terminated for p in processes)
+
+        while not finished():
+            process = next_process.next()
+
+            if not process.terminated:
+                answer = process.run_then_pause(budget_each)
+
+                if suite.domain.is_final(task, answer):
+                    return answer
+
+        return None
 
 class BaselinePortfolio(object):
-    """Baseline portfolio."""
+    """Portfolio that runs the best train-set solver."""
 
     def __init__(self, suite, training):
         """Initialize."""
@@ -55,7 +77,8 @@ class OraclePortfolio(object):
 
         # make a plan
         interval = data.get_common_budget() / budget_count
-        planner = borg.planners.KnapsackMultiversePlanner()
+        #planner = borg.planners.KnapsackMultiversePlanner()
+        planner = borg.planners.BellmanPlanner()
         plan = planner.plan(log_survival[None, ...])
 
         # and follow through
@@ -64,7 +87,7 @@ class OraclePortfolio(object):
         for (s, b) in plan:
             this_budget = (b + 1) * interval
 
-            assert remaining >= this_budget
+            assert remaining - this_budget > -1e-1
 
             process = suite.solvers[solver_names[s]].start(task)
             answer = process.run_then_stop(this_budget)
@@ -84,17 +107,17 @@ class PreplanningPortfolio(object):
         # grab known run data
         budget_count = 10
         solver_names = list(suite.solvers)
-        bins = training.to_bins_array(solver_names, budget_count).astype(numpy.double) + 1e-64
+        bins = training.to_bins_array(solver_names, budget_count).astype(numpy.double) + 1e-8 / budget_count
         rates = bins / numpy.sum(bins, axis = -1)[..., None]
-        log_survival = numpy.log(1.0 - numpy.cumsum(rates[..., :-1], axis = -1))
+        survival = 1.0 - numpy.cumsum(rates, axis = -1)
 
         # make a plan
         self._interval = training.get_common_budget() / budget_count
 
-        #planner = borg.planners.KnapsackMultiversePlanner()
-        planner = borg.planners.BellmanPlanner()
+        planner = borg.planners.KnapsackMultiversePlanner()
+        #planner = borg.planners.BellmanPlanner()
 
-        self._plan = planner.plan(log_survival)
+        self._plan = planner.plan(numpy.log(survival[..., :-1]))
         self._solver_names = list(suite.solvers)
 
         logger.info("preplanned plan: %s", self._plan)
@@ -107,7 +130,7 @@ class PreplanningPortfolio(object):
         for (s, b) in self._plan:
             this_budget = (b + 1) * self._interval
 
-            assert remaining >= this_budget
+            assert remaining - this_budget > -1e-1
 
             process = suite.solvers[self._solver_names[s]].start(task)
             answer = process.run_then_stop(this_budget)
@@ -132,6 +155,26 @@ class PureModelPortfolio(object):
         #self._planner = borg.planners.BellmanPlanner()
         self._runs_limit = 256
 
+    #def __call__(self, task, suite, budget):
+        #"""Run the portfolio."""
+
+        #remaining = budget.cpu_seconds
+        #plan = self._planner.plan(self._model.log_survival[..., :-1], self._model.log_weights)
+
+        #for (s, b) in plan:
+            #this_budget = (b + 1) * self._model.interval
+
+            #assert remaining - this_budget > -1e-1
+
+            #process = suite.solvers[self._solver_names[s]].start(task)
+            #answer = process.run_then_stop(this_budget)
+            #remaining -= this_budget
+
+            #if suite.domain.is_final(task, answer):
+                #return answer
+
+        #return None
+
     def __call__(self, task, suite, budget):
         """Run the portfolio."""
 
@@ -142,29 +185,19 @@ class PureModelPortfolio(object):
         """Run the portfolio."""
 
         # select a solver
-        failed = []
+        failures = []
         answer = None
 
         for i in xrange(self._runs_limit):
-            # obtain model predictions
-            failures = []
-
-            for solver in failed:
-                failures.append((self._solver_names.index(solver.name), solver.elapsed / self._model.interval))
-
-            posterior = self._model.condition(failures)
-
-            with cargo.numpy_printing(precision = 2, suppress = True, linewidth = 160, threshold = 1000000):
-                print "marginal:"
-                z = numpy.logaddexp.reduce(posterior.log_survival + posterior.log_weights[..., None, None], axis = 0)
-                print numpy.exp(z)
-
             # make a plan
+            posterior = self._model.condition(failures)
             position = int(borg.get_accountant().total.cpu_seconds / self._model.interval)
             plan = self._planner.plan(posterior.log_survival[..., position:-1], posterior.log_weights)
 
             if len(plan) == 0:
                 break
+
+            print "plan", plan
 
             # and follow through
             (plan0_s, plan0_c) = plan[0]
@@ -176,7 +209,7 @@ class PureModelPortfolio(object):
             if suite.domain.is_final(task, answer):
                 return answer
 
-            failed.append(process)
+            failures.append((plan0_s, plan0_c))
 
         return None
 

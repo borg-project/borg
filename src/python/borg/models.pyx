@@ -1,3 +1,4 @@
+# cython: profile=False
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import scipy.stats
@@ -194,8 +195,7 @@ class MultinomialModel(object):
         log_post_weights_N = numpy.copy(self._log_weights_N)
 
         for (s, b) in failures:
-            if b > 0:
-                log_post_weights_N += self._log_survival_NSC[:, s, b - 1]
+            log_post_weights_N += self._log_survival_NSC[:, s, b]
 
         log_post_weights_N -= numpy.logaddexp.reduce(log_post_weights_N)
 

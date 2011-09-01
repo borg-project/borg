@@ -29,15 +29,17 @@ class PortfolioMaker(object):
 
         if self.name == "random":
             portfolio = borg.portfolios.RandomPortfolio()
+        elif self.name == "uniform":
+            portfolio = borg.portfolios.UniformPortfolio()
         elif self.name == "baseline":
             portfolio = borg.portfolios.BaselinePortfolio(suite, training)
         elif self.name == "oracle":
             portfolio = borg.portfolios.OraclePortfolio()
         elif self.name == "preplanning":
             portfolio = borg.portfolios.PreplanningPortfolio(suite, training)
-        elif self.name == "pure_model":
+        elif self.name == "mul-knapsack-replan":
             model = borg.models.Mul_ModelFactory().fit(list(suite.solvers), training, 10)
-            #model = borg.models.Mul_Dir_ModelFactory().fit(list(suite.solvers), training, B = 4, T = 16)
+            #model = borg.models.Mul_Dir_ModelFactory().fit(list(suite.solvers), training, B = 6, T = 6)
             #model = borg.models.Mul_DirMix_ModelFactory().fit(list(suite.solvers), training, B = 4, T = 4)
             portfolio = borg.portfolios.PureModelPortfolio(suite, model)
 
@@ -168,7 +170,7 @@ def main(
     logger.info("found %i train task(s) under %s", len(train_paths), train_root)
     logger.info("found %i test task(s) under %s", len(test_paths), test_root)
 
-    splits = [(train_paths, test_paths)]
+    splits = [(train_paths, test_paths)] * 4
     jobs = list(yield_explicit_runs(makers, splits, suite_path, suffix, budget))
 
     # and run them
