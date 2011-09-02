@@ -78,3 +78,13 @@ def test_multinomial_model_fit():
     nose.tools.assert_true(numpy.all(components[:, 1, 0] == components[:, 1, 1]))
     nose.tools.assert_true(numpy.all(components[:, 1, 1] < components[:, 1, 2]))
 
+def test_multinomial_model_condition():
+    model = borg.models.MultinomialModel(10.0, numpy.log([[[0.2, 0.1]], [[0.9, 0.8]]]), numpy.log([0.5, 0.5]))
+    posterior0 = model.condition([(0, 0)])
+    posterior1 = model.condition([(0, 1)])
+
+    nose.tools.assert_almost_equal(posterior0.log_weights[0], numpy.log(0.2 * 0.5 / (0.2 * 0.5 + 0.9 * 0.5)))
+    nose.tools.assert_almost_equal(posterior0.log_weights[1], numpy.log(0.9 * 0.5 / (0.2 * 0.5 + 0.9 * 0.5)))
+    nose.tools.assert_almost_equal(posterior1.log_weights[0], numpy.log(0.1 * 0.5 / (0.1 * 0.5 + 0.8 * 0.5)))
+    nose.tools.assert_almost_equal(posterior1.log_weights[1], numpy.log(0.8 * 0.5 / (0.1 * 0.5 + 0.8 * 0.5)))
+

@@ -184,9 +184,10 @@ class RunData(object):
                 training.add_run(path, record)
 
             # load feature data
-            vector = numpy.recfromcsv("{0}.features.csv".format(path)).tolist()
+            feature_records = numpy.recfromcsv("{0}.features.csv".format(path))
+            feature_dict = dict(zip(feature_records.dtype.names, feature_records.tolist()))
 
-            training.add_feature_vector(path, vector)
+            training.add_feature_vector(path, feature_dict)
 
         return training
 

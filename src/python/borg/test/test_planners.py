@@ -58,3 +58,22 @@ def test_bellman_planner_impossibilities():
 
     nose.tools.assert_equal(sorted(plan), [(0, 2), (1, 0)])
 
+def test_bellman_planner_replan():
+    model0 = \
+        borg.models.MultinomialModel(
+            10.0,
+            numpy.log([
+                [[1.0, 0.2, 0.1, 0.1], [1.0, 1.0, 1.0, 1.0]],
+                [[1.0, 1.0, 1.0, 1.0], [1.0, 0.2, 0.1, 0.1]],
+                ]),
+            numpy.log([0.5, 0.5]),
+            )
+    plan0 = borg.planners.BellmanPlanner().plan(model0.log_survival, model0.log_weights)
+    print "plan0:", plan0
+    model1 = model0.condition(plan0[:1])
+    print "model1.log_weights:", model1.log_weights
+    plan1 = borg.planners.BellmanPlanner().plan(model1.log_survival[..., :-plan0[0][1] - 1], model1.log_weights)
+    print "plan1:", plan1
+
+    nose.tools.assert_equal(plan1, plan0[1:])
+

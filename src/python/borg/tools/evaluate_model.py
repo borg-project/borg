@@ -176,7 +176,7 @@ def main(
             #for run_count in run_counts[-1:]:
                 subset = get_training_systematic(training, run_count)
 
-                for samples in [16]:
+                for samples in [1]:
                 #for samples in xrange(1, 17):
                     for _ in xrange(1):
                         yield (

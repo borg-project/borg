@@ -114,13 +114,15 @@ cdef object bellman_plan_full(PlannerState* this, int d):
                 value = survival
                 plan = []
 
+            #print "d = {0}:".format(d), s, b, "[", ", ".join(["%.2f" % this.belief_stack_BW[next_d * this.W + w] for w in xrange(this.W)]), "]"
+
             if value <= best_value:
                 best_value = value
                 best_plan = plan
                 best_s = s
                 best_b = b
 
-    #if d < 5:
+    #if d < 1:
         #print "{0}x{1} ({2:08.4f}) {3}={4}".format(best_s, best_b, best_value, "<" * d, d)
 
     return (best_value, [(best_s, best_b)] + best_plan)
@@ -217,22 +219,22 @@ class BellmanPlanner(object):
         state.belief_stack_BW = <double*>belief_stack_BW.data
         state.log_survival_WSB = <double*>log_survival_WSB.data
 
+        #print "starting to plan"
+        #with cargo.numpy_printing(precision = 2, suppress = True, linewidth = 160, threshold = 1000000):
+            #print log_weights_W
+        #print "..."
+
         (value, plan) = bellman_plan_full(&state, 0)
 
-        #uniform_plan = [(0, 1), (1, 1), (2, 1)]
+        ## heuristically reorder the plan
+        #log_mean_fail_cmf_SB = numpy.logaddexp.reduce(log_survival_WSB + log_weights_W[:, None, None], axis = 0)
 
-        #print plan, plan_log_survival(plan, log_survival_WSB, log_weights_W)
-        #print uniform_plan, plan_log_survival(uniform_plan, log_survival_WSB, log_weights_W)
+        #def heuristic(pair):
+            #(s, c) = pair
 
-        #raise SystemExit()
+            #return log_mean_fail_cmf_SB[s, c] / (c + 1)
 
-        # heuristically reorder the plan
-        log_mean_fail_cmf_SB = numpy.logaddexp.reduce(log_survival_WSB + log_weights_W[:, None, None], axis = 0)
+        #return sorted(plan, key = heuristic)
 
-        def heuristic(pair):
-            (s, c) = pair
-
-            return log_mean_fail_cmf_SB[s, c] / (c + 1)
-
-        return sorted(plan, key = heuristic)
+        return plan
 

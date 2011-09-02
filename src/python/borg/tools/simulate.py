@@ -37,11 +37,15 @@ class PortfolioMaker(object):
             portfolio = borg.portfolios.OraclePortfolio()
         elif self.name == "preplanning":
             portfolio = borg.portfolios.PreplanningPortfolio(suite, training)
-        elif self.name == "mul-knapsack-replan":
-            model = borg.models.Mul_ModelFactory().fit(list(suite.solvers), training, 10)
-            #model = borg.models.Mul_Dir_ModelFactory().fit(list(suite.solvers), training, B = 6, T = 6)
-            #model = borg.models.Mul_DirMix_ModelFactory().fit(list(suite.solvers), training, B = 4, T = 4)
+        elif self.name == "mul-knapsack":
+            B = 10
+            T = 1
+            model = borg.models.Mul_ModelFactory().fit(list(suite.solvers), training, B, T)
+            #model = borg.models.Mul_Dir_ModelFactory().fit(list(suite.solvers), training, B, T)
+            #model = borg.models.Mul_DirMix_ModelFactory().fit(list(suite.solvers), training, B, T)
             portfolio = borg.portfolios.PureModelPortfolio(suite, model)
+        else:
+            raise ValueError("unrecognized portfolio name")
 
         return borg.solver_io.RunningPortfolioFactory(portfolio, suite)
 

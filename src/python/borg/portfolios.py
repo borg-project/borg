@@ -155,31 +155,36 @@ class PureModelPortfolio(object):
         #self._planner = borg.planners.BellmanPlanner()
         self._runs_limit = 256
 
-    #def __call__(self, task, suite, budget):
-        #"""Run the portfolio."""
-
-        #remaining = budget.cpu_seconds
-        #plan = self._planner.plan(self._model.log_survival[..., :-1], self._model.log_weights)
-
-        #for (s, b) in plan:
-            #this_budget = (b + 1) * self._model.interval
-
-            #assert remaining - this_budget > -1e-1
-
-            #process = suite.solvers[self._solver_names[s]].start(task)
-            #answer = process.run_then_stop(this_budget)
-            #remaining -= this_budget
-
-            #if suite.domain.is_final(task, answer):
-                #return answer
-
-        #return None
+        self._plan_cache = {}
+        self._plan = None
 
     def __call__(self, task, suite, budget):
         """Run the portfolio."""
 
-        with borg.accounting():
-            return self._solve(task, suite, budget)
+        remaining = budget.cpu_seconds
+
+        if self._plan is None:
+            self._plan = self._planner.plan(self._model.log_survival[..., :-1], self._model.log_weights)
+
+        for (s, b) in self._plan:
+            this_budget = (b + 1) * self._model.interval
+
+            assert remaining - this_budget > -1e-1
+
+            process = suite.solvers[self._solver_names[s]].start(task)
+            answer = process.run_then_stop(this_budget)
+            remaining -= this_budget
+
+            if suite.domain.is_final(task, answer):
+                return answer
+
+        return None
+
+    #def __call__(self, task, suite, budget):
+        #"""Run the portfolio."""
+
+        #with borg.accounting():
+            #return self._solve(task, suite, budget)
 
     def _solve(self, task, suite, budget):
         """Run the portfolio."""
@@ -191,8 +196,14 @@ class PureModelPortfolio(object):
         for i in xrange(self._runs_limit):
             # make a plan
             posterior = self._model.condition(failures)
-            position = int(borg.get_accountant().total.cpu_seconds / self._model.interval)
-            plan = self._planner.plan(posterior.log_survival[..., position:-1], posterior.log_weights)
+            position = sum(c + 1 for (_, c) in failures)
+            plan_key = (position, tuple(sorted(failures)))
+            plan = self._plan_cache.get(plan_key)
+
+            if plan is None:
+                plan = self._planner.plan(posterior.log_survival[..., :-position - 1], posterior.log_weights)
+
+                self._plan_cache[plan_key] = plan
 
             if len(plan) == 0:
                 break

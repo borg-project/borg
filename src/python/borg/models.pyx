@@ -7,6 +7,7 @@ import numpy
 import borg
 import cargo
 
+cimport cython
 cimport libc.math
 cimport numpy
 cimport borg.statistics
@@ -16,6 +17,7 @@ logger = cargo.get_logger(__name__, default_level = "DEBUG")
 cdef extern from "math.h":
     double INFINITY
 
+@cython.infer_types(True)
 def sampled_pmfs_log_pmf(pmfs, counts):
     """Compute the log probabilities of instance runs given discrete log PMFs."""
 
@@ -26,23 +28,13 @@ def sampled_pmfs_log_pmf(pmfs, counts):
 
     cdef numpy.ndarray[double, ndim = 3] pmfs_NSC = pmfs
     cdef numpy.ndarray[int, ndim = 3] counts_MSC = counts
-    cdef numpy.ndarray[double, ndim = 1] logs_M = numpy.empty(M, numpy.double)
+    cdef numpy.ndarray[double, ndim = 2] logs_NM = numpy.empty((N, M), numpy.double)
 
-    cdef int m
-    cdef int n
-    cdef int s
-    cdef int c
-
-    cdef double log_m
-    cdef double log_mn
     cdef int counts_msc
-    cdef int sum_counts_ms
 
-    for m in xrange(M):
-        log_m = -INFINITY
-
-        for n in xrange(N):
-            log_mn = 0.0
+    for n in xrange(N):
+        for m in xrange(M):
+            logs_NM[n, m] = 0.0
 
             for s in xrange(S):
                 sum_counts_ms = 0
@@ -53,18 +45,12 @@ def sampled_pmfs_log_pmf(pmfs, counts):
                     if counts_msc > 0:
                         sum_counts_ms += counts_msc
 
-                        log_mn += counts_msc * pmfs_NSC[n, s, c]
-                        log_mn -= libc.math.lgamma(1.0 + counts_msc)
+                        logs_NM[n, m] += counts_msc * pmfs_NSC[n, s, c]
+                        logs_NM[n, m] -= libc.math.lgamma(1.0 + counts_msc)
 
-                log_mn += libc.math.lgamma(1.0 + sum_counts_ms)
+                logs_NM[n, m] += libc.math.lgamma(1.0 + sum_counts_ms)
 
-            log_m = borg.statistics.log_plus(log_m, log_mn)
-
-        log_m -= libc.math.log(N)
-
-        logs_M[m] = log_m
-
-    return logs_M
+    return logs_NM
 
 cdef class Kernel(object):
     """Kernel function interface."""
@@ -173,7 +159,7 @@ class KernelModel(object):
 class MultinomialModel(object):
     """Multinomial mixture model."""
 
-    def __init__(self, interval, log_survival, log_weights = None):
+    def __init__(self, interval, log_survival, log_weights = None, log_masses = None):
         """Initialize."""
 
         (N, _, _) = log_survival.shape
@@ -186,8 +172,11 @@ class MultinomialModel(object):
         else:
             self._log_weights_N = log_weights
 
+        self._log_masses_NSC = log_masses
+
         borg.statistics.assert_log_weights(self._log_weights_N)
         borg.statistics.assert_log_survival(self._log_survival_NSC, 2)
+        borg.statistics.assert_log_probabilities(self._log_masses_NSC)
 
     def condition(self, failures):
         """Return a model conditioned on past runs."""
@@ -218,6 +207,12 @@ class MultinomialModel(object):
         """Possible log discrete survival functions."""
 
         return self._log_survival_NSC
+
+    @property
+    def log_masses(self):
+        """Possible log discrete survival functions."""
+
+        return self._log_masses_NSC
 
 def fit_mul_map(solver_names, training, B):
     """Fit a kernel-density model."""
@@ -302,7 +297,7 @@ class Mul_ModelFactory(object):
 
         log_survival_MSC = borg.statistics.to_log_survival(components_MSC, axis = -1)
 
-        return MultinomialModel(training.get_common_budget() / B, log_survival_MSC)
+        return MultinomialModel(training.get_common_budget() / B, log_survival_MSC, log_masses = numpy.log(components_MSC))
 
 class Mul_Dir_ModelFactory(object):
     def sample(self, counts, stored = 4, burn_in = 1024, spacing = 128):
@@ -351,15 +346,15 @@ class Mul_Dir_ModelFactory(object):
         components_MSC = numpy.empty((M, S, C), numpy.double)
         theta_samples_TNSC = self.sample(outcomes_NSC, stored = T)
 
-        print "outcomes:"
-        print outcomes_NSC[:2, ...]
+        #print "outcomes:"
+        #print outcomes_NSC[:2, ...]
 
-        for t in xrange(T):
-            components_MSC[t * N:(t + 1) * N, ...] = theta_samples_TNSC[t, ...]
+        #for t in xrange(T):
+            #components_MSC[t * N:(t + 1) * N, ...] = theta_samples_TNSC[t, ...]
 
-            with cargo.numpy_printing(precision = 2, suppress = True, linewidth = 160, threshold = 1000000):
-                print "T = {0}:".format(t)
-                print theta_samples_TNSC[t, :2, ...]
+            #with cargo.numpy_printing(precision = 2, suppress = True, linewidth = 160, threshold = 1000000):
+                #print "T = {0}:".format(t)
+                #print theta_samples_TNSC[t, :2, ...]
 
         log_survival_MSC = borg.statistics.to_log_survival(components_MSC, axis = -1)
 

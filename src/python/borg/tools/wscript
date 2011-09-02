@@ -10,6 +10,7 @@ def build(context):
             "cactus.py",
             "simulate.py",
             "evaluate_model.py",
+            "get_targets.py",
             ],
         install_path = "${PYTHONDIR}/borg/tools",
         )
