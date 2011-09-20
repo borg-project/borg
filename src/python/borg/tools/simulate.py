@@ -10,42 +10,43 @@ if __name__ == "__main__":
 import os.path
 import csv
 import uuid
-import random
 import cargo
 import borg
 
 logger = cargo.get_logger(__name__, default_level = "INFO")
 
 class PortfolioMaker(object):
-    def __init__(self, portfolio_name, model_name, interval):
+    def __init__(self, portfolio_name):
         self.name = portfolio_name
-        self.model_name = model_name
-        self.interval = interval
 
-    def __call__(self, suite, train_paths, suffix):
+    def __call__(self, suite, train_data):
         """Construct the specified portfolio."""
-
-        training = borg.storage.RunData.from_paths(train_paths, suite.domain, suffix = suffix)
 
         if self.name == "random":
             portfolio = borg.portfolios.RandomPortfolio()
         elif self.name == "uniform":
             portfolio = borg.portfolios.UniformPortfolio()
         elif self.name == "baseline":
-            portfolio = borg.portfolios.BaselinePortfolio(suite, training)
+            portfolio = borg.portfolios.BaselinePortfolio(suite, train_data)
         elif self.name == "oracle":
             portfolio = borg.portfolios.OraclePortfolio()
         elif self.name == "preplanning":
-            portfolio = borg.portfolios.PreplanningPortfolio(suite, training)
-        elif self.name == "mul-knapsack":
+            portfolio = borg.portfolios.PreplanningPortfolio(suite, train_data)
+        else:
             B = 10
             T = 1
-            model = borg.models.Mul_ModelFactory().fit(list(suite.solvers), training, B, T)
-            #model = borg.models.Mul_Dir_ModelFactory().fit(list(suite.solvers), training, B, T)
-            #model = borg.models.Mul_DirMix_ModelFactory().fit(list(suite.solvers), training, B, T)
-            portfolio = borg.portfolios.PureModelPortfolio(suite, model)
-        else:
-            raise ValueError("unrecognized portfolio name")
+
+            if self.name == "mul":
+                model = borg.models.Mul_ModelFactory().fit(train_data.solver_names, train_data, B, T)
+            elif self.name == "mul-dir":
+                model = borg.models.Mul_Dir_ModelFactory().fit(train_data.solver_names, train_data, B, T)
+            elif self.name == "mul-dirmix":
+                model = borg.models.Mul_DirMix_ModelFactory().fit(train_data.solver_names, train_data, B, T)
+            else:
+                raise ValueError("unrecognized portfolio name")
+
+            regress = borg.regression.UniformRegression(train_data, model)
+            portfolio = borg.portfolios.PureModelPortfolio(suite, model, regress)
 
         return borg.solver_io.RunningPortfolioFactory(portfolio, suite)
 
@@ -56,126 +57,77 @@ class SolverMaker(object):
     def __call__(self, suite, train_paths, suffix):
         return suite.solvers[self.name]
 
-def simulate_split(maker, suite_path, train_paths, test_paths, suffix, budget, split):
+def simulate_split(maker, train_data, test_data, split):
     """Make a validation run."""
 
-    suite = borg.fake.FakeSuite(borg.load_solvers(suite_path), test_paths, suffix)
-    solver = maker(suite, train_paths, suffix)
+    suite = borg.fake.FakeSuite(test_data)
+    solver = maker(suite, train_data)
     rows = []
 
-    #for test_path in test_paths[6:7]: # XXX
-    for test_path in test_paths:
-        logger.info("simulating run on %s", test_path)
+    for instance_id in test_data.run_lists:
+        logger.info("simulating run on %s", instance_id)
 
-        with suite.domain.task_from_path(test_path) as test_task:
+        with suite.domain.task_from_path(instance_id) as instance:
             with borg.accounting() as accountant:
-                answer = solver.start(test_task).run_then_stop(budget)
+                answer = solver.start(instance).run_then_stop(test_data.common_budget)
 
-            succeeded = suite.domain.is_final(test_task, answer)
+            succeeded = suite.domain.is_final(instance, answer)
             cpu_cost = accountant.total.cpu_seconds
 
             logger.info(
                 "%s %s on %s (%.2f CPU s)",
                 maker.name,
                 "succeeded" if succeeded else "failed",
-                os.path.basename(test_path),
+                os.path.basename(instance),
                 cpu_cost,
                 )
 
             success_str = "TRUE" if succeeded else "FALSE"
 
-            rows.append([test_path, maker.name, budget, cpu_cost, success_str, None, split])
+            rows.append([instance, maker.name, budget, cpu_cost, success_str, None, split])
 
-            #if not succeeded:
-                #feasible = False
-
-                #for run in suite.runs_data.get_run_list(test_path):
-                    #logger.info("%s: %s in %.2f", run.solver, run.success, run.cost)
-
-                    #feasible = feasible or run.success
-
-                #if feasible:
-                    #raise SystemExit()
+    rows.append([None, maker.name, budget, budget, "FALSE", None, split])
 
     return rows
-
-def yield_split_runs(makers, suite, budget):
-    # assemble task set
-    paths = list(cargo.files_under(tasks_root, suite.domain.extensions))
-    examples = int(round(len(paths) * 0.50))
-
-    logger.info("found %i tasks under %s", len(paths), tasks_root)
-
-    # build validation runs
-    for _ in xrange(runs):
-        split = uuid.uuid4()
-        shuffled = sorted(paths, key = lambda _ : random.random())
-        train_paths = shuffled[:examples]
-        test_paths = shuffled[examples:]
-
-        for maker in makers:
-            yield (
-                simulate_split,
-                [maker, suite_path, train_paths, test_paths, suffix, budget, split],
-                )
-
-def yield_explicit_runs(makers, splits, suite_path, suffix, budget):
-    """Make runs on train/test splits."""
-
-    for (train_paths, test_paths) in splits:
-        split_id = uuid.uuid4()
-
-        for maker in makers:
-            yield (
-                simulate_split,
-                [maker, suite_path, train_paths, test_paths, suffix, budget, split_id],
-                )
 
 @plac.annotations(
     out_path = ("results output path"),
     portfolio_name = ("name of the portfolio to train"),
-    suite_path = ("path to the solvers suite", "positional", None, os.path.abspath),
-    budget = ("CPU seconds per instance", "positional", None, float),
-    train_root = ("path to train task files", "positional", None, os.path.abspath),
-    test_root = ("path to test task files", "positional", None, os.path.abspath),
-    model_name = ("name of portfolio model", "option", None),
-    interval = ("planner discretization width", "option", None),
-    suffix = ("runs data file suffix", "option"),
+    train_runs = ("path to pre-recorded runs", "positional", None, os.path.abspath),
+    train_features = ("path to pre-computed features", "positional", None, os.path.abspath),
+    test_runs = ("path to pre-recorded runs", "positional", None, os.path.abspath),
+    test_features = ("path to pre-computed features", "positional", None, os.path.abspath),
     workers = ("submit jobs?", "option", "w", int),
+    local = ("workers are local?", "flag"),
     )
 def main(
     out_path,
     portfolio_name,
-    suite_path,
-    budget,
-    train_root,
-    test_root,
-    model_name = "kernel",
-    interval = 100.0,
-    suffix = ".runs.csv",
+    train_runs,
+    train_features,
+    test_runs,
+    test_features,
     workers = 0,
+    local = False,
     ):
-    """Simulate portfolio and solver performance."""
+    """Simulate portfolio and solver behavior."""
 
     cargo.enable_default_logging()
 
-    # prepare solver makers
-    suite = borg.load_solvers(suite_path)
-
-    if portfolio_name == "-":
-        makers = map(SolverMaker, suite.solvers)
-    else:
-        makers = [PortfolioMaker(portfolio_name, model_name, interval)]
-
     # generate jobs
-    train_paths = list(cargo.files_under(train_root, suite.domain.extensions))
-    test_paths = list(cargo.files_under(test_root, suite.domain.extensions))
+    def yield_runs():
+        train_data = borg.storage.RunData.from_bundled(train_runs, train_features)
+        test_data = borg.storage.RunData.from_bundled(test_runs, test_features)
 
-    logger.info("found %i train task(s) under %s", len(train_paths), train_root)
-    logger.info("found %i test task(s) under %s", len(test_paths), test_root)
+        if portfolio_name == "-":
+            makers = map(SolverMaker, train_data.solver_names)
+        else:
+            makers = [PortfolioMaker(portfolio_name)]
 
-    splits = [(train_paths, test_paths)] * 4
-    jobs = list(yield_explicit_runs(makers, splits, suite_path, suffix, budget))
+        for maker in makers:
+            split_id = uuid.uuid4()
+
+            yield (simulate_split, [maker, train_data, test_data, split_id])
 
     # and run them
     with open(out_path, "w") as out_file:
@@ -183,5 +135,5 @@ def main(
 
         writer.writerow(["path", "solver", "budget", "cost", "success", "answer", "split"])
 
-        cargo.do_or_distribute(jobs, workers, lambda _, r: writer.writerows(r))
+        cargo.do_or_distribute(yield_runs(), workers, lambda _, r: writer.writerows(r), local)
 

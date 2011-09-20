@@ -7,7 +7,6 @@ import signal
 import select
 import random
 import datetime
-import itertools
 import multiprocessing
 import numpy
 import cargo

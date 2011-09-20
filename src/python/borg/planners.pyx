@@ -59,15 +59,25 @@ def knapsack_plan(log_survival_WSB, log_weights_W):
 
         plan.append((s, c))
 
-    ## heuristically reorder the plan
-    #log_mean_fail_cmf_SB = numpy.logaddexp.reduce(log_survival_WSB + log_weights_W[:, None, None], axis = 0)
+    # heuristically reorder the plan
+    log_mean_fail_cmf_SB = numpy.logaddexp.reduce(log_survival_WSB + log_weights_W[:, None, None], axis = 0)
 
-    #def heuristic(pair):
-        #(s, c) = pair
+    def heuristic(pair):
+        (s, c) = pair
 
-        #return log_mean_fail_cmf_SB[s, c] / (c + 1)
+        return log_mean_fail_cmf_SB[s, c] / (c + 1)
 
-    #plan = sorted(plan, key = heuristic)
+    plan = sorted(plan, key = heuristic)
+
+    #print "plan is:", plan
+    #print "full survival function:"
+    #with cargo.numpy_printing(precision = 2, suppress = True, linewidth = 160, threshold = 1000000):
+        #print numpy.exp(log_survival_WSB)
+    #print "marginal survival function:"
+    #with cargo.numpy_printing(precision = 2, suppress = True, linewidth = 160, threshold = 1000000):
+        #print numpy.exp(log_mean_fail_cmf_SB)
+
+    #raise SystemExit()
 
     # ...
     return plan
@@ -227,7 +237,18 @@ class BellmanPlanner(object):
         (value, plan) = bellman_plan_full(&state, 0)
 
         ## heuristically reorder the plan
-        #log_mean_fail_cmf_SB = numpy.logaddexp.reduce(log_survival_WSB + log_weights_W[:, None, None], axis = 0)
+        print "plan is:", plan
+
+        log_mean_fail_cmf_SB = numpy.logaddexp.reduce(log_survival_WSB + log_weights_W[:, None, None], axis = 0)
+
+        print "full survival function:"
+        with cargo.numpy_printing(precision = 2, suppress = True, linewidth = 160, threshold = 1000000):
+            print log_mean_fail_cmf_SB
+        print "marginal survival function:"
+        with cargo.numpy_printing(precision = 2, suppress = True, linewidth = 160, threshold = 1000000):
+            print log_mean_fail_cmf_SB
+
+        raise SystemExit()
 
         #def heuristic(pair):
             #(s, c) = pair

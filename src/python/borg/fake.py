@@ -90,54 +90,49 @@ class FakeSolverFactory(object):
         our_runs = filter(lambda run: run.solver == self._solver_name, all_runs)
 
         if len(our_runs) == 0:
-            raise Exception("no candidate runs for fake solver")
+            raise Exception("no runs of solver \"{0}\" are recorded".format(self._solver_name))
 
         return FakeSolverProcess(cargo.grab(our_runs))
 
 class FakeDomain(object):
     name = "fake"
 
-    def __init__(self, domain):
+    def __init__(self, suite):
         """Initialize."""
 
-        self.extensions = [x for x in domain.extensions]
+        self._suite = suite
 
     @contextlib.contextmanager
     def task_from_path(self, task_path):
         yield task_path
 
-    def compute_features(self, task):
-        """Read or compute features of an instance."""
+    def compute_features(self, instance):
+        """Return static features of an instance."""
 
-        # XXX just pull it out of the training data storage instance
-        # grab precomputed feature data
-        csv_path = task + ".features.csv"
+        # XXX charge feature costs to CPU time accountant
 
-        assert os.path.exists(csv_path)
+        features = self._suite.run_data.get_feature_vector(instance)
 
-        features_array = numpy.recfromcsv(csv_path)
-        features = features_array.tolist()
-        names = features_array.dtype.names
-
-        # accumulate their cost
-        assert names[0] == "cpu_cost"
-
-        borg.get_accountant().charge_cpu(features[0])
-
-        return (names[1:], features[1:])
+        return (features.keys(), features.values())
 
     def is_final(self, task, answer):
         """Does this answer imply success?"""
 
         return bool(answer)
 
-class FakeSuite(object):
-    """Mimic a solver suite, using simulated solvers."""
+    @property
+    def extensions(self):
+        """Not applicable."""
 
-    def __init__(self, suite, test_paths, suffix):
+        raise NotImplementedError()
+
+class FakeSuite(object):
+    """Mimic a solver suite using simulated solvers."""
+
+    def __init__(self, run_data):
         """Initialize."""
 
-        self.runs_data = borg.TrainingData.from_paths(test_paths, suite.domain, suffix)
-        self.domain = FakeDomain(suite.domain)
-        self.solvers = dict((k, FakeSolverFactory(k, self.runs_data)) for k in suite.solvers)
+        self.run_data = run_data
+        self.domain = FakeDomain(self)
+        self.solvers = dict((k, FakeSolverFactory(k, self.run_data)) for k in self.run_data.solver_names)
 

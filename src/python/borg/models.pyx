@@ -1,4 +1,4 @@
-# cython: profile=False
+# cython: profile=True
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import scipy.stats
@@ -332,10 +332,10 @@ class Mul_Dir_ModelFactory(object):
 
         return theta_samples_TNSD
 
-    def fit(self, solver_names, training, B, T = 4):
+    def fit(self, solver_names, training, B, T = 1):
         """Fit a model."""
 
-        logger.info("fitting multinomial mixture model")
+        logger.info("fitting dirichlet-multinomial model")
 
         N = len(training.run_lists)
         M = N * T
@@ -346,11 +346,8 @@ class Mul_Dir_ModelFactory(object):
         components_MSC = numpy.empty((M, S, C), numpy.double)
         theta_samples_TNSC = self.sample(outcomes_NSC, stored = T)
 
-        #print "outcomes:"
-        #print outcomes_NSC[:2, ...]
-
-        #for t in xrange(T):
-            #components_MSC[t * N:(t + 1) * N, ...] = theta_samples_TNSC[t, ...]
+        for t in xrange(T):
+            components_MSC[t * N:(t + 1) * N, ...] = theta_samples_TNSC[t, ...]
 
             #with cargo.numpy_printing(precision = 2, suppress = True, linewidth = 160, threshold = 1000000):
                 #print "T = {0}:".format(t)
@@ -358,7 +355,7 @@ class Mul_Dir_ModelFactory(object):
 
         log_survival_MSC = borg.statistics.to_log_survival(components_MSC, axis = -1)
 
-        return MultinomialModel(training.get_common_budget() / B, log_survival_MSC)
+        return MultinomialModel(training.get_common_budget() / B, log_survival_MSC, log_masses = numpy.log(components_MSC))
 
 class Mul_DirMix_ModelFactory(object):
     def sample(self, counts, K, stored = 4, burn_in = 1024, spacing = 128):
@@ -376,6 +373,9 @@ class Mul_DirMix_ModelFactory(object):
         theta_samples_TNSD = numpy.empty((T, N, S, D), numpy.double)
 
         for i in xrange(burn_in + (stored - 1) * spacing + 1):
+            if i % 32 == 0:
+                print i
+
             # sample multinomial components
             for s in xrange(S):
                 for n in xrange(N):
@@ -425,7 +425,7 @@ class Mul_DirMix_ModelFactory(object):
     def fit(self, solver_names, training, B, T = 1):
         """Fit a kernel-density model."""
 
-        logger.info("fitting Dirichlet mixture model")
+        logger.info("fitting Dirichlet mixture-multinomial model")
 
         N = len(training.run_lists)
         M = N * T
@@ -441,7 +441,7 @@ class Mul_DirMix_ModelFactory(object):
 
         log_survival_MSC = borg.statistics.to_log_survival(components_MSC, axis = -1)
 
-        return MultinomialModel(training.get_common_budget() / B, log_survival_MSC)
+        return MultinomialModel(training.get_common_budget() / B, log_survival_MSC, log_masses = numpy.log(components_MSC))
 
 class Mul_DirMatMix_ModelFactory(object):
     def sample(self, counts, K, stored = 4, burn_in = 1024, spacing = 128):

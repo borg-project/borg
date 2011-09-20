@@ -1,4 +1,4 @@
-# cython: profile=False
+# cython: profile=True
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import numpy
@@ -307,6 +307,10 @@ cdef double _inverse_digamma_minus(double x, double N, double c) except? -1.0:
 
     return y
 
+@cython.infer_types(True)
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
 def dirichlet_estimate_map(vectors, double shape = 1.0, double scale = 1e8):
     """
     Compute the maximum-likelihood Dirichlet distribution.
@@ -315,56 +319,41 @@ def dirichlet_estimate_map(vectors, double shape = 1.0, double scale = 1e8):
     incorporate a gamma prior.
     """
 
-    # XXX attempt to derive an approach that uses Wallach's digamma recurrence?
-
     cdef int N = vectors.shape[0]
     cdef int D = vectors.shape[1]
 
     cdef numpy.ndarray[double, ndim = 2] vectors_ND = numpy.asarray(vectors, numpy.double)
+    cdef numpy.ndarray[double, ndim = 1] expect_p_D = numpy.zeros(D, numpy.double)
     cdef numpy.ndarray[double, ndim = 1] log_pbar_D = numpy.zeros(D, numpy.double)
     cdef numpy.ndarray[double, ndim = 1] alpha_D = numpy.ones(D, numpy.double) * 1e-1
-    cdef numpy.ndarray[double, ndim = 1] last_alpha_D = numpy.empty(D, numpy.double)
-
-    cdef int d
-    cdef int n
-    cdef int i
-
-    cdef double constant_term
 
     for d in xrange(D):
         for n in xrange(N):
             log_pbar_D[d] += libc.math.log(vectors_ND[n, d])
 
-    for i in xrange(32768):
-        for d in xrange(D):
-            last_alpha_D[d] = alpha_D[d]
+    cdef double constant_term
+    cdef double alpha_next
 
+    for i in xrange(1024):
         constant_term = 0.0
 
         for d in xrange(D):
             constant_term += alpha_D[d]
 
-        # XXX
-        #print "alpha_D =", alpha_D
-
-        if constant_term == 0.0:
-            with cargo.numpy_printing(precision = 2, suppress = True, threshold = 1000000, linewidth = 160):
-                print vectors
-
         constant_term = N * digamma(constant_term) - 1.0 / scale
-
-        for d in xrange(D):
-            alpha_D[d] = _inverse_digamma_minus(log_pbar_D[d] + constant_term, N, shape)
 
         alpha_change = 0.0
 
         for d in xrange(D):
-            alpha_change += libc.math.fabs(alpha_D[d] - last_alpha_D[d])
+            alpha_next = _inverse_digamma_minus(log_pbar_D[d] + constant_term, N, shape)
+            alpha_change += libc.math.fabs(alpha_D[d] - alpha_next)
+            alpha_D[d] = alpha_next
 
-        if alpha_change <= 1e-10:
+        if alpha_change < 1e-6:
+            print i
             return alpha_D
 
-    logger.warning("Dirichlet MAP estimation did not converge; alpha = %s", alpha_D)
+    logger.warning("Dirichlet MAP estimation did not converge; last change in alpha: %s", alpha_change)
 
     return alpha_D
 

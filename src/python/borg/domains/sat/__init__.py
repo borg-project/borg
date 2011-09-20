@@ -1,12 +1,10 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import contextlib
-import cargo
 import borg
 
-from . import features
-from . import instance
 from . import solvers
+from . import features
 
 class SatisfiabilityTask(object):
     def __init__(self, path):

@@ -49,6 +49,7 @@ def build(context):
             "portfolios.py",
             "solver_io.py",
             "storage.py",
+            "regression.py",
             "fake.py",
             ],
         install_path = install_path,

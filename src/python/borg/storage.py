@@ -1,5 +1,7 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
+import csv
+import collections
 import numpy
 import cargo
 
@@ -19,12 +21,14 @@ class RunRecord(object):
 class RunData(object):
     """Load and access portfolio training data."""
 
-    def __init__(self):
+    def __init__(self, solver_names):
         """Initialize."""
 
+        self.solver_names = solver_names
         self.run_lists = {}
         self.feature_vectors = {}
         self.common_budget = None
+        self.common_features = None
 
     def add_run(self, id_, run):
         """Add a run to these data."""
@@ -50,13 +54,19 @@ class RunData(object):
         """Add a feature vector to these data."""
 
         assert id_ not in self.feature_vectors
+        assert isinstance(vector, collections.Mapping)
+
+        if self.common_features is None:
+            self.common_features = sorted(vector)
+        else:
+            assert self.common_features == sorted(vector)
 
         self.feature_vectors[id_] = vector
 
     def filter(self, id_):
         """Return a filtered set of run data."""
 
-        data = RunData()
+        data = RunData(self.solver_names)
         
         data.run_lists = {id_: self.run_lists[id_]}
         data.feature_vectors = {id_: self.feature_vectors[id_]}
@@ -88,6 +98,24 @@ class RunData(object):
 
         return budget
 
+    def to_features_array(self):
+        """Retrieve feature values in an array."""
+
+        assert set(self.feature_vectors) == set(self.run_lists)
+
+        N = len(self.feature_vectors)
+        F = len(self.common_features)
+
+        feature_values_NF = numpy.empty((N, F), numpy.double)
+
+        for (n, instance_id) in enumerate(sorted(self.feature_vectors)):
+            features = self.feature_vectors[instance_id]
+
+            for (f, name) in enumerate(self.common_features):
+                feature_values_NF[n, f] = features[name]
+
+        return feature_values_NF
+
     def to_runs_array(self, solver_names):
         """Return run durations as a partially-filled array."""
 
@@ -98,8 +126,11 @@ class RunData(object):
         successes_NS = numpy.zeros((N, S), numpy.intc)
         failures_NS = numpy.zeros((N, S), numpy.intc)
         solver_names_S = list(solver_names)
+        instance_ids = sorted(self.run_lists)
 
-        for (n, runs) in enumerate(self.run_lists.itervalues()):
+        for (n, instance_id) in enumerate(instance_ids):
+            runs = self.run_lists[instance_id]
+
             for run in runs:
                 s = solver_names_S.index(run.solver)
 
@@ -115,7 +146,9 @@ class RunData(object):
 
         successes_NS[...] = 0
 
-        for (n, runs) in enumerate(self.run_lists.itervalues()):
+        for (n, instance_id) in enumerate(instance_ids):
+            runs = self.run_lists[instance_id]
+
             for run in runs:
                 s = solver_names_S.index(run.solver)
 
@@ -140,7 +173,9 @@ class RunData(object):
         cutoff = self.get_common_budget()
         interval = cutoff / B
 
-        for (n, runs) in enumerate(self.run_lists.values()):
+        for (n, instance_id) in enumerate(sorted(self.run_lists)):
+            runs = self.run_lists[instance_id]
+
             for run in runs:
                 s = solver_name_index.index(run.solver)
 
@@ -154,21 +189,21 @@ class RunData(object):
         return outcomes_NSC
 
     @staticmethod
-    def from_roots(tasks_roots, domain, suffix = ".runs.csv"):
-        """Collect training data by scanning for tasks."""
+    def from_roots(solver_names, tasks_roots, domain, suffix = ".runs.csv"):
+        """Collect run data by scanning for tasks."""
 
         task_paths = []
 
         for tasks_root in tasks_roots:
             task_paths.extend(cargo.files_under(tasks_root, domain.extensions))
 
-        return RunData.from_paths(task_paths, domain, suffix)
+        return RunData.from_paths(solver_names, task_paths, domain, suffix)
 
     @staticmethod
-    def from_paths(task_paths, domain, suffix = ".runs.csv"):
-        """Collect training data from task paths."""
+    def from_paths(solver_names, task_paths, domain, suffix = ".runs.csv"):
+        """Collect run data from task paths."""
 
-        training = RunData()
+        training = RunData(solver_names)
 
         for path in task_paths:
             # load run records
@@ -187,9 +222,65 @@ class RunData(object):
             feature_records = numpy.recfromcsv("{0}.features.csv".format(path))
             feature_dict = dict(zip(feature_records.dtype.names, feature_records.tolist()))
 
+            del feature_dict["cpu_cost"]
+            #feature_dict = {"nvars": feature_dict["nvars"]}
+
             training.add_feature_vector(path, feature_dict)
 
         return training
+
+    @staticmethod
+    def from_bundled(runs_csv_path, features_csv_path):
+        """Collect run data from two CSV files."""
+
+        run_data = RunData(None)
+
+        # load runs
+        logger.info("reading run data from %s", runs_csv_path)
+
+        solver_names = set()
+
+        with open(runs_csv_path) as csv_file:
+            csv_reader = csv.reader(csv_file)
+
+            columns = csv_reader.next()
+
+            if columns[:5] != ["instance", "solver", "budget", "cost", "succeeded"]:
+                raise Exception("unexpected columns in run data CSV file")
+
+            for (instance, solver, budget_str, cost_str, succeeded_str) in csv_reader:
+                run_data.add_run(
+                    instance,
+                    RunRecord(
+                        solver,
+                        float(budget_str),
+                        float(cost_str),
+                        succeeded_str == "TRUE",
+                        ),
+                    )
+                solver_names.add(solver)
+
+        run_data.solver_names = sorted(solver_names)
+
+        # load features
+        logger.info("reading feature data from %s", features_csv_path)
+
+        with open(features_csv_path) as csv_file:
+            csv_reader = csv.reader(csv_file)
+
+            columns = csv_reader.next()
+
+            if columns[0] != "instance":
+                raise Exception("unexpected columns in features CSV file")
+
+            for row in csv_reader:
+                feature_dict = dict(zip(columns[1:], row[1:]))
+
+                del feature_dict["cpu_cost"]
+
+                run_data.add_feature_vector(row[0], feature_dict)
+
+        return run_data
 
 TrainingData = RunData
 

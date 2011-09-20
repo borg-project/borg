@@ -67,9 +67,11 @@ class OraclePortfolio(object):
     def __call__(self, task, suite, budget):
         """Run the portfolio."""
 
+        # XXX fix the solver_names situation
+
         # grab known run data
         budget_count = 100
-        solver_names = list(suite.solvers)
+        solver_names = sorted(suite.solvers)
         data = suite.runs_data.filter(task)
         bins = data.to_bins_array(solver_names, budget_count)[0].astype(numpy.double) + 1e-64
         rates = bins / numpy.sum(bins, axis = -1)[..., None]
@@ -77,8 +79,8 @@ class OraclePortfolio(object):
 
         # make a plan
         interval = data.get_common_budget() / budget_count
-        #planner = borg.planners.KnapsackMultiversePlanner()
-        planner = borg.planners.BellmanPlanner()
+        planner = borg.planners.KnapsackMultiversePlanner()
+        #planner = borg.planners.BellmanPlanner()
         plan = planner.plan(log_survival[None, ...])
 
         # and follow through
@@ -104,10 +106,12 @@ class PreplanningPortfolio(object):
     def __init__(self, suite, training):
         """Initialize."""
 
+        # XXX again, fix the solver names order mess
+
         # grab known run data
         budget_count = 10
-        solver_names = list(suite.solvers)
-        bins = training.to_bins_array(solver_names, budget_count).astype(numpy.double) + 1e-8 / budget_count
+        self._solver_names = sorted(suite.solvers)
+        bins = training.to_bins_array(self._solver_names, budget_count).astype(numpy.double) + 1e-8 / budget_count
         rates = bins / numpy.sum(bins, axis = -1)[..., None]
         survival = 1.0 - numpy.cumsum(rates, axis = -1)
 
@@ -118,7 +122,6 @@ class PreplanningPortfolio(object):
         #planner = borg.planners.BellmanPlanner()
 
         self._plan = planner.plan(numpy.log(survival[..., :-1]))
-        self._solver_names = list(suite.solvers)
 
         logger.info("preplanned plan: %s", self._plan)
 
@@ -144,15 +147,21 @@ class PreplanningPortfolio(object):
 class PureModelPortfolio(object):
     """Hybrid mixture-model portfolio."""
 
-    def __init__(self, suite, model):
+    def __init__(self, suite, model, regress = None):
         """Initialize."""
 
-        self._solver_names = list(suite.solvers)
+        # XXX fix the solver_names (ordering) situation
+        # XXX fix the feature ordering situation
+
+        self._solver_names = sorted(suite.solvers)
         self._solver_name_index = dict(map(reversed, enumerate(self._solver_names)))
+
+        print list(enumerate(self._solver_names))
 
         self._model = model
         self._planner = borg.planners.KnapsackMultiversePlanner()
         #self._planner = borg.planners.BellmanPlanner()
+        self._regress = regress
         self._runs_limit = 256
 
         self._plan_cache = {}
@@ -163,10 +172,17 @@ class PureModelPortfolio(object):
 
         remaining = budget.cpu_seconds
 
-        if self._plan is None:
-            self._plan = self._planner.plan(self._model.log_survival[..., :-1], self._model.log_weights)
+        (feature_names, feature_values) = suite.domain.compute_features(task)
+        feature_dict = dict(zip(feature_names, feature_values))
+        feature_values_sorted = [feature_dict[f] for f in sorted(feature_names)]
+        predicted_weights = numpy.log(self._regress.predict(task, feature_values_sorted))
 
-        for (s, b) in self._plan:
+        if self._plan is None:
+            self._plan = self._planner.plan(self._model.log_survival[..., :-1], predicted_weights)
+
+        plan = self._plan
+
+        for (s, b) in plan:
             this_budget = (b + 1) * self._model.interval
 
             assert remaining - this_budget > -1e-1
@@ -208,7 +224,7 @@ class PureModelPortfolio(object):
             if len(plan) == 0:
                 break
 
-            print "plan", plan
+            #print "plan", plan
 
             # and follow through
             (plan0_s, plan0_c) = plan[0]
