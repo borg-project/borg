@@ -1,5 +1,6 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
+import os.path
 import csv
 import collections
 import numpy
@@ -230,17 +231,19 @@ class RunData(object):
         return training
 
     @staticmethod
-    def from_bundled(runs_csv_path, features_csv_path):
+    def from_bundle(bundle_path):
         """Collect run data from two CSV files."""
 
         run_data = RunData(None)
 
         # load runs
+        runs_csv_path = os.path.join(bundle_path, "all_runs.csv.gz")
+
         logger.info("reading run data from %s", runs_csv_path)
 
         solver_names = set()
 
-        with open(runs_csv_path) as csv_file:
+        with cargo.openz(runs_csv_path) as csv_file:
             csv_reader = csv.reader(csv_file)
 
             columns = csv_reader.next()
@@ -255,7 +258,7 @@ class RunData(object):
                         solver,
                         float(budget_str),
                         float(cost_str),
-                        succeeded_str == "TRUE",
+                        succeeded_str.lower() == "true",
                         ),
                     )
                 solver_names.add(solver)
@@ -263,9 +266,11 @@ class RunData(object):
         run_data.solver_names = sorted(solver_names)
 
         # load features
+        features_csv_path = os.path.join(bundle_path, "all_features.csv.gz")
+
         logger.info("reading feature data from %s", features_csv_path)
 
-        with open(features_csv_path) as csv_file:
+        with cargo.openz(features_csv_path) as csv_file:
             csv_reader = csv.reader(csv_file)
 
             columns = csv_reader.next()
@@ -274,11 +279,13 @@ class RunData(object):
                 raise Exception("unexpected columns in features CSV file")
 
             for row in csv_reader:
-                feature_dict = dict(zip(columns[1:], row[1:]))
+                feature_dict = dict(zip(columns[1:], map(float, row[1:])))
 
                 del feature_dict["cpu_cost"]
 
                 run_data.add_feature_vector(row[0], feature_dict)
+
+        assert set(run_data.run_lists) == set(run_data.feature_vectors)
 
         return run_data
 
