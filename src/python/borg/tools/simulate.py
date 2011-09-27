@@ -1,17 +1,15 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import plac
+import borg
 
 if __name__ == "__main__":
-    from borg.tools.simulate import main
-
-    plac.call(main)
+    plac.call(borg.tools.simulate.main)
 
 import os.path
 import csv
 import uuid
 import cargo
-import borg
 
 logger = cargo.get_logger(__name__, default_level = "INFO")
 
@@ -45,7 +43,7 @@ class PortfolioMaker(object):
             else:
                 raise ValueError("unrecognized portfolio name")
 
-            regress = borg.regression.UniformRegression(train_data, model)
+            regress = borg.regression.LinearRegression(train_data, model)
             portfolio = borg.portfolios.PureModelPortfolio(suite, model, regress)
 
         return borg.solver_io.RunningPortfolioFactory(portfolio, suite)
@@ -54,12 +52,14 @@ class SolverMaker(object):
     def __init__(self, solver_name):
         self.name = solver_name
 
-    def __call__(self, suite, train_paths, suffix):
+    def __call__(self, suite, train_data):
         return suite.solvers[self.name]
 
-def simulate_split(maker, train_data, test_data, split):
+def simulate_split(maker, train_data, test_data):
     """Make a validation run."""
 
+    split_id = uuid.uuid4()
+    budget = test_data.common_budget
     suite = borg.fake.FakeSuite(test_data)
     solver = maker(suite, train_data)
     rows = []
@@ -69,7 +69,7 @@ def simulate_split(maker, train_data, test_data, split):
 
         with suite.domain.task_from_path(instance_id) as instance:
             with borg.accounting() as accountant:
-                answer = solver.start(instance).run_then_stop(test_data.common_budget)
+                answer = solver.start(instance).run_then_stop(budget)
 
             succeeded = suite.domain.is_final(instance, answer)
             cpu_cost = accountant.total.cpu_seconds
@@ -84,29 +84,25 @@ def simulate_split(maker, train_data, test_data, split):
 
             success_str = "TRUE" if succeeded else "FALSE"
 
-            rows.append([instance, maker.name, budget, cpu_cost, success_str, None, split])
+            rows.append([instance, maker.name, budget, cpu_cost, success_str, None, split_id])
 
-    rows.append([None, maker.name, budget, budget, "FALSE", None, split])
+    rows.append([None, maker.name, budget, budget, "FALSE", None, split_id])
 
     return rows
 
 @plac.annotations(
     out_path = ("results output path"),
     portfolio_name = ("name of the portfolio to train"),
-    train_runs = ("path to pre-recorded runs", "positional", None, os.path.abspath),
-    train_features = ("path to pre-computed features", "positional", None, os.path.abspath),
-    test_runs = ("path to pre-recorded runs", "positional", None, os.path.abspath),
-    test_features = ("path to pre-computed features", "positional", None, os.path.abspath),
+    train_bundle = ("path to pre-recorded runs", "positional", None, os.path.abspath),
+    test_bundle = ("path to pre-recorded runs", "positional", None, os.path.abspath),
     workers = ("submit jobs?", "option", "w", int),
     local = ("workers are local?", "flag"),
     )
 def main(
     out_path,
     portfolio_name,
-    train_runs,
-    train_features,
-    test_runs,
-    test_features,
+    train_bundle,
+    test_bundle,
     workers = 0,
     local = False,
     ):
@@ -116,8 +112,8 @@ def main(
 
     # generate jobs
     def yield_runs():
-        train_data = borg.storage.RunData.from_bundled(train_runs, train_features)
-        test_data = borg.storage.RunData.from_bundled(test_runs, test_features)
+        train_data = borg.storage.RunData.from_bundle(train_bundle)
+        test_data = borg.storage.RunData.from_bundle(test_bundle)
 
         if portfolio_name == "-":
             makers = map(SolverMaker, train_data.solver_names)
@@ -125,9 +121,8 @@ def main(
             makers = [PortfolioMaker(portfolio_name)]
 
         for maker in makers:
-            split_id = uuid.uuid4()
-
-            yield (simulate_split, [maker, train_data, test_data, split_id])
+            for _ in xrange(4):
+                yield (simulate_split, [maker, train_data, test_data])
 
     # and run them
     with open(out_path, "w") as out_file:

@@ -72,7 +72,7 @@ class OraclePortfolio(object):
         # grab known run data
         budget_count = 100
         solver_names = sorted(suite.solvers)
-        data = suite.runs_data.filter(task)
+        data = suite.run_data.filter(task)
         bins = data.to_bins_array(solver_names, budget_count)[0].astype(numpy.double) + 1e-64
         rates = bins / numpy.sum(bins, axis = -1)[..., None]
         log_survival = numpy.log(1.0 - numpy.cumsum(rates[:, :-1], axis = -1))
@@ -177,10 +177,10 @@ class PureModelPortfolio(object):
         feature_values_sorted = [feature_dict[f] for f in sorted(feature_names)]
         predicted_weights = numpy.log(self._regress.predict(task, feature_values_sorted))
 
-        if self._plan is None:
-            self._plan = self._planner.plan(self._model.log_survival[..., :-1], predicted_weights)
+        #if self._plan is None:
+        plan = self._planner.plan(self._model.log_survival[..., :-1], predicted_weights)
 
-        plan = self._plan
+        #plan = self._plan
 
         for (s, b) in plan:
             this_budget = (b + 1) * self._model.interval

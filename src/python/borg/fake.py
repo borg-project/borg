@@ -1,8 +1,6 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
-import os.path
 import contextlib
-import numpy
 import borg
 import cargo
 

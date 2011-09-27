@@ -135,9 +135,6 @@ cpdef double digamma(double x):
     Implementation adapted from that of Bernardo (1976).
     """
 
-    #if x <= 0.0:
-        #raise ValueError("x <= 0 passed to digamma()")
-
     cdef double s = 1e-5
     cdef double c = 8.5
     cdef double s3 = 8.333333333e-2
