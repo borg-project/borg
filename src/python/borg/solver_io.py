@@ -3,9 +3,11 @@
 import os.path
 import uuid
 import time
+import shutil
 import signal
 import select
 import random
+import tempfile
 import datetime
 import multiprocessing
 import numpy
@@ -47,12 +49,13 @@ def timed_read(fds, timeout = -1):
 class SolverProcess(multiprocessing.Process):
     """Attempt to solve the task in a subprocess."""
 
-    def __init__(self, parse_output, arguments, stm_queue, mts_queue, solver_id):
+    def __init__(self, parse_output, arguments, stm_queue, mts_queue, solver_id, tmpdir):
         self._parse_output = parse_output
         self._arguments = arguments
         self._stm_queue = stm_queue
         self._mts_queue = mts_queue
         self._solver_id = solver_id
+        self._tmpdir = tmpdir
         self._seed = random_seed()
         self._popened = None
 
@@ -91,6 +94,8 @@ class SolverProcess(multiprocessing.Process):
                 os.kill(self._popened.pid, signal.SIGCONT)
 
                 self._popened.wait()
+
+            shutil.rmtree(self._tmpdir, ignore_errors = True)
 
     def handle_subsolver(self):
         # spawn solver
@@ -142,13 +147,14 @@ class SolverProcess(multiprocessing.Process):
 
         self._stm_queue.put((self._solver_id, run_cost, answer, True))
 
-def prepare(command, root, cnf_path):
+def prepare(command, root, cnf_path, tmpdir):
     """Format command for execution."""
 
     keywords = {
         "root": root,
         "task": cnf_path,
         "seed": random_seed(),
+        "tmpdir": tmpdir,
         }
 
     return [s.format(**keywords) for s in command]
@@ -170,14 +176,16 @@ class RunningSolver(object):
             self._solver_id = solver_id
 
         self._mts_queue = multiprocessing.Queue()
+        self._tmpdir = tempfile.mkdtemp(prefix = "borg.")
 
         self._process = \
             SolverProcess(
                 parse,
-                prepare(command, root, task_path),
+                prepare(command, root, task_path, self._tmpdir),
                 self._stm_queue,
                 self._mts_queue,
                 self._solver_id,
+                self._tmpdir,
                 )
 
     def __call__(self, budget):
@@ -215,6 +223,8 @@ class RunningSolver(object):
             os.kill(self._process.pid, signal.SIGUSR1)
 
             self._process.join()
+
+        shutil.rmtree(self._tmpdir, ignore_errors = True)
 
 class RunningPortfolio(object):
     """Portfolio running on a task."""
