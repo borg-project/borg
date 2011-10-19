@@ -30,7 +30,7 @@ def parse_sat_output(stdout):
 class SAT_SolverFactory(object):
     """Construct a basic competition solver callable."""
 
-    def __init__(self, root, command):
+    def __init__(self, root, command, library_paths = ()):
         """Initialize."""
 
         self._root = root

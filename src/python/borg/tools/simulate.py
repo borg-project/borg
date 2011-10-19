@@ -18,8 +18,6 @@ class PortfolioMaker(object):
         self.name = portfolio_name
 
     def __call__(self, suite, train_data):
-        """Construct the specified portfolio."""
-
         if self.name == "random":
             portfolio = borg.portfolios.RandomPortfolio()
         elif self.name == "uniform":
@@ -56,8 +54,6 @@ class SolverMaker(object):
         return suite.solvers[self.name]
 
 def simulate_split(maker, train_data, test_data):
-    """Make a validation run."""
-
     split_id = uuid.uuid4()
     budget = test_data.common_budget
     suite = borg.fake.FakeSuite(test_data)

@@ -21,6 +21,8 @@ cdef extern from "math.h":
 def sampled_pmfs_log_pmf(pmfs, counts):
     """Compute the log probabilities of instance runs given discrete log PMFs."""
 
+    borg.statistics.assert_log_weights(pmfs, axis = -1)
+
     cdef int N = pmfs.shape[0]
     cdef int S = pmfs.shape[1]
     cdef int C = pmfs.shape[2]
@@ -49,6 +51,8 @@ def sampled_pmfs_log_pmf(pmfs, counts):
                         logs_NM[n, m] -= libc.math.lgamma(1.0 + counts_msc)
 
                 logs_NM[n, m] += libc.math.lgamma(1.0 + sum_counts_ms)
+
+    borg.statistics.assert_log_probabilities(logs_NM)
 
     return logs_NM
 
@@ -210,7 +214,7 @@ class MultinomialModel(object):
 
     @property
     def log_masses(self):
-        """Possible log discrete survival functions."""
+        """Possible log discrete mass functions."""
 
         return self._log_masses_NSC
 
@@ -260,7 +264,7 @@ class Mul_ModelFactory(object):
         (N, S, D) = counts.shape
 
         counts_NSD = numpy.asarray(counts, numpy.intc)
-        alpha_D = numpy.ones(D, numpy.double) * 1e-2
+        alpha_D = numpy.ones(D, numpy.double) * 5e-2
         thetas_NSD = numpy.empty((N, S, D), numpy.double)
         theta_samples_TNSD = numpy.empty((T, N, S, D), numpy.double)
 

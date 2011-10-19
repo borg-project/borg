@@ -93,7 +93,7 @@ def main(
                 else:
                     count = runs
 
-                logger.info("scheduling %i runs of %s on %s", count, solver_name, os.path.basename(path))
+                logger.info("scheduling %i run(s) of %s on %s", count, solver_name, os.path.basename(path))
 
                 for _ in xrange(count):
                     yield (run_solver_on, [suite_path, solver_name, path, budget])

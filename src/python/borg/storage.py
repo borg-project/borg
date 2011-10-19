@@ -2,6 +2,8 @@
 
 import os.path
 import csv
+import random
+import itertools
 import collections
 import numpy
 import cargo
@@ -30,6 +32,11 @@ class RunData(object):
         self.feature_vectors = {}
         self.common_budget = None
         self.common_features = None
+
+    def __len__(self):
+        """Number of instances for which data are stored."""
+
+        return len(self.run_lists)
 
     def add_run(self, id_, run):
         """Add a run to these data."""
@@ -64,16 +71,50 @@ class RunData(object):
 
         self.feature_vectors[id_] = vector
 
-    def filter(self, id_):
+    def filter(self, *ids):
         """Return a filtered set of run data."""
 
         data = RunData(self.solver_names)
-        
-        data.run_lists = {id_: self.run_lists[id_]}
-        data.feature_vectors = {id_: self.feature_vectors[id_]}
+
+        for id_ in ids:
+            for run in self.run_lists[id_]:
+                data.add_run(id_, run)
+
+            data.add_feature_vector(id_, self.feature_vectors[id_])
+
         data.common_budget = self.common_budget
 
         return data
+
+    def split(self, fraction):
+        """Split the data into two sets of instances."""
+
+        shuffled_ids = sorted(self.ids, key = lambda _: random.random())
+        split_size = int(fraction * len(self.ids))
+        ids_a = shuffled_ids[:split_size]
+        ids_b = shuffled_ids[split_size:]
+
+        return (self.filter(*ids_a), self.filter(*ids_b))
+
+    def collect(self, counts):
+        """Get a systematic subset of the data."""
+
+        sampled = RunData(self.solver_names)
+        iter_count = itertools.cycle(counts)
+
+        for id_ in self.ids:
+            count = next(iter_count)
+
+            shuffled_runs = sorted(self.run_lists[id_], key = lambda _: random.random())
+
+            for i in xrange(count):
+                sampled.add_run(id_, shuffled_runs[i])
+
+            sampled.add_feature_vector(id_, self.feature_vectors[id_])
+
+        sampled.common_budget = self.common_budget
+
+        return sampled
 
     def get_feature_vector(self, id_):
         """Retrieve features of a task."""
@@ -188,6 +229,12 @@ class RunData(object):
                     outcomes_NSC[n, s, B] += 1
 
         return outcomes_NSC
+
+    @property
+    def ids(self):
+        """All associated instance ids."""
+
+        return self.run_lists.keys()
 
     @staticmethod
     def from_roots(solver_names, tasks_roots, domain, suffix = ".runs.csv"):
