@@ -55,6 +55,7 @@ def appender(items):
     tasks_root = ("path to task files", "positional", None, os.path.abspath),
     budget = ("per-instance budget", "positional", None, float),
     only_missing = ("only make missing runs", "flag"),
+    only_solver = ("only make runs of one solver", "option"),
     runs = ("number of runs", "option", "r", int),
     suffix = ("runs file suffix", "option"),
     workers = ("submit jobs?", "option", "w", int),
@@ -64,6 +65,7 @@ def main(
     tasks_root,
     budget,
     only_missing = False,
+    only_solver = None,
     runs = 4,
     suffix = ".runs.csv",
     workers = 0,
@@ -79,7 +81,10 @@ def main(
         if not paths:
             raise ValueError("no paths found under specified root")
 
-        solver_names = suite.solvers.keys()
+        if only_solver is None:
+            solver_names = suite.solvers.keys()
+        else:
+            solver_names = [only_solver]
 
         for path in paths:
             run_data = None
