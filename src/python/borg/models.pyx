@@ -1,8 +1,6 @@
 # cython: profile=True
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
-import scipy.stats
-import scikits.learn.linear_model
 import numpy
 import borg
 import cargo
@@ -257,6 +255,9 @@ def fit_mul_map(solver_names, training, B):
     return MultinomialModel(log_components_NSC)
 
 class Mul_ModelFactory(object):
+    def __init__(self, alpha = 1e-2):
+        self._alpha = alpha
+
     def sample(self, counts, stored = 4, burn_in = 1024, spacing = 128):
         """Sample parameters of the multinomial model using Gibbs."""
 
@@ -264,7 +265,7 @@ class Mul_ModelFactory(object):
         (N, S, D) = counts.shape
 
         counts_NSD = numpy.asarray(counts, numpy.intc)
-        alpha_D = numpy.ones(D, numpy.double) * 5e-2
+        alpha_D = numpy.ones(D, numpy.double) * self._alpha
         thetas_NSD = numpy.empty((N, S, D), numpy.double)
         theta_samples_TNSD = numpy.empty((T, N, S, D), numpy.double)
 

@@ -2,7 +2,7 @@
 
 import numpy
 import scipy.stats
-import scikits.learn.linear_model
+import sklearn.linear_model
 import cargo
 import borg
 
@@ -99,7 +99,7 @@ class LinearRegression(object):
 
         (features_NF, ps_NM) = prepare_training_data_raw(run_data, model)
 
-        self._regression = scikits.learn.linear_model.LinearRegression()
+        self._regression = sklearn.linear_model.LinearRegression()
 
         self._regression.fit(features_NF, ps_NM)
 

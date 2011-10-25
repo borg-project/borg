@@ -5,7 +5,7 @@ def configure(context):
     context.check_python_module("plac")
     context.check_python_module("numpy")
     context.check_python_module("scipy")
-    context.check_python_module("scikits.learn")
+    context.check_python_module("sklearn")
     context.check_python_module("nose")
     context.check_python_module("cargo")
 
@@ -45,7 +45,6 @@ def build(context):
             "__init__.py",
             "defaults.py",
             "expenses.py",
-            "experimental.py",
             "portfolios.py",
             "solver_io.py",
             "storage.py",

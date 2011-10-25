@@ -87,7 +87,7 @@ class RunData(object):
         return data
 
     def split(self, fraction):
-        """Split the data into two sets of instances."""
+        """Randomly split the data into two sets of instances."""
 
         shuffled_ids = sorted(self.ids, key = lambda _: random.random())
         split_size = int(fraction * len(self.ids))
@@ -95,6 +95,11 @@ class RunData(object):
         ids_b = shuffled_ids[split_size:]
 
         return (self.filter(*ids_a), self.filter(*ids_b))
+
+    def masked(self, mask):
+        """Return a subset of the instances."""
+
+        return self.filter(*(id_ for (id_, m) in zip(self.ids, mask) if m))
 
     def collect(self, counts):
         """Get a systematic subset of the data."""

@@ -11,6 +11,7 @@ import os.path
 import csv
 import uuid
 import numpy
+import sklearn
 import cargo
 import borg
 
@@ -21,24 +22,25 @@ def score_model_log_probability(model, B, testing):
 
     counts = testing.to_bins_array(testing.solver_names, B)
     log_probabilities = borg.models.sampled_pmfs_log_pmf(model.log_masses, counts)
+    lps_per_instance = numpy.logaddexp.reduce(log_probabilities, axis = 0)
 
-    print model.log_masses[0]
-
-    return numpy.mean(log_probabilities)
+    return numpy.mean(lps_per_instance)
 
 def evaluate_split(model_name, split, training, testing):
     # build the model
     B = 10
     T = 1
 
-    if model_name == "mul":
-        model = borg.models.Mul_ModelFactory().fit(training.solver_names, training, B, T)
+    if model_name == "mul_alpha=0.1":
+        model = borg.models.Mul_ModelFactory(alpha = 0.1).fit(training.solver_names, training, B, T)
+    elif model_name == "mul_alpha=1.0":
+        model = borg.models.Mul_ModelFactory(alpha = 1.0).fit(training.solver_names, training, B, T)
     elif model_name == "mul-dir":
         model = borg.models.Mul_Dir_ModelFactory().fit(training.solver_names, training, B, T)
     elif model_name == "mul-dirmix":
         model = borg.models.Mul_DirMix_ModelFactory().fit(training.solver_names, training, B, T)
     else:
-        raise Exception("unrecognized model name")
+        raise Exception("unrecognized model name \"{0}\"".format(model_name))
 
     # evaluate the model
     score = score_model_log_probability(model, B, testing)
@@ -67,12 +69,13 @@ def main(out_path, model_name, bundle, workers = 0, local = False):
 
     def yield_jobs():
         run_data = borg.storage.RunData.from_bundle(bundle)
+        validation = sklearn.cross_validation.KFold(len(run_data), 10)
 
-        for _ in xrange(6):
+        for (train_mask, test_mask) in validation:
             split = uuid.uuid4()
-            (training, testing) = run_data.split(0.5)
-            instance_counts = numpy.r_[1:len(training):16]
-            #instance_counts = [1, 16]
+            training = run_data.masked(train_mask)
+            testing = run_data.masked(test_mask)
+            instance_counts = map(int, map(round, numpy.r_[2:len(training):16j]))
             training_ids = sorted(training.ids, key = lambda _: numpy.random.rand())
 
             for instance_count in instance_counts:
