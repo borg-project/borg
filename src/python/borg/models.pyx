@@ -216,44 +216,6 @@ class MultinomialModel(object):
 
         return self._log_masses_NSC
 
-def fit_mul_map(solver_names, training, B):
-    """Fit a kernel-density model."""
-
-    logger.info("fitting multinomial mixture model")
-
-    N = len(training.run_lists)
-    S = len(solver_names)
-    C = B + 1
-
-    outcomes_NSC = training.to_bins_array(solver_names, B)
-    attempts_NSC = numpy.sum(outcomes_NSC, axis = -1)[..., None]
-    log_components_NSC = numpy.empty((N, S, C), numpy.double)
-
-    ll = 0.0
-
-    for s in xrange(S):
-        prior_s = borg.statistics.dcm_estimate_ml(outcomes_NSC[:, s, :])
-
-        # XXX hackish regularization
-        prior_s += 1e-32
-
-        # XXX not exactly the correct MAP estimate...
-        log_components_NSC[:, s, :] = numpy.log(outcomes_NSC[:, s, :] + prior_s)
-        log_components_NSC[:, s, :] -= numpy.log(attempts_NSC[:, s, :] + numpy.sum(prior_s))
-
-        ll += numpy.sum(borg.statistics.dirichlet_log_pdf(prior_s, numpy.exp(log_components_NSC[:, s, :])))
-
-        for n in xrange(N):
-            ll += borg.statistics.multinomial_log_pdf(numpy.exp(log_components_NSC[n, s, :]), outcomes_NSC[n, s, :])
-
-    with cargo.numpy_printing(precision = 2, suppress = True, linewidth = 160, threshold = 1000000):
-        print numpy.exp(log_components_NSC[:, 0, :])
-        #print prior_s
-
-    #print ",".join(map(str, [N, ll]))
-
-    return MultinomialModel(log_components_NSC)
-
 class Mul_ModelFactory(object):
     def __init__(self, alpha = 1e-2):
         self._alpha = alpha
@@ -317,6 +279,8 @@ class Mul_Dir_ModelFactory(object):
         theta_samples_TNSD = numpy.empty((T, N, S, D), numpy.double)
 
         for i in xrange(burn_in + (stored - 1) * spacing + 1):
+            print "iteration", i
+
             # sample multinomial components
             for s in xrange(S):
                 for n in xrange(N):

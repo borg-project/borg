@@ -79,7 +79,7 @@ def main(out_path, model_name, bundle, workers = 0, local = False):
             training_ids = sorted(training.ids, key = lambda _: numpy.random.rand())
 
             for instance_count in instance_counts:
-                subset = training.filter(*training_ids[:instance_count]).collect([4])
+                subset = training.filter(*training_ids[:instance_count]).collect([4, 1])
 
                 yield (evaluate_split, [model_name, split, subset, testing])
 

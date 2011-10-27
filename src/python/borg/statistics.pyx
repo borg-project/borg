@@ -163,6 +163,22 @@ cpdef double digamma(double x):
 
     return v
 
+cpdef double digamma_approx(double x):
+    """Compute an approximation to the digamma function."""
+
+    if x >= 0.6:
+        return libc.math.log(x - 0.5)
+    else:
+        return -1.0 / x + 0.57721566490153287
+
+cpdef double trigamma_approx(double x):
+    """Compute an approximation to the trigamma function."""
+
+    if x >= 0.6:
+        return 1.0 / (x - 0.5)
+    else:
+        return 1.0 / (x * x)
+
 cpdef double inverse_digamma(double x):
     """Compute the (numeric) inverse of the digamma function."""
 
@@ -305,6 +321,37 @@ cdef double _inverse_digamma_minus(double x, double N, double c) except? -1.0:
     return y
 
 @cython.infer_types(True)
+@cython.cdivision(True)
+cdef double _inverse_digamma_minus_newton(double x, double t, double N, double c) except? -1.0:
+    """Compute a (numeric) inverse for Dirichlet estimation."""
+
+    # approximate the MAP initialization with the (approximate) ML initialization
+    cdef double y
+
+    if x >= -2.22:
+        y = libc.math.exp(x) + 0.5
+    else:
+        y = -1.0 / (x + 0.57721566490153287)
+
+    # then run Newton-Raphson
+    cdef double numerator
+    cdef double denominator
+
+    for i in xrange(32):
+        #numerator = N * digamma(y) - (c - 1) / y - t
+        #denominator = N * trigamma(y) + (c - 1) / (y * y)
+        numerator = N * digamma_approx(y) - (c - 1) / y - t - x
+        denominator = N * trigamma_approx(y) + (c - 1) / (y * y)
+
+        y -= numerator / denominator
+
+        #print y
+
+    #print "done!"
+
+    return y
+
+@cython.infer_types(True)
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
@@ -343,11 +390,11 @@ def dirichlet_estimate_map(vectors, double shape = 1.0, double scale = 1e8):
 
         for d in xrange(D):
             alpha_next = _inverse_digamma_minus(log_pbar_D[d] + constant_term, N, shape)
+            #alpha_next = _inverse_digamma_minus_newton(log_pbar_D[d], constant_term, N, shape)
             alpha_change += libc.math.fabs(alpha_D[d] - alpha_next)
             alpha_D[d] = alpha_next
 
         if alpha_change < 1e-6:
-            print i
             return alpha_D
 
     logger.warning("Dirichlet MAP estimation did not converge; last change in alpha: %s", alpha_change)
