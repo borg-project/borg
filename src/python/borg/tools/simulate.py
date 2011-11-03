@@ -95,6 +95,7 @@ def simulate_split(maker, train_data, test_data):
     portfolio_name = ("name of the portfolio to train"),
     train_bundle = ("path to pre-recorded runs", "positional", None, os.path.abspath),
     test_bundle = ("path to pre-recorded runs", "positional", None, os.path.abspath),
+    single = ("run a single solver", "option"),
     workers = ("submit jobs?", "option", "w", int),
     local = ("workers are local?", "flag"),
     )
@@ -103,6 +104,7 @@ def main(
     portfolio_name,
     train_bundle,
     test_bundle,
+    single = None,
     workers = 0,
     local = False,
     ):
@@ -116,7 +118,10 @@ def main(
         test_data = borg.storage.RunData.from_bundle(test_bundle)
 
         if portfolio_name == "-":
-            makers = map(SolverMaker, train_data.solver_names)
+            if single is None:
+                makers = map(SolverMaker, train_data.solver_names)
+            else:
+                makers = map(SolverMaker, [single])
         else:
             makers = [PortfolioMaker(portfolio_name)]
 
