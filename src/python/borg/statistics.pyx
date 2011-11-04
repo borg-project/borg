@@ -1,4 +1,4 @@
-# cython: profile=True
+#cython: profile=False
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import sys
@@ -369,6 +369,7 @@ cpdef double unit_normal_rv():
 
     return x
 
+@cython.cdivision(True)
 cpdef double unit_gamma_rv(double shape):
     """
     Generate a gamma-distributed random variate with unit scale.
@@ -376,15 +377,18 @@ cpdef double unit_gamma_rv(double shape):
     See Marsaglia and Tsang, 2000; adapted from Minka.
     """
 
+    assert shape > 0.0
+
+    # boost using Marsaglia's (1961) method
     cdef double boost
 
     if shape < 1.0:
-        # boost using Marsaglia's (1961) method
         boost = libc.math.exp(libc.math.log(unit_uniform_rv()) / shape)
         shape += 1.0
     else:
         boost = 1.0
 
+    # generate the rv
     cdef double d = shape - 1.0 / 3.0
     cdef double c = 1.0 / libc.math.sqrt(9.0 * d)
     cdef double v
@@ -408,17 +412,41 @@ cpdef double unit_gamma_rv(double shape):
 
     return boost * d * v
 
-#cdef double post_dirichlet_rv(
-    #unsigned int D,
-    #double* alphas,
-    #unsigned int alpha_stride,
-    #double* counts,
-    #unsigned int count_stride,
-    #double* samples,
-    #unsigned int sample_stride,
-    #):
+@cython.infer_types(True)
+@cython.cdivision(True)
+cdef double post_dirichlet_rv(
+    unsigned int D,
+    double* out,
+    unsigned int out_stride,
+    double* alphas,
+    unsigned int alpha_stride,
+    int* counts,
+    unsigned int count_stride,
+    ):
 
-    #pass
+    # draw samples from independent gammas
+    cdef void* out_p = out
+    cdef void* alphas_p = alphas
+    cdef void* counts_p = counts
+
+    cdef double alpha
+    cdef double count
+    cdef double l1_norm = 0.0
+
+    for d in xrange(D):
+        alpha = (<double*>(alphas_p + alpha_stride * d))[0]
+        count = (<int*>(counts_p + count_stride * d))[0]
+
+        rv = unit_gamma_rv(alpha + count)
+        #rv = unit_gamma_rv(alpha + count + 1e-32)
+
+        (<double*>(out_p + out_stride * d))[0] = rv
+
+        l1_norm += rv
+
+    # then normalize to the simplex
+    for d in xrange(D):
+        (<double*>(out_p + out_stride * d))[0] /= l1_norm
 
 #
 # DISTRIBUTION FUNCTIONS

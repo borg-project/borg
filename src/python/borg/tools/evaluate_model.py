@@ -24,12 +24,14 @@ def score_model_log_probability(model, B, testing):
     log_probabilities = borg.models.sampled_pmfs_log_pmf(model.log_masses, counts)
     lps_per_instance = numpy.logaddexp.reduce(log_probabilities, axis = 0)
 
+    #return lps_per_instance
     return numpy.mean(lps_per_instance)
 
 def evaluate_split(model_name, split, training, testing):
     """Evaluate a model on a train/test split."""
 
-    borg.statistics.set_prng_keys(hash(cargo.get_task().key))
+    if cargo.get_task() is not None:
+        borg.statistics.set_prng_seeds(hash(cargo.get_task().key))
 
     # build the model
     B = 10
@@ -39,6 +41,8 @@ def evaluate_split(model_name, split, training, testing):
         model = borg.models.Mul_ModelFactory(alpha = 0.1).fit(training.solver_names, training, B, T)
     elif model_name == "mul_alpha=1.0":
         model = borg.models.Mul_ModelFactory(alpha = 1.0).fit(training.solver_names, training, B, T)
+    elif model_name == "mul_alpha=100.0":
+        model = borg.models.Mul_ModelFactory(alpha = 100.0).fit(training.solver_names, training, B, T)
     elif model_name == "mul-dir":
         model = borg.models.Mul_Dir_ModelFactory().fit(training.solver_names, training, B, T)
     elif model_name == "mul-dirmix":
@@ -47,6 +51,10 @@ def evaluate_split(model_name, split, training, testing):
         raise Exception("unrecognized model name \"{0}\"".format(model_name))
 
     # evaluate the model
+    #scores = score_model_log_probability(model, B, testing)
+
+    #return [[model_name, len(training), split, score] for score in scores]
+
     score = score_model_log_probability(model, B, testing)
 
     logger.info(
@@ -74,6 +82,9 @@ def main(out_path, model_name, bundle, workers = 0, local = False):
     def yield_jobs():
         run_data = borg.storage.RunData.from_bundle(bundle)
         validation = sklearn.cross_validation.KFold(len(run_data), 10)
+        restarts_mixture = [4]
+
+        logger.info("yielding jobs for restarts mixture %s", restarts_mixture)
 
         for (train_mask, test_mask) in validation:
             split = uuid.uuid4()
@@ -83,7 +94,7 @@ def main(out_path, model_name, bundle, workers = 0, local = False):
             training_ids = sorted(training.ids, key = lambda _: numpy.random.rand())
 
             for instance_count in instance_counts:
-                subset = training.filter(*training_ids[:instance_count]).collect([4, 1])
+                subset = training.filter(*training_ids[:instance_count]).collect(restarts_mixture)
 
                 yield (evaluate_split, [model_name, split, subset, testing])
 

@@ -13,6 +13,16 @@ cdef double log_erf_approximate(double x)
 cpdef double digamma(double x)
 cpdef double inverse_digamma(double x)
 
+cdef double post_dirichlet_rv(
+    unsigned int D,
+    double* out,
+    unsigned int out_stride,
+    double* alphas,
+    unsigned int alpha_stride,
+    int* counts,
+    unsigned int count_stride,
+    )
+
 cdef double standard_normal_log_pdf(double x)
 cdef double standard_normal_log_cdf(double x)
 
