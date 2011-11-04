@@ -103,14 +103,19 @@ cdef double log_minus(double x, double y):
     else:
         return y + libc.math.log(1.0 - libc.math.exp(x - y))
 
+def floored_log(array, floor = 1e-64):
+    """Return the log of an array, applying a minimum value."""
+
+    copy = numpy.copy(array)
+
+    copy[copy < floor] = floor
+
+    return numpy.log(copy)
+
 def to_log_survival(probabilities, axis):
     """Convert a discrete distribution to log survival-function values."""
 
-    survival = 1.0 - numpy.cumsum(probabilities, axis = axis)
-
-    survival[survival <= 0.0] = 1e-64
-
-    return numpy.log(survival)
+    return floored_log(1.0 - numpy.cumsum(probabilities, axis = axis))
 
 #
 # SPECIAL FUNCTIONS
@@ -163,14 +168,28 @@ cpdef double digamma(double x):
 
     return v
 
+@cython.cdivision(True)
 cpdef double digamma_approx(double x):
     """Compute an approximation to the digamma function."""
 
     if x >= 0.6:
         return libc.math.log(x - 0.5)
     else:
-        return -1.0 / x + 0.57721566490153287
+        return 0.57721566490153287 - 1.0 / x
 
+@cython.cdivision(True)
+cpdef double digamma_approx2(double x):
+    """Compute an approximation to the digamma function."""
+
+    return libc.math.log(x + 0.5) - 1.0 / x
+
+@cython.cdivision(True)
+cpdef double trigamma(double x):
+    """Compute the trigamma function."""
+
+    return scipy.special.polygamma(1, x)
+
+@cython.cdivision(True)
 cpdef double trigamma_approx(double x):
     """Compute an approximation to the trigamma function."""
 
@@ -178,6 +197,16 @@ cpdef double trigamma_approx(double x):
         return 1.0 / (x - 0.5)
     else:
         return 1.0 / (x * x)
+
+@cython.infer_types(True)
+@cython.cdivision(True)
+cpdef double trigamma_approx2(double x):
+    """Compute an approximation to the trigamma function."""
+
+    x2 = x * x
+    x3 = x2 * x
+
+    return (2.0 * x2 + 2.0 * x + 1.0) / (2.0 * x3 + x2)
 
 cpdef double inverse_digamma(double x):
     """Compute the (numeric) inverse of the digamma function."""
@@ -195,6 +224,31 @@ cpdef double inverse_digamma(double x):
             y -= d
 
         d /= 2.0
+
+    return y
+
+@cython.infer_types(True)
+@cython.cdivision(True)
+cpdef double inverse_digamma_newton(double x) except? -1.0:
+    """Compute the (numeric) inverse of the digamma function."""
+
+    # initialization
+    cdef double y
+
+    if x >= -2.22:
+        y = libc.math.exp(x) + 0.5
+    else:
+        y = -1.0 / (x + 0.57721566490153287)
+
+    # then run Newton-Raphson
+    cdef double numerator
+    cdef double denominator
+
+    for i in xrange(5):
+        numerator = digamma(y) - x
+        denominator = trigamma_approx2(y)
+
+        y -= numerator / denominator
 
     return y
 
@@ -287,38 +341,60 @@ def dirichlet_log_pdf(alpha, vectors):
 
     return term_a - term_b + term_c
 
+@cython.infer_types(True)
+@cython.boundscheck(False)
+@cython.wraparound(False)
 @cython.cdivision(True)
-cdef double _inverse_digamma_minus(double x, double N, double c) except? -1.0:
-    """Compute a (numeric) inverse for Dirichlet estimation."""
+def dirichlet_estimate_ml(vectors):
+    """
+    Compute the maximum-likelihood Dirichlet distribution.
 
-    cdef double y = libc.math.exp(x / N)
-    cdef double d = 1.0
-    cdef double v
+    Implements Minka's fixed-point iteration.
+    """
 
-    if y == 0.0:
-        return 0.0
+    cdef int N = vectors.shape[0]
+    cdef int D = vectors.shape[1]
 
-    while d > 1e-8:
-        v = N * digamma(y) - (c - 1.0) / y
+    cdef numpy.ndarray[double, ndim = 2] vectors_ND = numpy.asarray(vectors, numpy.double)
+    cdef numpy.ndarray[double, ndim = 1] log_pbar_D = numpy.zeros(D, numpy.double)
 
-        if v < x:
-            y += d
-        else:
-            y -= d
+    # initialization
+    cdef double sum_alpha = 0.0
+    cdef double digamma_sum_alpha = 0.5772156649015328
 
-        d /= 2.0
+    for d in xrange(D):
+        for n in xrange(N):
+            log_pbar_D[d] += libc.math.log(vectors_ND[n, d])
 
-    #if libc.math.fabs(v - x) > 1e-8:
-        #logger.warning(
-            #"modified-digamma inversion did not converge: f(%f, %f, %f) = %f != %f",
-            #y,
-            #N,
-            #c,
-            #v,
-            #x,
-            #)
+        log_pbar_D[d] /= N
 
-    return y
+        sum_alpha += inverse_digamma_newton(digamma_sum_alpha + log_pbar_D[d])
+
+    digamma_sum_alpha = digamma(sum_alpha)
+
+    # iteration
+    cdef double sum_alpha_last = 0.0
+
+    for i in xrange(24):
+        sum_alpha = 0.0
+
+        for d in xrange(D):
+            sum_alpha += inverse_digamma_newton(digamma_sum_alpha + log_pbar_D[d])
+
+        digamma_sum_alpha = digamma(sum_alpha)
+
+        if libc.math.fabs(1.0 - sum_alpha_last / sum_alpha) < 1e-4:
+            break
+
+        sum_alpha_last = sum_alpha
+
+    # termination
+    cdef numpy.ndarray[double, ndim = 1] alpha_D = numpy.ones(D, numpy.double) * 1e-1
+
+    for d in xrange(D):
+        alpha_D[d] = inverse_digamma_newton(digamma_sum_alpha + log_pbar_D[d])
+
+    return alpha_D
 
 @cython.infer_types(True)
 @cython.cdivision(True)
@@ -338,16 +414,10 @@ cdef double _inverse_digamma_minus_newton(double x, double t, double N, double c
     cdef double denominator
 
     for i in xrange(32):
-        #numerator = N * digamma(y) - (c - 1) / y - t
-        #denominator = N * trigamma(y) + (c - 1) / (y * y)
-        numerator = N * digamma_approx(y) - (c - 1) / y - t - x
-        denominator = N * trigamma_approx(y) + (c - 1) / (y * y)
+        numerator = N * digamma(y) - (c - 1) / y - t - x
+        denominator = N * trigamma_approx2(y) + (c - 1) / (y * y)
 
         y -= numerator / denominator
-
-        #print y
-
-    #print "done!"
 
     return y
 
@@ -357,7 +427,7 @@ cdef double _inverse_digamma_minus_newton(double x, double t, double N, double c
 @cython.cdivision(True)
 def dirichlet_estimate_map(vectors, double shape = 1.0, double scale = 1e8):
     """
-    Compute the maximum-likelihood Dirichlet distribution.
+    Compute the max a posteriori Dirichlet distribution.
 
     Implements a version of Minka's fixed-point iteration adapted to
     incorporate a gamma prior.
@@ -367,7 +437,6 @@ def dirichlet_estimate_map(vectors, double shape = 1.0, double scale = 1e8):
     cdef int D = vectors.shape[1]
 
     cdef numpy.ndarray[double, ndim = 2] vectors_ND = numpy.asarray(vectors, numpy.double)
-    cdef numpy.ndarray[double, ndim = 1] expect_p_D = numpy.zeros(D, numpy.double)
     cdef numpy.ndarray[double, ndim = 1] log_pbar_D = numpy.zeros(D, numpy.double)
     cdef numpy.ndarray[double, ndim = 1] alpha_D = numpy.ones(D, numpy.double) * 1e-1
 
@@ -384,13 +453,12 @@ def dirichlet_estimate_map(vectors, double shape = 1.0, double scale = 1e8):
         for d in xrange(D):
             constant_term += alpha_D[d]
 
-        constant_term = N * digamma(constant_term) - 1.0 / scale
+        constant_term = N * digamma_approx2(constant_term) - 1.0 / scale
 
         alpha_change = 0.0
 
         for d in xrange(D):
-            alpha_next = _inverse_digamma_minus(log_pbar_D[d] + constant_term, N, shape)
-            #alpha_next = _inverse_digamma_minus_newton(log_pbar_D[d], constant_term, N, shape)
+            alpha_next = _inverse_digamma_minus_newton(log_pbar_D[d], constant_term, N, shape)
             alpha_change += libc.math.fabs(alpha_D[d] - alpha_next)
             alpha_D[d] = alpha_next
 

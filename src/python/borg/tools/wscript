@@ -7,6 +7,7 @@ def build(context):
             "run_solvers.py",
             "solve.py",
             "train.py",
+            "plan.py",
             "cactus.py",
             "simulate.py",
             "evaluate_model.py",

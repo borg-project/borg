@@ -217,10 +217,10 @@ class MultinomialModel(object):
         return self._log_masses_NSC
 
 class Mul_ModelFactory(object):
-    def __init__(self, alpha = 1e-2):
+    def __init__(self, alpha = 1e-4):
         self._alpha = alpha
 
-    def sample(self, counts, stored = 4, burn_in = 1024, spacing = 128):
+    def sample(self, counts, stored = 4, burn_in = 0, spacing = 1):
         """Sample parameters of the multinomial model using Gibbs."""
 
         T = stored
@@ -250,21 +250,25 @@ class Mul_ModelFactory(object):
 
         logger.info("fitting multinomial model")
 
+        # run sampling
         N = len(training.run_lists)
         M = N * T
         S = len(solver_names)
         C = B + 1
 
         outcomes_NSC = training.to_bins_array(solver_names, B)
-        components_MSC = numpy.empty((M, S, C), numpy.double)
         theta_samples_TNSC = self.sample(outcomes_NSC, stored = T)
+
+        # flatten the samples
+        components_MSC = numpy.empty((M, S, C), numpy.double)
 
         for t in xrange(T):
             components_MSC[t * N:(t + 1) * N, ...] = theta_samples_TNSC[t, ...]
 
         log_survival_MSC = borg.statistics.to_log_survival(components_MSC, axis = -1)
+        log_masses_MSC = borg.statistics.floored_log(components_MSC)
 
-        return MultinomialModel(training.get_common_budget() / B, log_survival_MSC, log_masses = numpy.log(components_MSC))
+        return MultinomialModel(training.get_common_budget() / B, log_survival_MSC, log_masses = log_masses_MSC)
 
 class Mul_Dir_ModelFactory(object):
     def sample(self, counts, stored = 4, burn_in = 1024, spacing = 128):
@@ -279,7 +283,7 @@ class Mul_Dir_ModelFactory(object):
         theta_samples_TNSD = numpy.empty((T, N, S, D), numpy.double)
 
         for i in xrange(burn_in + (stored - 1) * spacing + 1):
-            print "iteration", i
+            #print "iteration", i
 
             # sample multinomial components
             for s in xrange(S):
@@ -290,7 +294,7 @@ class Mul_Dir_ModelFactory(object):
 
             # optimize the Dirichlets
             for s in xrange(S):
-                alpha_SD[s, :] = borg.statistics.dirichlet_estimate_map(thetas_NSD[:, s, :], shape = 1.01, scale = 1)
+                alpha_SD[s, :] = borg.statistics.dirichlet_estimate_ml(thetas_NSD[:, s, :])
 
             if burn_in <= i and (i - burn_in) % spacing == 0:
                 theta_samples_TNSD[int((i - burn_in) / spacing), ...] = thetas_NSD
@@ -313,7 +317,10 @@ class Mul_Dir_ModelFactory(object):
 
         outcomes_NSC = training.to_bins_array(solver_names, B)
         components_MSC = numpy.empty((M, S, C), numpy.double)
-        theta_samples_TNSC = self.sample(outcomes_NSC, stored = T)
+        #theta_samples_TNSC = self.sample(outcomes_NSC, stored = T, burn_in = 48) # XXX
+        cargo.print_call_profiled(lambda: self.sample(outcomes_NSC, stored = T, burn_in = 128)) # XXX
+
+        raise SystemExit() # XXX
 
         for t in xrange(T):
             components_MSC[t * N:(t + 1) * N, ...] = theta_samples_TNSC[t, ...]
