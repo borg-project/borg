@@ -27,6 +27,10 @@ def score_model_log_probability(model, B, testing):
     return numpy.mean(lps_per_instance)
 
 def evaluate_split(model_name, split, training, testing):
+    """Evaluate a model on a train/test split."""
+
+    borg.statistics.set_prng_keys(hash(cargo.get_task().key))
+
     # build the model
     B = 10
     T = 1

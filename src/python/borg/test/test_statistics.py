@@ -7,6 +7,31 @@ import nose.tools
 import cargo
 import borg
 
+def test_unit_uniform_rv():
+    samples = [borg.statistics.unit_uniform_rv() for _ in xrange(65535)]
+
+    nose.tools.assert_almost_equal(numpy.mean(samples), 0.5, places = 2)
+
+def test_unit_normal_rv():
+    samples = [borg.statistics.unit_normal_rv() for _ in xrange(65535)]
+
+    nose.tools.assert_almost_equal(numpy.mean(samples), 0.0, places = 2)
+    nose.tools.assert_almost_equal(numpy.std(samples), 1.0, places = 2)
+
+def test_unit_gamma_rv():
+    def assert_unit_gamma_rv_ok(shape):
+        rv_samples = [borg.statistics.unit_gamma_rv(shape) for _ in xrange(65535)]
+        np_samples = numpy.random.gamma(shape, size = 65535)
+
+        nose.tools.assert_almost_equal(numpy.mean(rv_samples), numpy.mean(np_samples), places = 1)
+        nose.tools.assert_almost_equal(numpy.std(rv_samples), numpy.std(np_samples), places = 1)
+
+    yield (assert_unit_gamma_rv_ok, 1e-2)
+    yield (assert_unit_gamma_rv_ok, 1e-1)
+    yield (assert_unit_gamma_rv_ok, 1e-0)
+    yield (assert_unit_gamma_rv_ok, 1e+1)
+    yield (assert_unit_gamma_rv_ok, 1e+2)
+
 def test_digamma():
     nose.tools.assert_almost_equal(borg.statistics.digamma(1e-2), scipy.special.digamma(1e-2))
     nose.tools.assert_almost_equal(borg.statistics.digamma(1e-1), scipy.special.digamma(1e-1))
@@ -20,11 +45,11 @@ def test_inverse_digamma():
 
         nose.tools.assert_almost_equal(borg.statistics.inverse_digamma(v), x)
 
-    assert_inverse_digamma_ok(1e-2)
-    assert_inverse_digamma_ok(1e-1)
-    assert_inverse_digamma_ok(1e-0)
-    assert_inverse_digamma_ok(1e+1)
-    assert_inverse_digamma_ok(1e+2)
+    yield (assert_inverse_digamma_ok, 1e-2)
+    yield (assert_inverse_digamma_ok, 1e-1)
+    yield (assert_inverse_digamma_ok, 1e-0)
+    yield (assert_inverse_digamma_ok, 1e+1)
+    yield (assert_inverse_digamma_ok, 1e+2)
 
 def test_inverse_digamma_newton():
     def assert_inverse_digamma_ok(x):
@@ -32,11 +57,11 @@ def test_inverse_digamma_newton():
 
         nose.tools.assert_almost_equal(borg.statistics.inverse_digamma_newton(v), x)
 
-    assert_inverse_digamma_ok(1e-2)
-    assert_inverse_digamma_ok(1e-1)
-    assert_inverse_digamma_ok(1e-0)
-    assert_inverse_digamma_ok(1e+1)
-    assert_inverse_digamma_ok(1e+2)
+    yield (assert_inverse_digamma_ok, 1e-2)
+    yield (assert_inverse_digamma_ok, 1e-1)
+    yield (assert_inverse_digamma_ok, 1e-0)
+    yield (assert_inverse_digamma_ok, 1e+1)
+    yield (assert_inverse_digamma_ok, 1e+2)
 
 def test_gamma_log_pdf():
     def assert_ok(x):

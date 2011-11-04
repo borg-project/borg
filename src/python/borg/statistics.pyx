@@ -1,19 +1,22 @@
 # cython: profile=True
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
+import sys
+import random
 import numpy
 import scipy.special
 import cargo
 
 cimport cython
 cimport libc.math
+cimport libc.limits
 cimport numpy
-
-logger = cargo.get_logger(__name__, default_level = "DEBUG")
 
 cdef extern from "math.h":
     double NAN
     double INFINITY
+
+logger = cargo.get_logger(__name__, default_level = "DEBUG")
 
 #
 # ASSERTIONS
@@ -73,6 +76,26 @@ def assert_log_survival(array, axis):
 #
 # UTILITIES
 #
+
+def set_prng_seeds(seed = None):
+    """
+    Set seeds for all relevant PRNGs.
+    
+    The (optional) argument is to random.seed(), which is used to initialize
+    the other relevant PRNGs. That's statistically iffy, but what isn't?
+    """
+
+    random.seed(seed)
+
+    numpy.random.seed(random.randint(0, sys.maxint))
+
+    _set_internal_prng_seed(
+        random.randint(libc.limits.LONG_MIN, libc.limits.LONG_MAX),
+        random.randint(libc.limits.LONG_MIN, libc.limits.LONG_MAX),
+        random.randint(libc.limits.LONG_MIN, libc.limits.LONG_MAX),
+        )
+
+set_prng_seeds()
 
 @cython.profile(False)
 cdef double log_plus(double x, double y):
@@ -253,7 +276,152 @@ cpdef double inverse_digamma_newton(double x) except? -1.0:
     return y
 
 #
-# DISTRIBUTIONS
+# RANDOM VARIATES
+#
+
+cdef long _prng_ix = 101
+cdef long _prng_iy = 1001
+cdef long _prng_iz = 10001
+
+cdef _set_internal_prng_seed(long ix, long iy, long iz):
+    """Set the state of the internal PRNG."""
+
+    global _prng_ix
+    global _prng_iy
+    global _prng_iz
+
+    _prng_ix = ix
+    _prng_iy = iy
+    _prng_iz = iz
+
+@cython.infer_types(True)
+@cython.cdivision(True)
+cpdef double unit_uniform_rv():
+    """
+    Generate a uniformly-distributed random variate in [0,1].
+
+    Adapted from Minka, who adapted Malvar; c.f. Wichmann and Hill, 1982.
+    """
+
+    global _prng_ix
+    global _prng_iy
+    global _prng_iz
+
+    _prng_ix = 171 * (_prng_ix % 177) - 2 * (_prng_ix / 177)
+    _prng_iy = 172 * (_prng_iy % 176) - 2 * (_prng_iy / 176)
+    _prng_iz = 170 * (_prng_iz % 178) - 2 * (_prng_iz / 178)
+
+    if _prng_ix < 0:
+        _prng_ix += 30269
+    if _prng_iy < 0:
+        _prng_iy += 30307
+    if _prng_iz < 0:
+        _prng_iz += 30323
+
+    u = _prng_ix / <float>30269 + _prng_iy / <float>30307 + _prng_iz / <float>30323
+    u -= <float><int>u
+
+    return u
+
+cdef double _prng_normal_cache
+cdef bint _prng_normal_cache_ok
+
+@cython.infer_types(True)
+@cython.cdivision(True)
+cpdef double unit_normal_rv():
+    """
+    Generate a (unit) normally-distributed random variate.
+
+    Adapted from Minka.
+    """
+
+    # return a value computed previously, if any
+    global _prng_normal_cache
+    global _prng_normal_cache_ok
+
+    if _prng_normal_cache_ok:
+        _prng_normal_cache_ok = False
+
+        return _prng_normal_cache
+
+    # generate a random point inside the unit circle
+    cdef double x
+    cdef double y
+    cdef double radius
+
+    while True:
+        x = 2.0 * unit_uniform_rv() - 1.0
+        y = 2.0 * unit_uniform_rv() - 1.0
+
+        radius = (x * x) + (y * y)
+
+        if radius < 1.0 and radius != 0.0:
+            break
+
+    # Box-Muller formula
+    radius = libc.math.sqrt(-2.0 * libc.math.log(radius) / radius)
+
+    x *= radius
+    y *= radius
+
+    _prng_normal_cache = y
+    _prng_normal_cache_ok = True
+
+    return x
+
+cpdef double unit_gamma_rv(double shape):
+    """
+    Generate a gamma-distributed random variate with unit scale.
+
+    See Marsaglia and Tsang, 2000; adapted from Minka.
+    """
+
+    cdef double boost
+
+    if shape < 1.0:
+        # boost using Marsaglia's (1961) method
+        boost = libc.math.exp(libc.math.log(unit_uniform_rv()) / shape)
+        shape += 1.0
+    else:
+        boost = 1.0
+
+    cdef double d = shape - 1.0 / 3.0
+    cdef double c = 1.0 / libc.math.sqrt(9.0 * d)
+    cdef double v
+    cdef double x
+    cdef double u
+
+    while True:
+        while True:
+            x = unit_normal_rv()
+            v = 1.0 + c * x
+
+            if v > 0:
+                break
+
+        v = v * v * v
+        x = x * x
+        u = unit_uniform_rv()
+
+        if (u < 1.0 - 0.0331 * x * x) or (libc.math.log(u) < 0.5 * x + d * (1.0 - v + libc.math.log(v))):
+            break
+
+    return boost * d * v
+
+#cdef double post_dirichlet_rv(
+    #unsigned int D,
+    #double* alphas,
+    #unsigned int alpha_stride,
+    #double* counts,
+    #unsigned int count_stride,
+    #double* samples,
+    #unsigned int sample_stride,
+    #):
+
+    #pass
+
+#
+# DISTRIBUTION FUNCTIONS
 #
 
 cdef double standard_normal_log_pdf(double x):

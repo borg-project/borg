@@ -8,7 +8,6 @@ def build(context):
             "solve.py",
             "train.py",
             "plan.py",
-            "cactus.py",
             "simulate.py",
             "evaluate_model.py",
             "evaluate_regression.py",

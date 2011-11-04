@@ -54,6 +54,10 @@ class SolverMaker(object):
         return suite.solvers[self.name]
 
 def simulate_split(maker, train_data, test_data):
+    """Simulate portfolio execution on a train/test split."""
+
+    borg.statistics.set_prng_keys(hash(cargo.get_task().key))
+
     split_id = uuid.uuid4()
     budget = test_data.common_budget
     suite = borg.fake.FakeSuite(test_data)

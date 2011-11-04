@@ -21,6 +21,8 @@ logger = cargo.get_logger(__name__, default_level = "INFO")
 def run_solver_on(suite_path, solver_name, task_path, budget):
     """Run a solver."""
 
+    borg.statistics.set_prng_keys(hash(cargo.get_task().key))
+
     suite = borg.load_solvers(suite_path)
 
     with suite.domain.task_from_path(task_path) as task:

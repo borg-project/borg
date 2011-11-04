@@ -85,8 +85,7 @@ def main(
         if not quiet:
             cargo.get_logger("borg.solvers", level = "DETAIL")
 
-        numpy.random.seed(seed)
-        random.seed(numpy.random.randint(2**31))
+        borg.statistics.set_prng_seeds(seed)
 
         # run the solver
         bundle = borg.load_solvers(solvers_path)
