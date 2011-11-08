@@ -529,12 +529,52 @@ cpdef gamma_log_pdf(double x, double shape, double scale):
         - x / scale
 
 def dirichlet_log_pdf(alpha, vectors):
-    """Compute the log of the Dirichlet PDF."""
+    """Compute the log of the Dirichlet PDF evaluated at multiple vectors."""
 
     term_a = scipy.special.gammaln(numpy.sum(alpha, axis = -1))
     term_b = numpy.sum(scipy.special.gammaln(alpha), axis = -1)
     term_c = numpy.sum((alpha - 1.0) * numpy.log(vectors), axis = -1)
 
+    return term_a - term_b + term_c
+
+@cython.infer_types(True)
+cdef double dirichlet_log_pdf_raw(
+    int D,
+    double* alpha, int alpha_stride,
+    double* vector, int vector_stride,
+    ):
+    """Compute the log of the Dirichlet PDF evaluated at one vector."""
+
+    cdef void* alpha_p = alpha
+    cdef void* vector_p = vector
+
+    # first time
+    term_a = 0.0
+
+    for d in xrange(D):
+        term_a += (<double*>(alpha_p + alpha_stride * d))[0]
+
+    term_a = libc.math.lgamma(term_a)
+
+    # second term
+    term_b = 0.0
+
+    for d in xrange(D):
+        term_b += libc.math.lgamma((<double*>(alpha_p + alpha_stride * d))[0])
+
+    # third term
+    cdef double alpha_d
+    cdef double vector_d
+
+    term_c = 0.0
+
+    for d in xrange(D):
+        alpha_d = (<double*>(alpha_p + alpha_stride * d))[0]
+        vector_d = (<double*>(vector_p + vector_stride * d))[0]
+
+        term_c += (alpha_d - 1.0) * libc.math.log(vector_d)
+
+    # ...
     return term_a - term_b + term_c
 
 @cython.infer_types(True)
