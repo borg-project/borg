@@ -89,13 +89,13 @@ def set_prng_seeds(seed = None):
 
     numpy.random.seed(random.randint(0, sys.maxint))
 
-    _set_internal_prng_seed(
-        random.randint(libc.limits.LONG_MIN, libc.limits.LONG_MAX),
-        random.randint(libc.limits.LONG_MIN, libc.limits.LONG_MAX),
-        random.randint(libc.limits.LONG_MIN, libc.limits.LONG_MAX),
-        )
+    ii = numpy.iinfo(numpy.int32)
 
-set_prng_seeds()
+    _set_internal_prng_seed(
+        random.randint(ii.min, ii.max),
+        random.randint(ii.min, ii.max),
+        random.randint(ii.min, ii.max),
+        )
 
 @cython.profile(False)
 cdef double log_plus(double x, double y):
@@ -279,52 +279,86 @@ cpdef double inverse_digamma_newton(double x) except? -1.0:
 # RANDOM VARIATES
 #
 
-cdef long _prng_ix = 101
-cdef long _prng_iy = 1001
-cdef long _prng_iz = 10001
+cdef numpy.int32_t _prng_ix
+cdef numpy.int32_t _prng_iy
+cdef numpy.int32_t _prng_iz
 
-cdef _set_internal_prng_seed(long ix, long iy, long iz):
+set_prng_seeds()
+
+cdef void _set_internal_prng_seed(numpy.int32_t ix, numpy.int32_t iy, numpy.int32_t iz):
     """Set the state of the internal PRNG."""
 
     global _prng_ix
     global _prng_iy
     global _prng_iz
 
-    _prng_ix = ix
-    _prng_iy = iy
-    _prng_iz = iz
+    _prng_ix = (ix % 254) + 1
+    _prng_iy = (iy % 254) + 1
+    _prng_iz = (iz % 254) + 1
+
+    global _prng_normal_cache_ok
+
+    _prng_normal_cache_ok = False
 
 @cython.infer_types(True)
 @cython.cdivision(True)
 cpdef double unit_uniform_rv():
     """
-    Generate a uniformly-distributed random variate in [0,1].
+    Generate a uniformly-distributed random variate in [0.0,1.0).
 
-    Adapted from Minka, who adapted Malvar; c.f. Wichmann and Hill, 1982.
+    Implements the Wichmann-Hill PRNG.
     """
 
     global _prng_ix
     global _prng_iy
     global _prng_iz
 
-    _prng_ix = 171 * (_prng_ix % 177) - 2 * (_prng_ix / 177)
-    _prng_iy = 172 * (_prng_iy % 176) - 2 * (_prng_iy / 176)
-    _prng_iz = 170 * (_prng_iz % 178) - 2 * (_prng_iz / 178)
+    _prng_ix = (171 * _prng_ix) % 30269
+    _prng_iy = (172 * _prng_iy) % 30307
+    _prng_iz = (170 * _prng_iz) % 30323
 
-    if _prng_ix < 0:
-        _prng_ix += 30269
-    if _prng_iy < 0:
-        _prng_iy += 30307
-    if _prng_iz < 0:
-        _prng_iz += 30323
+    u = _prng_ix / 30269.0 + _prng_iy / 30307.0 + _prng_iz / 30323.0
 
-    u = _prng_ix / <float>30269 + _prng_iy / <float>30307 + _prng_iz / <float>30323
-    u -= <float><int>u
+    return u - <numpy.int32_t>u
 
-    return u
+@cython.infer_types(True)
+cdef int categorical_rv_raw(int D, double* logps, int logps_stride):
+    """Generate a categorically-distributed random variate."""
+
+    cdef void* logps_p = logps
+
+    u = unit_uniform_rv()
+
+    total = 0.0
+
+    for d in xrange(D - 1):
+        total += (<double*>(logps_p + d * logps_stride))[0]
+
+        if total > u:
+            return d
+
+    return D - 1
+
+@cython.infer_types(True)
+cdef int categorical_rv_log_raw(int D, double* logps, int logps_stride):
+    """Generate a categorically-distributed random variate."""
+
+    cdef void* logps_p = logps
+
+    u = unit_uniform_rv()
+
+    total = 0.0
+
+    for d in xrange(D - 1):
+        total += libc.math.exp((<double*>(logps_p + d * logps_stride))[0])
+
+        if total > u:
+            return d
+
+    return D - 1
 
 cdef double _prng_normal_cache
-cdef bint _prng_normal_cache_ok
+cdef bint _prng_normal_cache_ok = False
 
 @cython.infer_types(True)
 @cython.cdivision(True)
@@ -370,7 +404,7 @@ cpdef double unit_normal_rv():
     return x
 
 @cython.cdivision(True)
-cpdef double unit_gamma_rv(double shape):
+cpdef double unit_gamma_rv(double shape) except? -1.0:
     """
     Generate a gamma-distributed random variate with unit scale.
 
@@ -414,7 +448,7 @@ cpdef double unit_gamma_rv(double shape):
 
 @cython.infer_types(True)
 @cython.cdivision(True)
-cdef double post_dirichlet_rv(
+cdef int post_dirichlet_rv(
     unsigned int D,
     double* out,
     unsigned int out_stride,
@@ -422,7 +456,7 @@ cdef double post_dirichlet_rv(
     unsigned int alpha_stride,
     int* counts,
     unsigned int count_stride,
-    ):
+    ) except -1:
 
     # draw samples from independent gammas
     cdef void* out_p = out
@@ -438,7 +472,6 @@ cdef double post_dirichlet_rv(
         count = (<int*>(counts_p + count_stride * d))[0]
 
         rv = unit_gamma_rv(alpha + count)
-        #rv = unit_gamma_rv(alpha + count + 1e-32)
 
         (<double*>(out_p + out_stride * d))[0] = rv
 
@@ -447,6 +480,8 @@ cdef double post_dirichlet_rv(
     # then normalize to the simplex
     for d in xrange(D):
         (<double*>(out_p + out_stride * d))[0] /= l1_norm
+
+    return 0
 
 #
 # DISTRIBUTION FUNCTIONS
@@ -597,10 +632,11 @@ def dirichlet_estimate_ml(vectors):
     # initialization
     cdef double sum_alpha = 0.0
     cdef double digamma_sum_alpha = 0.5772156649015328
+    cdef double log_floor = 1e-32
 
     for d in xrange(D):
         for n in xrange(N):
-            log_pbar_D[d] += libc.math.log(vectors_ND[n, d])
+            log_pbar_D[d] += libc.math.log(vectors_ND[n, d] + log_floor)
 
         log_pbar_D[d] /= N
 

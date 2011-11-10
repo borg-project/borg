@@ -1,5 +1,6 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
+import sys
 import numpy
 import scipy.stats
 import scipy.special
@@ -8,9 +9,17 @@ import cargo
 import borg
 
 def test_unit_uniform_rv():
-    samples = [borg.statistics.unit_uniform_rv() for _ in xrange(65535)]
+    def assert_ok():
+        samples = numpy.array([borg.statistics.unit_uniform_rv() for _ in xrange(65535)])
 
-    nose.tools.assert_almost_equal(numpy.mean(samples), 0.5, places = 2)
+        nose.tools.assert_true(numpy.all(samples >= 0.0))
+        nose.tools.assert_true(numpy.all(samples < 1.0))
+        nose.tools.assert_almost_equal(numpy.mean(samples), 0.5, places = 2)
+
+    for _ in xrange(8):
+        #borg.statistics.set_prng_seeds(numpy.random.randint(-sys.maxint - 1, sys.maxint))
+
+        yield (assert_ok,)
 
 def test_unit_normal_rv():
     samples = [borg.statistics.unit_normal_rv() for _ in xrange(65535)]

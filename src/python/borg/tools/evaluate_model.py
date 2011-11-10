@@ -30,8 +30,9 @@ def score_model_log_probability(model, B, testing):
 def evaluate_split(model_name, split, training, testing):
     """Evaluate a model on a train/test split."""
 
-    if cargo.get_task() is not None:
-        borg.statistics.set_prng_seeds(hash(cargo.get_task().key))
+    #if cargo.get_task() is not None:
+        #borg.statistics.set_prng_seeds(hash(cargo.get_task().key))
+    borg.statistics.set_prng_seeds()
 
     # build the model
     B = 10
@@ -82,7 +83,7 @@ def main(out_path, model_name, bundle, workers = 0, local = False):
     def yield_jobs():
         run_data = borg.storage.RunData.from_bundle(bundle)
         validation = sklearn.cross_validation.KFold(len(run_data), 10)
-        restarts_mixture = [4]
+        restarts_mixture = [4, 1]
 
         logger.info("yielding jobs for restarts mixture %s", restarts_mixture)
 

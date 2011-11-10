@@ -12,7 +12,7 @@ def configure(context):
 
     context.load("cython")
 
-    context.env.append_unique("CFLAGS", ["-O3"])
+    context.env.append_unique("CFLAGS", ["-O3", "-msse2", "-mtune=generic"])
 
     context.recurse("borg")
 
