@@ -9,7 +9,7 @@ import numpy
 import condor
 import borg
 
-logger = borg.get_logger(__name__)
+logger = borg.get_logger(__name__, default_level = "INFO")
 
 def run_solver_on(suite_path, solver_name, task_path, budget):
     """Run a solver."""
@@ -76,6 +76,9 @@ def main(
 
     def yield_runs():
         suite = borg.load_solvers(suite_path)
+
+        logger.info("scanning paths under %s", tasks_root)
+
         paths = list(borg.util.files_under(tasks_root, suite.domain.extensions))
 
         if not paths:
@@ -103,7 +106,7 @@ def main(
                 for _ in xrange(count):
                     yield (run_solver_on, [suite_path, solver_name, path, budget])
 
-    def collect_run(task, row):
+    for (task, row) in condor.do(yield_runs(), workers):
         # unpack run outcome
         (solver_name, budget, cost, succeeded, answer) = row
 
@@ -124,8 +127,6 @@ def main(
                 writer.writerow(["solver", "budget", "cost", "succeeded", "answer"])
 
             writer.writerow([solver_name, budget, cost, succeeded, answer_text])
-
-    condor.do(yield_runs(), workers, collect_run)
 
 if __name__ == "__main__":
     borg.script(main)
