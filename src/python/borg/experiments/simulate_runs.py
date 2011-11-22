@@ -3,10 +3,11 @@
 import os.path
 import csv
 import uuid
+import json
 import condor
 import borg
 
-logger = borg.get_logger(__name__)
+logger = borg.get_logger(__name__, default_level = "INFO")
 
 class PortfolioMaker(object):
     def __init__(self, portfolio_name):
@@ -48,7 +49,7 @@ class SolverMaker(object):
     def __call__(self, suite, train_data):
         return suite.solvers[self.name]
 
-def simulate_split(maker, train_data, test_data):
+def simulate_run(run, maker, train_data, test_data):
     """Simulate portfolio execution on a train/test split."""
 
     split_id = uuid.uuid4()
@@ -77,51 +78,58 @@ def simulate_split(maker, train_data, test_data):
 
             success_str = "TRUE" if succeeded else "FALSE"
 
-            rows.append([instance, maker.name, budget, cpu_cost, success_str, None, split_id])
+            rows.append([run["category"], instance, maker.name, budget, cpu_cost, success_str, None, split_id])
 
-    rows.append([None, maker.name, budget, budget, "FALSE", None, split_id])
+    rows.append([run["category"], None, maker.name, budget, budget, "FALSE", None, split_id])
 
     return rows
 
 @borg.annotations(
-    out_path = ("results output path"),
-    portfolio_name = ("name of the portfolio to train"),
-    train_bundle = ("path to pre-recorded runs", "positional", None, os.path.abspath),
-    test_bundle = ("path to pre-recorded runs", "positional", None, os.path.abspath),
+    out_path = ("results CSV output path"),
+    runs_path = ("path to JSON runs specification"),
+    repeats = ("number of times to repeat each run", "option", None, int),
     workers = ("submit jobs?", "option", "w", int),
     local = ("workers are local?", "flag"),
     )
-def main(
-    out_path,
-    portfolio_name,
-    train_bundle,
-    test_bundle,
-    workers = 0,
-    local = False,
-    ):
+def main(out_path, runs_path, repeats = 4, workers = 0, local = False):
     """Simulate portfolio and solver behavior."""
 
-    # generate jobs
-    def yield_runs():
-        train_data = borg.storage.RunData.from_bundle(train_bundle)
-        test_data = borg.storage.RunData.from_bundle(test_bundle)
+    with open(runs_path) as runs_file:
+        runs = json.load(runs_file)
 
-        if portfolio_name == "-":
-            makers = map(SolverMaker, train_data.solver_names)
-        else:
-            makers = [PortfolioMaker(portfolio_name)]
+    logger.info("simulating %i runs", len(runs) * repeats)
 
-        for maker in makers:
-            for _ in xrange(4):
-                yield (simulate_split, [maker, train_data, test_data])
+    run_data_sets = {}
 
-    # and run them
+    def get_run_data(path):
+        data = run_data_sets.get(path)
+
+        if data is None:
+            run_data_sets[path] = data = borg.storage.RunData.from_bundle(path)
+
+        return data
+
+    def yield_jobs():
+        for run in runs:
+            train_data = get_run_data(run["train_bundle"])
+            test_data = get_run_data(run["test_bundle"])
+
+            if run["portfolio_name"] == "-":
+                makers = map(SolverMaker, train_data.solver_names)
+            else:
+                makers = [PortfolioMaker(run["portfolio_name"])]
+
+            for maker in makers:
+                for _ in xrange(repeats):
+                    yield (simulate_run, [run, maker, train_data, test_data])
+
     with open(out_path, "w") as out_file:
         writer = csv.writer(out_file)
 
-        writer.writerow(["path", "solver", "budget", "cost", "success", "answer", "split"])
+        writer.writerow(["category", "path", "solver", "budget", "cost", "success", "answer", "split"])
 
-        condor.do(yield_runs(), workers, lambda _, r: writer.writerows(r), local)
+        for (_, rows) in condor.do(yield_jobs(), workers, local):
+            writer.writerows(rows)
 
 if __name__ == "__main__":
     borg.script(main)

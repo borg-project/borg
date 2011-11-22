@@ -9,7 +9,6 @@ def build(context):
             "train.py",
             "plan.py",
             "simulate.py",
-            "evaluate_model.py",
             "evaluate_regression.py",
             "bundle_run_data.py",
             ],

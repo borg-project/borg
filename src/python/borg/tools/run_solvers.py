@@ -1,27 +1,20 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
-import plac
-
-if __name__ == "__main__":
-    from borg.tools.run_solvers import main
-
-    plac.call(main)
-
 import os.path
 import csv
 import zlib
 import base64
 import cPickle as pickle
 import numpy
-import cargo
+import condor
 import borg
 
-logger = cargo.get_logger(__name__, default_level = "INFO")
+logger = borg.get_logger(__name__)
 
 def run_solver_on(suite_path, solver_name, task_path, budget):
     """Run a solver."""
 
-    borg.statistics.set_prng_keys(hash(cargo.get_task().key))
+    borg.statistics.set_prng_keys(hash(condor.get_task().key))
 
     suite = borg.load_solvers(suite_path)
 
@@ -52,7 +45,7 @@ def appender(items):
 
     return append
 
-@plac.annotations(
+@borg.annotations(
     suite_path = ("path to the solvers suite", "positional", None, os.path.abspath),
     tasks_root = ("path to task files", "positional", None, os.path.abspath),
     budget = ("per-instance budget", "positional", None, float),
@@ -74,11 +67,16 @@ def main(
     ):
     """Collect solver running-time data."""
 
-    cargo.enable_default_logging()
+    condor.defaults.condor_matching = \
+        "InMastodon" \
+        " && regexp(\"rhavan-.*\", ParallelSchedulingGroup)" \
+        " && (Arch == \"X86_64\")" \
+        " && (OpSys == \"LINUX\")" \
+        " && (Memory > 1024)"
 
     def yield_runs():
         suite = borg.load_solvers(suite_path)
-        paths = list(cargo.files_under(tasks_root, suite.domain.extensions))
+        paths = list(borg.util.files_under(tasks_root, suite.domain.extensions))
 
         if not paths:
             raise ValueError("no paths found under specified root")
@@ -127,5 +125,8 @@ def main(
 
             writer.writerow([solver_name, budget, cost, succeeded, answer_text])
 
-    cargo.do_or_distribute(yield_runs(), workers, collect_run)
+    condor.do(yield_runs(), workers, collect_run)
+
+if __name__ == "__main__":
+    borg.script(main)
 

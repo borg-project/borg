@@ -99,7 +99,7 @@ class LinearRegression(object):
 
         (features_NF, ps_NM) = prepare_training_data_raw(run_data, model)
 
-        self._regression = sklearn.linear_model.LinearRegression()
+        self._regression = sklearn.linear_model.Ridge()
 
         self._regression.fit(features_NF, ps_NM)
 

@@ -2,13 +2,20 @@
 
 from __future__ import absolute_import
 
+import plac
 import os.path
 import imp
 import uuid
 import cargo
+import condor
 
 logger = cargo.get_logger(__name__, default_level = "INFO")
 named_domains = {}
+
+get_logger = cargo.get_logger
+
+def do(*args, **kwargs):
+    return condor.do(*args, **kwargs)
 
 def named_domain(domain_class):
     """Decorates and automatically registers a domain class."""
@@ -70,7 +77,31 @@ class Suite(object):
 
         return Suite.integrated(*map(load_solvers, paths))
 
+def script(main):
+    """Call a script main function."""
+
+    borg.enable_default_logging()
+
+    plac.call(main)
+
+#def annotations(*annotation_args, **annotation_kwargs):
+    #"""Annotate and wrap a script main method."""
+
+    #def decorator(main):
+        #def wrapper(*args, **kwargs):
+            #cargo.enable_default_logging()
+
+            #return main(*args, **kwargs)
+
+        #return wrapper
+
+    #return decorator
+
+annotations = plac.annotations
+enable_default_logging = cargo.enable_default_logging
+
 from . import defaults
+from . import util
 from . import portfolios
 from . import models
 from . import expenses
@@ -80,6 +111,7 @@ from . import fake
 from . import planners
 from . import regression
 from . import domains
+from . import experiments
 
 from borg.expenses import *
 from borg.storage import (
