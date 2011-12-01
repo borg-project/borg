@@ -3,6 +3,7 @@ def build(context):
         source = [
             "__init__.py",
             "ll_vs_train.py",
+            "ll_vs_features.py",
             "mix_over_k.py",
             "mul_over_alpha.py",
             "simulate_runs.py",

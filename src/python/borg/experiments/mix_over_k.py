@@ -10,8 +10,11 @@ import borg
 
 logger = borg.get_logger(__name__, default_level = "INFO")
 
-def evaluate_split(model_name, K, split, training, testing):
+def evaluate_split(run_data, model_name, K, split, train_mask, test_mask):
     """Evaluate a model on a train/test split."""
+
+    training = run_data.masked(train_mask).collect_systematic([2])
+    testing = run_data.masked(test_mask).collect_systematic([4])
 
     # build the model
     if model_name == "mul-dirmix":
@@ -48,28 +51,25 @@ def evaluate_split(model_name, K, split, training, testing):
 def main(out_path, bundle, workers = 0, local = False):
     """Evaluate the mixture model(s) over a range of component counts."""
 
-    borg.get_logger("condor.labor", level = "NOTSET")
-
     def yield_jobs():
         run_data = borg.storage.RunData.from_bundle(bundle)
         validation = sklearn.cross_validation.KFold(len(run_data), 10)
 
         for (train_mask, test_mask) in validation:
             split = uuid.uuid4()
-            training = run_data.masked(train_mask)
-            testing = run_data.masked(test_mask)
             Ks = range(1, 64, 2)
 
             for K in Ks:
                 for model_name in ["mul-dirmix", "mul-dirmatmix"]:
-                    yield (evaluate_split, [model_name, K, split, training, testing])
+                    yield (evaluate_split, [run_data, model_name, K, split, train_mask, test_mask])
 
     with open(out_path, "w") as out_file:
         writer = csv.writer(out_file)
 
         writer.writerow(["model_name", "components", "instances", "split", "mean_log_probability"])
 
-        condor.do(yield_jobs(), workers, lambda _, r: writer.writerow(r), local)
+        for (_, row) in condor.do(yield_jobs(), workers, local):
+            writer.writerow(row)
 
 if __name__ == "__main__":
     borg.script(main)

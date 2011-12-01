@@ -1,6 +1,7 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import csv
+import itertools
 import numpy
 import sklearn
 import condor
@@ -8,20 +9,7 @@ import borg
 
 logger = borg.get_logger(__name__, default_level = "INFO")
 
-def evaluate_split(run_data, model_name, mixture, independent, instance_count, train_mask, test_mask):
-    """Evaluate a model on a train/test fold."""
-
-    testing = run_data.masked(test_mask).collect_systematic([4])
-    training_all = run_data.masked(train_mask)
-    training_ids = sorted(training_all.ids, key = lambda _: numpy.random.rand())
-    training_filtered = training_all.filter(*training_ids[:instance_count])
-
-    if independent:
-        training = training_filtered.collect_independent(mixture)
-    else:
-        training = training_filtered.collect_systematic(mixture)
-
-    # build the model
+def train_model(model_name, training):
     B = 10
     T = 1
 
@@ -36,27 +24,37 @@ def evaluate_split(run_data, model_name, mixture, independent, instance_count, t
     else:
         raise Exception("unrecognized model name \"{0}\"".format(model_name))
 
+    return model
+
+def evaluate_features(model, training, testing, feature_names):
+    training = training.filter_features(feature_names)
+    testing = testing.filter_features(feature_names)
+
+    # use features
+    features = []
+
+    for instance_id in sorted(testing.feature_vectors):
+        dict_ = testing.feature_vectors[instance_id]
+        values = map(dict_.__getitem__, testing.common_features)
+
+        features.append(values)
+
+    regression = borg.regression.LinearRegression(training, model)
+    weights = regression.predict(features)
+
     # evaluate the model
     logger.info("scoring model on %i instances", len(testing))
 
-    lps_per_instance = borg.models.run_data_log_probabilities(model, B, testing)
-    score = numpy.mean(lps_per_instance)
+    score = borg.models.run_data_mean_log_probability(model, testing, weights)
 
     logger.info(
-        "score of model %s given %i runs from %i instances: %f",
-        model_name,
+        "score given %i runs from %i instances: %f",
         training.get_run_count(),
         len(training),
         score,
         )
 
-    mixture_description = \
-        "{0} ({1})".format(
-            "/".join(map(str, mixture)),
-            "Ind." if independent else "Sys.",
-            )
-
-    return [model_name, mixture_description, instance_count, score]
+    return [model.name, len(feature_names), score]
 
 @borg.annotations(
     out_path = ("results output path"),
@@ -76,29 +74,36 @@ def main(out_path, experiments, workers = 0, local = False):
             logger.info("preparing experiment: %s", experiment)
 
             run_data = get_run_data(experiment["run_data"])
-            validation = sklearn.cross_validation.KFold(len(run_data), 10)
-            max_instance_count = numpy.floor(0.9 * len(run_data)) - 10
-            instance_counts = map(int, map(round, numpy.r_[10:max_instance_count:16j]))
+            validation = sklearn.cross_validation.KFold(len(run_data), 5)
+            (train_mask, test_mask) = iter(validation).next()
+            training = run_data.masked(train_mask).collect_systematic([2])
+            testing = run_data.masked(test_mask).collect_systematic([4])
+            feature_counts = range(0, len(run_data.common_features) + 1)
+            replications = xrange(32)
+            configurations = itertools.product(feature_counts, replications)
 
-            for (train_mask, test_mask) in validation:
-                for instance_count in instance_counts:
+            for model_name in experiment["model_names"]:
+                model = train_model(model_name, training)
+                model.name = model_name
+
+                for (feature_count, _) in configurations:
+                    feature_names = sorted(run_data.common_features, key = lambda _: numpy.random.random())
+                    feature_names = feature_names[:feature_count]
+
                     yield (
-                        evaluate_split,
+                        evaluate_features,
                         [
-                            run_data,
-                            experiment["model_name"],
-                            experiment["mixture"],
-                            experiment["independent"],
-                            instance_count,
-                            train_mask,
-                            test_mask,
+                            model,
+                            training,
+                            testing,
+                            feature_names
                             ],
                         )
 
     with borg.util.openz(out_path, "wb") as out_file:
         writer = csv.writer(out_file)
 
-        writer.writerow(["model_name", "sampling", "instances", "mean_log_probability"])
+        writer.writerow(["model_name", "features", "mean_log_probability"])
 
         for (_, row) in condor.do(yield_jobs(), workers, local):
             writer.writerow(row)

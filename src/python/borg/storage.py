@@ -87,6 +87,20 @@ class RunData(object):
 
         return data
 
+    def filter_features(self, names):
+        """Return a set of run data with only the specified features."""
+
+        data = RunData(self.solver_names, self.common_budget)
+
+        data.run_lists = self.run_lists
+
+        for (id_, old_vector) in self.feature_vectors.iteritems():
+            new_vector = dict((k, old_vector[k]) for k in names)
+
+            data.add_feature_vector(id_, new_vector)
+
+        return data
+
     def masked(self, mask):
         """Return a subset of the instances."""
 

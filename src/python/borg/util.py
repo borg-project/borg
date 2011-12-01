@@ -3,6 +3,7 @@
 import os.path
 import bz2
 import gzip
+import json
 import fnmatch
 import contextlib
 
@@ -44,4 +45,32 @@ def openz(path, mode = "rb", closing = True):
 
     if closing:
         return contextlib.closing(file_)
+
+def memoize(call):
+    """Automatically memoize a callable."""
+
+    # XXX use the fancy wrapper convenience functions in 2.7
+
+    results = {}
+
+    def wrapper(*args, **kwargs):
+        key = (tuple(args), tuple(sorted(kwargs.iteritems())))
+
+        try:
+            return results[key]
+        except KeyError:
+            results[key] = result = call(*args, **kwargs)
+
+            return result
+
+    return wrapper
+
+def load_json(path_or_file):
+    """Load JSON from a path or file."""
+
+    if isinstance(path_or_file, str):
+        with openz(path_or_file, "rb") as json_file:
+            return json.load(json_file)
+    else:
+        return json.load(path_or_file)
 

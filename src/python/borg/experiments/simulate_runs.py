@@ -24,21 +24,16 @@ class PortfolioMaker(object):
             portfolio = borg.portfolios.OraclePortfolio()
         elif self.name == "preplanning":
             portfolio = borg.portfolios.PreplanningPortfolio(suite, train_data)
-        else:
-            B = 10
+        elif self.name == "probabilistic":
+            B = 60
             T = 1
 
-            if self.name == "mul":
-                model = borg.models.MulSampler().fit(train_data.solver_names, train_data, B, T)
-            elif self.name == "mul-dir":
-                model = borg.models.MulDirSampler().fit(train_data.solver_names, train_data, B, T)
-            elif self.name == "mul-dirmix":
-                model = borg.models.MulDirMixSampler().fit(train_data.solver_names, train_data, B, T)
-            else:
-                raise ValueError("unrecognized portfolio name")
-
+            #model = borg.models.MulDirMixSampler().fit(train_data.solver_names, train_data, B, T)
+            model = borg.models.MulSampler().fit(train_data.solver_names, train_data, B, T)
             regress = borg.regression.LinearRegression(train_data, model)
             portfolio = borg.portfolios.PureModelPortfolio(suite, model, regress)
+        else:
+            raise ValueError("unrecognized portfolio name: {0}".format(self.name))
 
         return borg.solver_io.RunningPortfolioFactory(portfolio, suite)
 
@@ -123,7 +118,7 @@ def main(out_path, runs_path, repeats = 4, workers = 0, local = False):
                 for _ in xrange(repeats):
                     yield (simulate_run, [run, maker, train_data, test_data])
 
-    with open(out_path, "w") as out_file:
+    with borg.util.openz(out_path, "wb") as out_file:
         writer = csv.writer(out_file)
 
         writer.writerow(["category", "path", "solver", "budget", "cost", "success", "answer", "split"])

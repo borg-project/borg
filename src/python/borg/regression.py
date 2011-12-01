@@ -2,6 +2,7 @@
 
 import numpy
 import scipy.stats
+import sklearn.pipeline
 import sklearn.linear_model
 import cargo
 import borg
@@ -97,28 +98,44 @@ class LinearRegression(object):
     def __init__(self, run_data, model):
         """Initialize."""
 
-        (features_NF, ps_NM) = prepare_training_data_raw(run_data, model)
+        features_NF = run_data.to_features_array()
 
-        self._regression = sklearn.linear_model.Ridge()
+        self._model = model
+        self._assignments = numpy.argmax(model.clusters, axis = -1)
+        self._regression = \
+            sklearn.pipeline.Pipeline([
+                ("scaler", sklearn.preprocessing.Scaler()),
+                ("estimator", sklearn.linear_model.LogisticRegression()),
+                ]) \
+                .fit(features_NF, self._assignments)
 
-        self._regression.fit(features_NF, ps_NM)
+        (_, estimator) = self._regression.steps[-1]
 
-    def predict(self, task, features, normalize = True):
+        self._indices = dict(zip(estimator.label_, xrange(estimator.label_.shape[0])))
+        self._sizes = numpy.sum(model.clusters, axis = 0)
+
+    def predict(self, features):
         """Predict RTD probabilities."""
 
         features = numpy.asarray(features)
 
-        prediction = self._regression.predict(features)
-        prediction = numpy.clip(prediction / 100.0, 0.0, 1.0)
-        #prediction = 1.0 / (1.0 + numpy.exp(-prediction))
+        (M, F) = features.shape
+        (N, K) = self._model.clusters.shape
 
-        if normalize:
-            prediction /= numpy.sum(prediction)
+        prediction = self._regression.predict_proba(features)
+        weights = numpy.empty((M, N))
 
-        return prediction
+        for m in xrange(M):
+            for n in xrange(N):
+                k = self._assignments[n]
+                p_z = prediction[m, self._indices[k]]
 
-class ClusterRegression(object):
-    """Cluster regression model."""
+                weights[m, n] = p_z * 1.0 / self._sizes[k]
+
+        return weights
+
+class NeighborRegression(object):
+    """Neighbor-esque regression model."""
 
     def __init__(self, run_data, model):
         """Initialize."""

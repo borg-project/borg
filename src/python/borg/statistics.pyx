@@ -140,6 +140,18 @@ def to_log_survival(probabilities, axis):
 
     return floored_log(1.0 - numpy.cumsum(probabilities, axis = axis))
 
+def indicator(indices, D, dtype = numpy.intc):
+    """Convert a vector of indices to a matrix of indicator vectors."""
+
+    (N,) = indices.shape
+
+    indicator = numpy.zeros((N, D), dtype = dtype)
+
+    for n in xrange(N):
+        indicator[n, indices[n]] = 1.0
+
+    return indicator
+
 #
 # SPECIAL FUNCTIONS
 #
