@@ -2,10 +2,9 @@
 
 import re
 import os.path
-import cargo
 import borg
 
-logger = cargo.get_logger(__name__)
+logger = borg.get_logger(__name__)
 
 def parse_max_sat_competition(stdout):
     """Parse output from a standard competition solver."""

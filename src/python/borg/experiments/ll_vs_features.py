@@ -45,7 +45,7 @@ def evaluate_features(model, training, testing, feature_names):
     # evaluate the model
     logger.info("scoring model on %i instances", len(testing))
 
-    score = borg.models.run_data_mean_log_probability(model, testing, weights)
+    score = numpy.mean(borg.models.run_data_log_probabilities(model, testing, weights))
 
     logger.info(
         "score given %i runs from %i instances: %f",

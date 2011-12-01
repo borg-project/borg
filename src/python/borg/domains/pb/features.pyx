@@ -1,13 +1,11 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
-import os.path
 import signal
 import numpy
 import scipy.sparse
-import cargo
 import borg
 
-logger = cargo.get_logger(__name__, default_level = "INFO")
+logger = borg.get_logger(__name__, default_level = "INFO")
 
 named = {
     "nonlinear" : lambda opb: 1.0 if opb.nonlinear is None else -1.0,

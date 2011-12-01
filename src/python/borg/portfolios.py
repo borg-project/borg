@@ -2,10 +2,9 @@
 
 import itertools
 import numpy
-import cargo
 import borg
 
-logger = cargo.get_logger(__name__, default_level = "INFO")
+logger = borg.get_logger(__name__, default_level = "INFO")
 
 class RandomPortfolio(object):
     """Random portfolio."""
@@ -13,7 +12,10 @@ class RandomPortfolio(object):
     def __call__(self, task, suite, budget):
         """Run the portfolio."""
 
-        return cargo.grab(suite.solvers.values()).start(task).run_then_stop(budget.cpu_seconds)
+        solvers = suite.solvers.values()
+        selected = numpy.random.randint(len(solvers))
+
+        return solvers[selected].start(task).run_then_stop(budget.cpu_seconds)
 
 class UniformPortfolio(object):
     """Portfolio that runs every solver once."""

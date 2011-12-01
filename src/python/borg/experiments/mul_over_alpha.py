@@ -17,14 +17,10 @@ def evaluate_split(run_data, alpha, split, train_mask, test_mask):
     testing = run_data.masked(test_mask).collect_systematic([4])
 
     # build the model
-    B = 10
-    T = 1
-
-    model = borg.models.MulSampler(alpha = alpha).fit(training.solver_names, training, B, T)
+    model = borg.models.MulSampler(alpha = alpha).fit(training.solver_names, training, B = 10, T = 1)
 
     # evaluate the model
-    log_probabilities = borg.models.run_data_log_probabilities(model, B, testing)
-    score = numpy.mean(log_probabilities)
+    score = numpy.mean(borg.models.run_data_log_probabilities(model, testing))
 
     logger.info(
         "score at alpha = %.2f given %i runs from %i instances: %f",

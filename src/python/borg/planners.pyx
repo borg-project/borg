@@ -1,14 +1,14 @@
-# cython: profile=False
+#cython: profile=False
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import numpy
-import cargo
+import borg
 
 cimport cython
 cimport numpy
 cimport borg.statistics
 
-logger = cargo.get_logger(__name__, default_level = "INFO")
+logger = borg.get_logger(__name__, default_level = "INFO")
 
 cdef extern from "math.h":
     double INFINITY
@@ -242,10 +242,10 @@ class BellmanPlanner(object):
         log_mean_fail_cmf_SB = numpy.logaddexp.reduce(log_survival_WSB + log_weights_W[:, None, None], axis = 0)
 
         print "full survival function:"
-        with cargo.numpy_printing(precision = 2, suppress = True, linewidth = 160, threshold = 1000000):
+        with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 160, threshold = 1000000):
             print log_mean_fail_cmf_SB
         print "marginal survival function:"
-        with cargo.numpy_printing(precision = 2, suppress = True, linewidth = 160, threshold = 1000000):
+        with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 160, threshold = 1000000):
             print log_mean_fail_cmf_SB
 
         raise SystemExit()

@@ -39,8 +39,7 @@ def evaluate_split(run_data, model_name, mixture, independent, instance_count, t
     # evaluate the model
     logger.info("scoring model on %i instances", len(testing))
 
-    lps_per_instance = borg.models.run_data_log_probabilities(model, B, testing)
-    score = numpy.mean(lps_per_instance)
+    score = numpy.mean(borg.models.run_data_log_probabilities(model, testing))
 
     logger.info(
         "score of model %s given %i runs from %i instances: %f",

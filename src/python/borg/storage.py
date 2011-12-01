@@ -6,9 +6,9 @@ import random
 import itertools
 import collections
 import numpy
-import cargo
+import borg
 
-logger = cargo.get_logger(__name__, default_level = "INFO")
+logger = borg.get_logger(__name__, default_level = "INFO")
 
 class RunRecord(object):
     """Record of a solver run."""
@@ -282,7 +282,7 @@ class RunData(object):
         task_paths = []
 
         for tasks_root in tasks_roots:
-            task_paths.extend(cargo.files_under(tasks_root, domain.extensions))
+            task_paths.extend(borg.util.files_under(tasks_root, domain.extensions))
 
         return RunData.from_paths(solver_names, task_paths, domain, suffix)
 
@@ -329,7 +329,7 @@ class RunData(object):
 
         solver_names = set()
 
-        with cargo.openz(runs_csv_path) as csv_file:
+        with borg.util.openz(runs_csv_path) as csv_file:
             csv_reader = csv.reader(csv_file)
 
             columns = csv_reader.next()
@@ -356,7 +356,7 @@ class RunData(object):
 
         logger.info("reading feature data from %s", features_csv_path)
 
-        with cargo.openz(features_csv_path) as csv_file:
+        with borg.util.openz(features_csv_path) as csv_file:
             csv_reader = csv.reader(csv_file)
 
             columns = csv_reader.next()

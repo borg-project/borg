@@ -5,7 +5,7 @@ import sys
 import random
 import numpy
 import scipy.special
-import cargo
+import borg
 
 cimport cython
 cimport libc.math
@@ -16,7 +16,7 @@ cdef extern from "math.h":
     double NAN
     double INFINITY
 
-logger = cargo.get_logger(__name__, default_level = "DEBUG")
+logger = borg.get_logger(__name__, default_level = "DEBUG")
 
 #
 # ASSERTIONS

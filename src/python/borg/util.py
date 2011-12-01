@@ -2,10 +2,14 @@
 
 import os.path
 import bz2
+import sys
 import gzip
 import json
 import fnmatch
+import traceback
 import contextlib
+import subprocess
+import numpy
 
 def files_under(path, pattern = "*"):
     """Iterate over the set of paths to files in the specified directory tree."""
@@ -49,8 +53,6 @@ def openz(path, mode = "rb", closing = True):
 def memoize(call):
     """Automatically memoize a callable."""
 
-    # XXX use the fancy wrapper convenience functions in 2.7
-
     results = {}
 
     def wrapper(*args, **kwargs):
@@ -73,4 +75,109 @@ def load_json(path_or_file):
             return json.load(json_file)
     else:
         return json.load(path_or_file)
+
+@contextlib.contextmanager
+def numpy_printing(**kwargs):
+    """Temporarily modify numpy printing options."""
+
+    old = numpy.get_printoptions()
+
+    numpy.set_printoptions(**kwargs)
+
+    yield
+
+    numpy.set_printoptions(**old)
+
+@contextlib.contextmanager
+def numpy_errors(**kwargs):
+    """Temporarily modify numpy error options."""
+
+    old = numpy.seterr(**kwargs)
+
+    yield
+
+    numpy.seterr(**old)
+
+def seconds(value):
+    """Return the equivalent number of seconds, floating-point."""
+
+    return value.days * 8.64e4 + value.seconds + value.microseconds / 1e6
+
+def call_capturing(arguments, input = None, preexec_fn = None):
+    """Spawn a process and return its output and status code."""
+
+    popened = None
+
+    try:
+        # launch the subprocess
+        popened = \
+            subprocess.Popen(
+                arguments,
+                stdin      = subprocess.PIPE,
+                stdout     = subprocess.PIPE,
+                stderr     = subprocess.PIPE,
+                preexec_fn = preexec_fn,
+                )
+
+        # wait for its natural death
+        (stdout, stderr) = popened.communicate(input)
+    except:
+        #raised = Raised()
+
+        if popened is not None and popened.poll() is None:
+            #try:
+            popened.kill()
+            popened.wait()
+            #except:
+                #Raised().print_ignored()
+
+        #raised.re_raise()
+    else:
+        return (stdout, stderr, popened.returncode)
+
+def check_call_capturing(arguments, input = None, preexec_fn = None):
+    """Spawn a process and return its output."""
+
+    (stdout, stderr, code) = call_capturing(arguments, input, preexec_fn)
+
+    if code == 0:
+        return (stdout, stderr)
+    else:
+        from subprocess import CalledProcessError
+
+        error = CalledProcessError(code, arguments)
+
+        error.stdout = stdout
+        error.stderr = stderr
+
+        raise error
+
+class Raised(object):
+    """
+    Store the currently-handled exception.
+
+    The current exception must be saved before errors during error handling are
+    handled, so that the original exception can be re-raised with its context
+    information intact.
+    """
+
+    def __init__(self):
+        (self.type, self.value, self.traceback) = traceback.exc_info()
+
+    def format(self):
+        """Return a list of lines describing the exception."""
+
+        return traceback.format_exception(self.type, self.value, self.traceback)
+
+    def re_raise(self):
+        """Re-raise the stored exception."""
+
+        raise (self.type, self.value, self.traceback)
+
+    def print_ignored(self, message = "An error was unavoidably ignored:", file_ = sys.stderr):
+        """Print an exception-was-ignored message."""
+
+        file_.write("\n%s\n" % message)
+        file_.write("".join(self.format()))
+        file_.write("\n")
 

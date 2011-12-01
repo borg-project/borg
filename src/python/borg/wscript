@@ -6,8 +6,6 @@ def configure(context):
     context.check_python_module("numpy")
     context.check_python_module("scipy")
     context.check_python_module("sklearn")
-    context.check_python_module("nose")
-    context.check_python_module("cargo")
 
     # extract numpy's installation path
     context.start_msg("Locating the NumPy module")
@@ -63,6 +61,7 @@ def build(context):
             ],
         )
 
+    context.recurse("unix")
     context.recurse("domains")
     context.recurse("tools")
     context.recurse("experiments")

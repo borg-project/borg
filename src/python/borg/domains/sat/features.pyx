@@ -3,7 +3,6 @@
 import resource
 import numpy
 import scipy.sparse
-import cargo
 import borg
 
 cimport libc.math
@@ -13,7 +12,7 @@ cimport numpy
 cdef extern from "math.h":
     double fabs(double)
 
-logger = cargo.get_logger(__name__, default_level = "INFO")
+logger = borg.get_logger(__name__, default_level = "INFO")
 
 def entropy_of_int(array, states):
     """Compute a measure of array entropy."""

@@ -2,9 +2,8 @@
 
 import contextlib
 import borg
-import cargo
 
-logger = cargo.get_logger(__name__, default_level = "DETAIL")
+logger = borg.get_logger(__name__, default_level = "DETAIL")
 
 class FakeSolverProcess(object):
     """Provide a solver interface to stored run data."""

@@ -1,10 +1,9 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import re
-import cargo
 import borg
 
-logger = cargo.get_logger(__name__)
+logger = borg.get_logger(__name__)
 
 def parse_sat_output(stdout):
     """Parse a solver's standard competition-format output."""

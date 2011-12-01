@@ -24,12 +24,10 @@ def evaluate_split(run_data, model_name, K, split, train_mask, test_mask):
     else:
         raise ValueError("unrecognized model name {0}".format(model_name))
 
-    B = 10
-    model = sampler.fit(training.solver_names, training, B = B, T = 1)
+    model = sampler.fit(training.solver_names, training, B = 10, T = 1)
 
     # evaluate the model
-    log_probabilities = borg.models.run_data_log_probabilities(model, B, testing)
-    score = numpy.mean(log_probabilities)
+    score = numpy.mean(borg.models.run_data_log_probabilities(model, testing))
 
     logger.info(
         "%s score at K = %i given %i runs from %i instances: %f",

@@ -1,13 +1,11 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import numpy
-import scipy.stats
 import sklearn.pipeline
 import sklearn.linear_model
-import cargo
 import borg
 
-logger = cargo.get_logger(__name__, default_level = "INFO")
+logger = borg.get_logger(__name__, default_level = "INFO")
 
 def prepare_training_data_raw(run_data, model):
     """Prepare regression training data from run data."""
@@ -105,7 +103,7 @@ class LinearRegression(object):
         self._regression = \
             sklearn.pipeline.Pipeline([
                 ("scaler", sklearn.preprocessing.Scaler()),
-                ("estimator", sklearn.linear_model.LogisticRegression()),
+                ("estimator", sklearn.linear_model.LogisticRegression(C = 1e0)),
                 ]) \
                 .fit(features_NF, self._assignments)
 
@@ -130,43 +128,7 @@ class LinearRegression(object):
                 k = self._assignments[n]
                 p_z = prediction[m, self._indices[k]]
 
-                weights[m, n] = p_z * 1.0 / self._sizes[k]
+                weights[m, n] = p_z / self._sizes[k]
 
         return weights
-
-class NeighborRegression(object):
-    """Neighbor-esque regression model."""
-
-    def __init__(self, run_data, model):
-        """Initialize."""
-
-        self._run_data = run_data
-        self._model = model
-        self._feature_values_NF = run_data.to_features_array()
-
-        self._feature_mus_F = numpy.mean(self._feature_values_NF, axis = 0)
-        self._feature_sigmas_F = numpy.std(self._feature_values_NF, axis = 0)
-        self._feature_sigmas_F += 1e-4
-        #self._feature_mus_F = numpy.zeros(self._feature_values_NF.shape[1])
-        #self._feature_sigmas_F = numpy.ones(self._feature_values_NF.shape[1])
-
-        self._feature_values_NF -= self._feature_mus_F
-        self._feature_values_NF /= self._feature_sigmas_F
-
-    def predict(self, instance, features, normalize = True):
-        """Predict RTD probabilities."""
-
-        (N, F) = self._feature_values_NF.shape
-
-        all_features_NF = self._feature_values_NF
-        instance_features_F = (features - self._feature_mus_F) / self._feature_sigmas_F
-        log_t_pdfs_NF = scipy.stats.t.logpdf(instance_features_F[None, ...], 1e-2, loc = all_features_NF)
-        log_weights_N = -numpy.ones(N) * N
-        log_weights_N += numpy.sum(log_t_pdfs_NF, axis = -1)
-        log_weights_N -= numpy.logaddexp.reduce(log_weights_N)
-
-        n = sorted(self._run_data.run_lists).index(instance)
-        print log_weights_N[n:n + 8]
-
-        return numpy.exp(log_weights_N)
 

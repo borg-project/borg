@@ -3,14 +3,13 @@
 
 import numpy
 import borg
-import cargo
 
 cimport cython
 cimport libc.math
 cimport numpy
 cimport borg.statistics
 
-logger = cargo.get_logger(__name__, default_level = "DEBUG")
+logger = borg.get_logger(__name__, default_level = "DEBUG")
 
 cdef extern from "math.h":
     double INFINITY
@@ -54,7 +53,7 @@ def sampled_pmfs_log_pmf(pmfs, counts):
 
     return logs_NM
 
-def run_data_log_probabilities(model, B, testing, weights = None):
+def run_data_log_probabilities(model, testing, weights = None):
     """Compute per-instance log probabilities of run data under a model."""
 
     logger.info("scoring model on %i instances", len(testing))
@@ -66,7 +65,7 @@ def run_data_log_probabilities(model, B, testing, weights = None):
     log_probabilities = borg.models.sampled_pmfs_log_pmf(model.log_masses, counts)
 
     if weights is None:
-        weights = numpy.ones_like(log_probabilities.T) / log_probabilities.shape[1]
+        weights = numpy.ones_like(log_probabilities.T) / log_probabilities.shape[0]
 
     borg.statistics.assert_weights(weights, axis = -1)
 
@@ -76,11 +75,6 @@ def run_data_log_probabilities(model, B, testing, weights = None):
     lps_per = numpy.logaddexp.reduce(weighted_lps, axis = 0)
 
     return lps_per
-
-def run_data_mean_log_probability(model, testing, weights = None):
-    """Compute mean log probability of run data under a model."""
-
-    return numpy.mean(run_data_log_probabilities(model, None, testing, weights = weights))
 
 class MultinomialModel(object):
     """Multinomial mixture model."""
@@ -398,7 +392,7 @@ class MulDirMixSampler(object):
         return MultinomialModel(training.get_common_budget() / B, log_survival_MSC, log_masses = numpy.log(components_MSC))
 
 class MulDirMatMixSampler(object):
-    def __init__(self, K = 32):
+    def __init__(self, K = 16):
         self._K = K
 
     @cython.infer_types(True)
