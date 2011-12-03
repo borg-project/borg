@@ -109,9 +109,11 @@ from . import solver_io
 from . import storage
 from . import fake
 from . import unix
+from . import bregman
 from . import planners
 from . import regression
 from . import domains
+from . import experiments
 
 from borg.expenses import *
 from borg.storage import (

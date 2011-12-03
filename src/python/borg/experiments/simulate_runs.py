@@ -3,7 +3,6 @@
 import os.path
 import csv
 import uuid
-import json
 import condor
 import borg
 
@@ -81,28 +80,17 @@ def simulate_run(run, maker, train_data, test_data):
 
 @borg.annotations(
     out_path = ("results CSV output path"),
-    runs_path = ("path to JSON runs specification"),
+    runs = ("path to JSON runs specification", "positional", None, borg.util.load_json),
     repeats = ("number of times to repeat each run", "option", None, int),
     workers = ("submit jobs?", "option", "w", int),
     local = ("workers are local?", "flag"),
     )
-def main(out_path, runs_path, repeats = 4, workers = 0, local = False):
+def main(out_path, runs, repeats = 4, workers = 0, local = False):
     """Simulate portfolio and solver behavior."""
-
-    with open(runs_path) as runs_file:
-        runs = json.load(runs_file)
 
     logger.info("simulating %i runs", len(runs) * repeats)
 
-    run_data_sets = {}
-
-    def get_run_data(path):
-        data = run_data_sets.get(path)
-
-        if data is None:
-            run_data_sets[path] = data = borg.storage.RunData.from_bundle(path)
-
-        return data
+    get_run_data = borg.util.memoize(borg.storage.RunData.from_bundle)
 
     def yield_jobs():
         for run in runs:

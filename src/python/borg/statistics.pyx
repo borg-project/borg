@@ -334,17 +334,17 @@ cpdef double unit_uniform_rv():
     return u - <numpy.int32_t>u
 
 @cython.infer_types(True)
-cdef int categorical_rv_raw(int D, double* logps, int logps_stride):
+cdef int categorical_rv_raw(int D, double* ps, int ps_stride):
     """Generate a categorically-distributed random variate."""
 
-    cdef void* logps_p = logps
+    cdef void* ps_p = ps
 
     u = unit_uniform_rv()
 
     total = 0.0
 
     for d in xrange(D - 1):
-        total += (<double*>(logps_p + d * logps_stride))[0]
+        total += (<double*>(ps_p + d * ps_stride))[0]
 
         if total > u:
             return d

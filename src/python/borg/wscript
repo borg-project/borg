@@ -37,6 +37,7 @@ def build(context):
     cython_build("models")
     cython_build("planners")
     cython_build("statistics")
+    cython_build("bregman")
 
     context(
         source = [

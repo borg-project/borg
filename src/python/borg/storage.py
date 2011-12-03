@@ -21,6 +21,12 @@ class RunRecord(object):
         self.cost = cost
         self.success = success
 
+    def __str__(self):
+        return str((self.solver, self.budget, self.cost, self.success))
+
+    def __repr__(self):
+        return repr((self.solver, self.budget, self.cost, self.success))
+
 class RunData(object):
     """Load and access portfolio training data."""
 

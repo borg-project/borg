@@ -17,6 +17,7 @@ def build(context):
             "test_models.py",
             "test_statistics.py",
             "test_planners.py",
+            "test_bregman.py",
             ],
         install_path = install_path,
         )

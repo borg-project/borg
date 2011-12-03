@@ -76,6 +76,30 @@ def run_data_log_probabilities(model, testing, weights = None):
 
     return lps_per
 
+def mixture_from_posterior(sampler, solver_names, training, bins, samples_per_chain = 1, chains = 1):
+    """Sample and return a model."""
+
+    logger.info("sampling from %s", sampler)
+
+    outcomes_NSC = training.to_bins_array(solver_names, bins)
+    samples = []
+
+    for _ in xrange(chains):
+        chain_samples = sampler.sample(outcomes_NSC, stored = samples_per_chain)
+
+        samples.extend(chain_samples)
+
+    components_MSC = numpy.vstack(samples)
+    log_survival_MSC = borg.statistics.to_log_survival(components_MSC, axis = -1)
+    log_masses_MSC = borg.statistics.floored_log(components_MSC)
+
+    return \
+        MultinomialModel(
+            training.get_common_budget() / bins,
+            log_survival_MSC,
+            log_masses = log_masses_MSC,
+            )
+
 class MultinomialModel(object):
     """Multinomial mixture model."""
 
@@ -203,7 +227,7 @@ class MulSampler(object):
 
 class MulDirSampler(object):
     @cython.infer_types(True)
-    def sample(self, counts, stored = 4, burn_in = 1024, spacing = 128):
+    def sample(self, counts, stored = 4, burn_in = 1000, spacing = 100):
         """Sample parameters of the DCM model using Gibbs."""
 
         cdef int N = counts.shape[0]
@@ -392,7 +416,8 @@ class MulDirMixSampler(object):
         return MultinomialModel(training.get_common_budget() / B, log_survival_MSC, log_masses = numpy.log(components_MSC))
 
 class MulDirMatMixSampler(object):
-    def __init__(self, K = 16):
+    #def __init__(self, K = 16):
+    def __init__(self, K = 8): # XXX
         self._K = K
 
     @cython.infer_types(True)
@@ -419,7 +444,6 @@ class MulDirMatMixSampler(object):
         cdef unsigned int log_posterior_K_stride0 = log_posterior_K.strides[0]
 
         theta_samples = []
-        z_samples = []
 
         for i in xrange(burn_in + (stored - 1) * spacing + 1):
             # sample multinomial components
@@ -480,28 +504,8 @@ class MulDirMatMixSampler(object):
             # record a sample?
             if burn_in <= i and (i - burn_in) % spacing == 0:
                 theta_samples.append(thetas_NSD.copy())
-                z_samples.append(zs_N.copy())
 
                 logger.info("recorded sample at Gibbs iteration %i", i)
 
-        return (theta_samples, z_samples)
-
-    def fit(self, solver_names, training, B, T = 1):
-        """Sample and return a model."""
-
-        logger.info("fitting Dirichlet mixture model")
-
-        outcomes_NSC = training.to_bins_array(solver_names, B)
-        (theta_samples, z_samples) = self.sample(outcomes_NSC, stored = T)
-        components_MSC = numpy.vstack(theta_samples)
-        clusters_N = borg.statistics.indicator(numpy.hstack(z_samples), self._K)
-        log_survival_MSC = borg.statistics.to_log_survival(components_MSC, axis = -1)
-
-        return \
-            MultinomialModel(
-                training.get_common_budget() / B,
-                log_survival_MSC,
-                log_masses = numpy.log(components_MSC),
-                clusters = clusters_N,
-                )
+        return theta_samples
 

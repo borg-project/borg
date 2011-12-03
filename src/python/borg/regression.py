@@ -93,24 +93,26 @@ class ConstantRegression(object):
 class LinearRegression(object):
     """Linear regression model."""
 
-    def __init__(self, run_data, model):
+    def __init__(self, run_data, model, K = 32):
         """Initialize."""
 
+        # cluster the distributions
         features_NF = run_data.to_features_array()
 
         self._model = model
-        self._assignments = numpy.argmax(model.clusters, axis = -1)
+        self._kl_means = borg.bregman.KLMeans(k = K).fit(numpy.exp(model.log_masses))
+        self._indicators = borg.statistics.indicator(self._kl_means._assignments, K)
         self._regression = \
             sklearn.pipeline.Pipeline([
                 ("scaler", sklearn.preprocessing.Scaler()),
-                ("estimator", sklearn.linear_model.LogisticRegression(C = 1e0)),
+                ("estimator", sklearn.linear_model.LogisticRegression(C = 1e-1)),
                 ]) \
-                .fit(features_NF, self._assignments)
+                .fit(features_NF, self._kl_means._assignments)
 
         (_, estimator) = self._regression.steps[-1]
 
         self._indices = dict(zip(estimator.label_, xrange(estimator.label_.shape[0])))
-        self._sizes = numpy.sum(model.clusters, axis = 0)
+        self._sizes = numpy.sum(self._indicators, axis = 0)
 
     def predict(self, features):
         """Predict RTD probabilities."""
@@ -118,14 +120,14 @@ class LinearRegression(object):
         features = numpy.asarray(features)
 
         (M, F) = features.shape
-        (N, K) = self._model.clusters.shape
+        (N, K) = self._indicators.shape
 
         prediction = self._regression.predict_proba(features)
         weights = numpy.empty((M, N))
 
         for m in xrange(M):
             for n in xrange(N):
-                k = self._assignments[n]
+                k = self._kl_means._assignments[n]
                 p_z = prediction[m, self._indices[k]]
 
                 weights[m, n] = p_z / self._sizes[k]
