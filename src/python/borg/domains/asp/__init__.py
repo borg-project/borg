@@ -1,8 +1,10 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
+import os.path
 import contextlib
-import borg
+#import borg
 
+#solvers = borg.domains.asp.solvers
 from . import solvers
 from . import features
 
@@ -17,10 +19,12 @@ class GroundedAnswerSetInstance(object):
     def clean(self):
         """Clean up the grounded instance."""
 
-@borg.named_domain
 class AnswerSetProgramming(object):
     name = "asp"
     extensions = ["*.lparse"]
+
+    def __init__(self, claspre_path):
+        self._claspre_path = os.path.abspath(claspre_path)
 
     @contextlib.contextmanager
     def task_from_path(self, asp_path):
@@ -33,7 +37,7 @@ class AnswerSetProgramming(object):
         task.clean()
 
     def compute_features(self, task):
-        return features.get_features_for(task.path)
+        return features.get_features_for(task.path, self._claspre_path)
 
     def is_final(self, task, answer):
         """Is the answer definitive for the task?"""

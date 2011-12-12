@@ -1,12 +1,11 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import numpy
-import scipy.stats
-import scikits.learn.linear_model
-import cargo
+import sklearn.pipeline
+import sklearn.linear_model
 import borg
 
-logger = cargo.get_logger(__name__, default_level = "INFO")
+logger = borg.get_logger(__name__, default_level = "INFO")
 
 def prepare_training_data_raw(run_data, model):
     """Prepare regression training data from run data."""
@@ -94,62 +93,44 @@ class ConstantRegression(object):
 class LinearRegression(object):
     """Linear regression model."""
 
-    def __init__(self, run_data, model):
+    def __init__(self, run_data, model, K = 32):
         """Initialize."""
 
-        (features_NF, ps_NM) = prepare_training_data_raw(run_data, model)
+        # cluster the distributions
+        features_NF = run_data.to_features_array()
 
-        self._regression = scikits.learn.linear_model.LinearRegression()
+        self._model = model
+        self._kl_means = borg.bregman.KLMeans(k = K).fit(numpy.exp(model.log_masses))
+        self._indicators = borg.statistics.indicator(self._kl_means._assignments, K)
+        self._regression = \
+            sklearn.pipeline.Pipeline([
+                ("scaler", sklearn.preprocessing.Scaler()),
+                ("estimator", sklearn.linear_model.LogisticRegression(C = 1e-1)),
+                ]) \
+                .fit(features_NF, self._kl_means._assignments)
 
-        self._regression.fit(features_NF, ps_NM)
+        (_, estimator) = self._regression.steps[-1]
 
-    def predict(self, task, features, normalize = True):
+        self._indices = dict(zip(estimator.label_, xrange(estimator.label_.shape[0])))
+        self._sizes = numpy.sum(self._indicators, axis = 0)
+
+    def predict(self, features):
         """Predict RTD probabilities."""
 
         features = numpy.asarray(features)
 
-        prediction = self._regression.predict(features)
-        prediction = numpy.clip(prediction / 100.0, 0.0, 1.0)
-        #prediction = 1.0 / (1.0 + numpy.exp(-prediction))
+        (M, F) = features.shape
+        (N, K) = self._indicators.shape
 
-        if normalize:
-            prediction /= numpy.sum(prediction)
+        prediction = self._regression.predict_proba(features)
+        weights = numpy.empty((M, N))
 
-        return prediction
+        for m in xrange(M):
+            for n in xrange(N):
+                k = self._kl_means._assignments[n]
+                p_z = prediction[m, self._indices[k]]
 
-class ClusterRegression(object):
-    """Cluster regression model."""
+                weights[m, n] = p_z / self._sizes[k]
 
-    def __init__(self, run_data, model):
-        """Initialize."""
-
-        self._run_data = run_data
-        self._model = model
-        self._feature_values_NF = run_data.to_features_array()
-
-        self._feature_mus_F = numpy.mean(self._feature_values_NF, axis = 0)
-        self._feature_sigmas_F = numpy.std(self._feature_values_NF, axis = 0)
-        self._feature_sigmas_F += 1e-4
-        #self._feature_mus_F = numpy.zeros(self._feature_values_NF.shape[1])
-        #self._feature_sigmas_F = numpy.ones(self._feature_values_NF.shape[1])
-
-        self._feature_values_NF -= self._feature_mus_F
-        self._feature_values_NF /= self._feature_sigmas_F
-
-    def predict(self, instance, features, normalize = True):
-        """Predict RTD probabilities."""
-
-        (N, F) = self._feature_values_NF.shape
-
-        all_features_NF = self._feature_values_NF
-        instance_features_F = (features - self._feature_mus_F) / self._feature_sigmas_F
-        log_t_pdfs_NF = scipy.stats.t.logpdf(instance_features_F[None, ...], 1e-2, loc = all_features_NF)
-        log_weights_N = -numpy.ones(N) * N
-        log_weights_N += numpy.sum(log_t_pdfs_NF, axis = -1)
-        log_weights_N -= numpy.logaddexp.reduce(log_weights_N)
-
-        n = sorted(self._run_data.run_lists).index(instance)
-        print log_weights_N[n:n + 8]
-
-        return numpy.exp(log_weights_N)
+        return weights
 

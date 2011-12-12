@@ -12,17 +12,10 @@ def configure(context):
 
     context.load("cython")
 
-    context.env.append_unique("CFLAGS", ["-O3"])
+    context.env.append_unique("CFLAGS", ["-O3", "-msse2", "-mtune=generic"])
 
     context.recurse("borg")
 
 def build(context):
-    context(
-        source = [
-            "cargo_site_defaults.py",
-            ],
-        install_path = "${PYTHONDIR}",
-        )
-
     context.recurse("borg")
 

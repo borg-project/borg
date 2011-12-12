@@ -2,10 +2,9 @@
 
 import itertools
 import numpy
-import cargo
 import borg
 
-logger = cargo.get_logger(__name__, default_level = "INFO")
+logger = borg.get_logger(__name__, default_level = "INFO")
 
 class RandomPortfolio(object):
     """Random portfolio."""
@@ -13,7 +12,10 @@ class RandomPortfolio(object):
     def __call__(self, task, suite, budget):
         """Run the portfolio."""
 
-        return cargo.grab(suite.solvers.values()).start(task).run_then_stop(budget.cpu_seconds)
+        solvers = suite.solvers.values()
+        selected = numpy.random.randint(len(solvers))
+
+        return solvers[selected].start(task).run_then_stop(budget.cpu_seconds)
 
 class UniformPortfolio(object):
     """Portfolio that runs every solver once."""
@@ -175,7 +177,7 @@ class PureModelPortfolio(object):
         (feature_names, feature_values) = suite.domain.compute_features(task)
         feature_dict = dict(zip(feature_names, feature_values))
         feature_values_sorted = [feature_dict[f] for f in sorted(feature_names)]
-        predicted_weights = numpy.log(self._regress.predict(task, feature_values_sorted))
+        (predicted_weights,) = numpy.log(self._regress.predict([feature_values_sorted]))
 
         #if self._plan is None:
         plan = self._planner.plan(self._model.log_survival[..., :-1], predicted_weights)

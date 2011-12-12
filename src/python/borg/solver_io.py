@@ -11,19 +11,15 @@ import tempfile
 import datetime
 import multiprocessing
 import numpy
-import cargo
-import cargo.unix.sessions
-import cargo.unix.accounting
 import borg
 
-logger = cargo.get_logger(__name__, default_level = "INFO")
+logger = borg.get_logger(__name__, default_level = "INFO")
 
 def random_seed():
     """Return a random solver seed."""
 
     return numpy.random.randint(0, 2**31)
 
-@cargo.composed(list)
 def timed_read(fds, timeout = -1):
     """Read from multiple descriptors with an optional timeout."""
 
@@ -36,15 +32,17 @@ def timed_read(fds, timeout = -1):
     changed = dict(polling.poll(timeout * 1000))
 
     # and interpret them
-    for fd in fds:
+    def make_read(fd):
         revents = changed.get(fd, 0)
 
         if revents & select.POLLIN:
-            yield os.read(fd, 65536)
+            return os.read(fd, 65536)
         elif revents & select.POLLHUP:
-            yield ""
+            return ""
         else:
-            yield None
+            return None
+
+    return map(make_read, fds)
 
 class SolverProcess(multiprocessing.Process):
     """Attempt to solve the task in a subprocess."""
@@ -110,7 +108,7 @@ class SolverProcess(multiprocessing.Process):
                 if self._popened is not None:
                     os.kill(popened.pid, signal.SIGSTOP)
 
-                    run_cost = cargo.seconds(expenditure - last_expenditure)
+                    run_cost = borg.util.seconds(expenditure - last_expenditure)
                     self._stm_queue.put((self._solver_id, run_cost, None, False))
 
                 additional = self._mts_queue.get()
@@ -118,11 +116,11 @@ class SolverProcess(multiprocessing.Process):
                 last_expenditure = expenditure
 
                 if self._popened is None:
-                    popened = cargo.unix.sessions.spawn_pipe_session(self._arguments, {})
+                    popened = borg.unix.sessions.spawn_pipe_session(self._arguments, {})
                     self._popened = popened
 
                     descriptors = [popened.stdout.fileno(), popened.stderr.fileno()]
-                    accountant = cargo.unix.accounting.SessionTimeAccountant(popened.pid)
+                    accountant = borg.unix.accounting.SessionTimeAccountant(popened.pid)
                 else:
                     os.kill(popened.pid, signal.SIGCONT)
 
@@ -143,7 +141,7 @@ class SolverProcess(multiprocessing.Process):
 
         # provide the outcome to the central planner
         answer = self._parse_output(stdout)
-        run_cost = cargo.seconds(expenditure - last_expenditure)
+        run_cost = borg.util.seconds(expenditure - last_expenditure)
 
         self._stm_queue.put((self._solver_id, run_cost, answer, True))
 

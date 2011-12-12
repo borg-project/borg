@@ -23,9 +23,9 @@ def test_sampled_pmfs_log_pmf():
             )
     logs = borg.models.sampled_pmfs_log_pmf(cdfs, counts)
 
-    nose.tools.assert_almost_equal(numpy.exp(logs[0]), 0.1)
-    nose.tools.assert_almost_equal(numpy.exp(logs[1]), 0.9**2)
-    nose.tools.assert_almost_equal(numpy.exp(logs[2]), 0.1 * 0.9**2)
+    nose.tools.assert_almost_equal(numpy.exp(logs[0, 0]), 0.1)
+    nose.tools.assert_almost_equal(numpy.exp(logs[0, 1]), 0.9**2)
+    nose.tools.assert_almost_equal(numpy.exp(logs[0, 2]), 0.1 * 0.9**2)
 
 def test_kernel_model_sample():
     """Test borg.models.KernelModel.sample()."""

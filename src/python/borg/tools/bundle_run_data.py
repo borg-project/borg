@@ -1,19 +1,13 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
-import plac
-import borg
-
-if __name__ == "__main__":
-    plac.call(borg.tools.bundle_run_data.main)
-
 import os
 import os.path
 import csv
-import cargo
+import borg
 
-logger = cargo.get_logger(__name__, default_level = "INFO")
+logger = borg.get_logger(__name__, default_level = "INFO")
 
-@plac.annotations(
+@borg.annotations(
     bundle_path = ("path to new bundle",),
     root_path = ("instances root directory",),
     runs_extension = ("runs files extension",),
@@ -21,12 +15,10 @@ logger = cargo.get_logger(__name__, default_level = "INFO")
 def main(bundle_path, root_path, runs_extension):
     """Bundle together run and feature data."""
 
-    cargo.enable_default_logging()
-
     # list relevant files
     features_extension = ".features.csv"
-    runs_paths = map(os.path.abspath, cargo.files_under(root_path, "*{0}".format(runs_extension)))
-    features_paths = map(os.path.abspath, cargo.files_under(root_path, "*{0}".format(features_extension)))
+    runs_paths = map(os.path.abspath, borg.util.files_under(root_path, "*{0}".format(runs_extension)))
+    features_paths = map(os.path.abspath, borg.util.files_under(root_path, "*{0}".format(features_extension)))
 
     # write the bundle
     os.mkdir(bundle_path)
@@ -34,7 +26,7 @@ def main(bundle_path, root_path, runs_extension):
 
     logger.info("bundling run data from %i files", len(runs_paths))
 
-    with cargo.openz(os.path.join(bundle_path, "all_runs.csv.gz"), "w") as out_file:
+    with borg.util.openz(os.path.join(bundle_path, "all_runs.csv.gz"), "w") as out_file:
         out_writer = csv.writer(out_file)
 
         out_writer.writerow(["instance", "solver", "budget", "cost", "succeeded"])
@@ -55,7 +47,7 @@ def main(bundle_path, root_path, runs_extension):
 
     logger.info("bundling feature data from %i files", len(features_paths))
 
-    with cargo.openz(os.path.join(bundle_path, "all_features.csv.gz"), "w") as out_file:
+    with borg.util.openz(os.path.join(bundle_path, "all_features.csv.gz"), "w") as out_file:
         out_writer = csv.writer(out_file)
         feature_names = None
 
@@ -78,4 +70,7 @@ def main(bundle_path, root_path, runs_extension):
 
                 for row in in_reader:
                     out_writer.writerow([instance_path] + row)
+
+if __name__ == "__main__":
+    borg.script(main)
 

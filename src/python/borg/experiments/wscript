@@ -1,0 +1,15 @@
+def build(context):
+    context(
+        source = [
+            "__init__.py",
+            "common.py",
+            "ll_vs_train.py",
+            "ll_vs_features.py",
+            "mix_over_k.py",
+            "mul_over_alpha.py",
+            "apply_models.py",
+            "simulate_runs.py",
+            ],
+        install_path = "${PYTHONDIR}/borg/experiments",
+        )
+

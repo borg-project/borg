@@ -1,10 +1,9 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import re
-import cargo
 import borg
 
-logger = cargo.get_logger(__name__)
+logger = borg.get_logger(__name__)
 
 def parse_sat_output(stdout):
     """Parse a solver's standard competition-format output."""
@@ -30,7 +29,7 @@ def parse_sat_output(stdout):
 class SAT_SolverFactory(object):
     """Construct a basic competition solver callable."""
 
-    def __init__(self, root, command):
+    def __init__(self, root, command, library_paths = ()):
         """Initialize."""
 
         self._root = root

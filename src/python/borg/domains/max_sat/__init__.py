@@ -1,7 +1,6 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import contextlib
-import cargo
 import borg
 
 from . import instance
@@ -9,7 +8,7 @@ from . import solvers
 from . import features
 from . import test
 
-logger = cargo.get_logger(__name__, default_level = "INFO")
+logger = borg.get_logger(__name__, default_level = "INFO")
 
 class MAX_SAT_Task(object):
     def __init__(self, path):

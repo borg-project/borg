@@ -23,6 +23,7 @@ http://borg.readthedocs.org/
 License
 -------
 
-This software package is provided under the non-copyleft open-source "MIT"
-license. The complete legal notice can be found in the included LICENSE file.
+Unless otherwise specified, this software is provided under the non-copyleft
+open-source "MIT" license. The complete legal notice can be found in the
+included LICENSE file.
 

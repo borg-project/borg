@@ -3,9 +3,9 @@
 import re
 import numpy
 import scipy.sparse
-import cargo
+import borg
 
-logger = cargo.get_logger(__name__)
+logger = borg.get_logger(__name__)
 
 class PseudoBooleanInstance(object):
     def __init__(self, objective, totals, relations, constraints, nonlinear = False):

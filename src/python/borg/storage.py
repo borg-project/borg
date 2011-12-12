@@ -2,11 +2,13 @@
 
 import os.path
 import csv
+import random
+import itertools
 import collections
 import numpy
-import cargo
+import borg
 
-logger = cargo.get_logger(__name__, default_level = "INFO")
+logger = borg.get_logger(__name__, default_level = "INFO")
 
 class RunRecord(object):
     """Record of a solver run."""
@@ -19,17 +21,28 @@ class RunRecord(object):
         self.cost = cost
         self.success = success
 
+    def __str__(self):
+        return str((self.solver, self.budget, self.cost, self.success))
+
+    def __repr__(self):
+        return repr((self.solver, self.budget, self.cost, self.success))
+
 class RunData(object):
     """Load and access portfolio training data."""
 
-    def __init__(self, solver_names):
+    def __init__(self, solver_names, common_budget = None):
         """Initialize."""
 
         self.solver_names = solver_names
         self.run_lists = {}
         self.feature_vectors = {}
-        self.common_budget = None
+        self.common_budget = common_budget
         self.common_features = None
+
+    def __len__(self):
+        """Number of instances for which data are stored."""
+
+        return len(self.run_lists)
 
     def add_run(self, id_, run):
         """Add a run to these data."""
@@ -46,10 +59,11 @@ class RunData(object):
         else:
             assert run.budget == self.common_budget
 
-    def get_run_count(self):
-        """Return the number of runs stored."""
+    def add_runs(self, pairs):
+        """Add runs to these data."""
 
-        return sum(map(len, self.run_lists.values()))
+        for (id_, run) in pairs:
+            self.add_run(id_, run)
 
     def add_feature_vector(self, id_, vector):
         """Add a feature vector to these data."""
@@ -64,16 +78,83 @@ class RunData(object):
 
         self.feature_vectors[id_] = vector
 
-    def filter(self, id_):
+    def filter(self, *ids):
         """Return a filtered set of run data."""
 
         data = RunData(self.solver_names)
-        
-        data.run_lists = {id_: self.run_lists[id_]}
-        data.feature_vectors = {id_: self.feature_vectors[id_]}
+
+        for id_ in ids:
+            for run in self.run_lists[id_]:
+                data.add_run(id_, run)
+
+            data.add_feature_vector(id_, self.feature_vectors[id_])
+
         data.common_budget = self.common_budget
 
         return data
+
+    def filter_features(self, names):
+        """Return a set of run data with only the specified features."""
+
+        data = RunData(self.solver_names, self.common_budget)
+
+        data.run_lists = self.run_lists
+
+        for (id_, old_vector) in self.feature_vectors.iteritems():
+            new_vector = dict((k, old_vector[k]) for k in names)
+
+            data.add_feature_vector(id_, new_vector)
+
+        return data
+
+    def masked(self, mask):
+        """Return a subset of the instances."""
+
+        return self.filter(*(id_ for (id_, m) in zip(self.ids, mask) if m))
+
+    def collect_systematic(self, counts):
+        """Get a systematic subset of the data."""
+
+        sampled = RunData(self.solver_names, common_budget = self.common_budget)
+        iter_count = itertools.cycle(counts)
+
+        for id_ in sorted(self.ids, key = lambda _: random.random()):
+            count = next(iter_count)
+
+            for solver in self.solver_names:
+                runs = sorted(self.runs_on(id_, solver), key = lambda _: random.random())
+
+                sampled.add_runs((id_, run) for run in runs[:count])
+
+            sampled.add_feature_vector(id_, self.feature_vectors[id_])
+
+        return sampled
+
+    def collect_independent(self, counts):
+        """Get independent subsets of the data."""
+
+        sampled = RunData(self.solver_names, common_budget = self.common_budget)
+
+        for solver in self.solver_names:
+            iter_count = itertools.cycle(counts)
+
+            for id_ in sorted(self.ids, key = lambda _: random.random()):
+                count = next(iter_count)
+                runs = sorted(self.runs_on(id_, solver), key = lambda _: random.random())
+
+                sampled.add_runs((id_, run) for run in runs[:count])
+
+                if id_ not in sampled.feature_vectors:
+                    sampled.add_feature_vector(id_, self.feature_vectors[id_])
+
+        return sampled
+
+    def runs_on(self, id_, solver):
+        """Retrieve runs made by a solver on an instance."""
+
+        for run in self.run_lists[id_]:
+            if run.solver == solver:
+                yield run
 
     def get_feature_vector(self, id_):
         """Retrieve features of a task."""
@@ -98,6 +179,11 @@ class RunData(object):
                     raise Exception("collected runs include multiple run budgets")
 
         return budget
+
+    def get_run_count(self):
+        """Return the number of runs stored."""
+
+        return sum(map(len, self.run_lists.values()))
 
     def to_features_array(self):
         """Retrieve feature values in an array."""
@@ -189,6 +275,12 @@ class RunData(object):
 
         return outcomes_NSC
 
+    @property
+    def ids(self):
+        """All associated instance ids."""
+
+        return self.run_lists.keys()
+
     @staticmethod
     def from_roots(solver_names, tasks_roots, domain, suffix = ".runs.csv"):
         """Collect run data by scanning for tasks."""
@@ -196,7 +288,7 @@ class RunData(object):
         task_paths = []
 
         for tasks_root in tasks_roots:
-            task_paths.extend(cargo.files_under(tasks_root, domain.extensions))
+            task_paths.extend(borg.util.files_under(tasks_root, domain.extensions))
 
         return RunData.from_paths(solver_names, task_paths, domain, suffix)
 
@@ -243,7 +335,7 @@ class RunData(object):
 
         solver_names = set()
 
-        with cargo.openz(runs_csv_path) as csv_file:
+        with borg.util.openz(runs_csv_path) as csv_file:
             csv_reader = csv.reader(csv_file)
 
             columns = csv_reader.next()
@@ -270,7 +362,7 @@ class RunData(object):
 
         logger.info("reading feature data from %s", features_csv_path)
 
-        with cargo.openz(features_csv_path) as csv_file:
+        with borg.util.openz(features_csv_path) as csv_file:
             csv_reader = csv.reader(csv_file)
 
             columns = csv_reader.next()

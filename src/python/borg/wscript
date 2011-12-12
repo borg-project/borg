@@ -5,9 +5,7 @@ def configure(context):
     context.check_python_module("plac")
     context.check_python_module("numpy")
     context.check_python_module("scipy")
-    context.check_python_module("scikits.learn")
-    context.check_python_module("nose")
-    context.check_python_module("cargo")
+    context.check_python_module("sklearn")
 
     # extract numpy's installation path
     context.start_msg("Locating the NumPy module")
@@ -39,18 +37,19 @@ def build(context):
     cython_build("models")
     cython_build("planners")
     cython_build("statistics")
+    cython_build("bregman")
 
     context(
         source = [
             "__init__.py",
             "defaults.py",
             "expenses.py",
-            "experimental.py",
             "portfolios.py",
             "solver_io.py",
             "storage.py",
             "regression.py",
             "fake.py",
+            "util.py",
             ],
         install_path = install_path,
         )
@@ -63,7 +62,9 @@ def build(context):
             ],
         )
 
+    context.recurse("unix")
     context.recurse("domains")
     context.recurse("tools")
+    context.recurse("experiments")
     context.recurse("test")
 

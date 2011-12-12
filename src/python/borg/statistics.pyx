@@ -1,19 +1,22 @@
-# cython: profile=True
+#cython: profile=False
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
+import sys
+import random
 import numpy
 import scipy.special
-import cargo
+import borg
 
 cimport cython
 cimport libc.math
+cimport libc.limits
 cimport numpy
-
-logger = cargo.get_logger(__name__, default_level = "DEBUG")
 
 cdef extern from "math.h":
     double NAN
     double INFINITY
+
+logger = borg.get_logger(__name__, default_level = "DEBUG")
 
 #
 # ASSERTIONS
@@ -74,6 +77,26 @@ def assert_log_survival(array, axis):
 # UTILITIES
 #
 
+def set_prng_seeds(seed = None):
+    """
+    Set seeds for all relevant PRNGs.
+    
+    The (optional) argument is to random.seed(), which is used to initialize
+    the other relevant PRNGs. That's statistically iffy, but what isn't?
+    """
+
+    random.seed(seed)
+
+    numpy.random.seed(random.randint(0, sys.maxint))
+
+    ii = numpy.iinfo(numpy.int32)
+
+    _set_internal_prng_seed(
+        random.randint(ii.min, ii.max),
+        random.randint(ii.min, ii.max),
+        random.randint(ii.min, ii.max),
+        )
+
 @cython.profile(False)
 cdef double log_plus(double x, double y):
     """
@@ -103,14 +126,31 @@ cdef double log_minus(double x, double y):
     else:
         return y + libc.math.log(1.0 - libc.math.exp(x - y))
 
+def floored_log(array, floor = 1e-64):
+    """Return the log of an array, applying a minimum value."""
+
+    copy = numpy.copy(array)
+
+    copy[copy < floor] = floor
+
+    return numpy.log(copy)
+
 def to_log_survival(probabilities, axis):
     """Convert a discrete distribution to log survival-function values."""
 
-    survival = 1.0 - numpy.cumsum(probabilities, axis = axis)
+    return floored_log(1.0 - numpy.cumsum(probabilities, axis = axis))
 
-    survival[survival <= 0.0] = 1e-64
+def indicator(indices, D, dtype = numpy.intc):
+    """Convert a vector of indices to a matrix of indicator vectors."""
 
-    return numpy.log(survival)
+    (N,) = indices.shape
+
+    indicator = numpy.zeros((N, D), dtype = dtype)
+
+    for n in xrange(N):
+        indicator[n, indices[n]] = 1.0
+
+    return indicator
 
 #
 # SPECIAL FUNCTIONS
@@ -163,6 +203,46 @@ cpdef double digamma(double x):
 
     return v
 
+@cython.cdivision(True)
+cpdef double digamma_approx(double x):
+    """Compute an approximation to the digamma function."""
+
+    if x >= 0.6:
+        return libc.math.log(x - 0.5)
+    else:
+        return 0.57721566490153287 - 1.0 / x
+
+@cython.cdivision(True)
+cpdef double digamma_approx2(double x):
+    """Compute an approximation to the digamma function."""
+
+    return libc.math.log(x + 0.5) - 1.0 / x
+
+@cython.cdivision(True)
+cpdef double trigamma(double x):
+    """Compute the trigamma function."""
+
+    return scipy.special.polygamma(1, x)
+
+@cython.cdivision(True)
+cpdef double trigamma_approx(double x):
+    """Compute an approximation to the trigamma function."""
+
+    if x >= 0.6:
+        return 1.0 / (x - 0.5)
+    else:
+        return 1.0 / (x * x)
+
+@cython.infer_types(True)
+@cython.cdivision(True)
+cpdef double trigamma_approx2(double x):
+    """Compute an approximation to the trigamma function."""
+
+    x2 = x * x
+    x3 = x2 * x
+
+    return (2.0 * x2 + 2.0 * x + 1.0) / (2.0 * x3 + x2)
+
 cpdef double inverse_digamma(double x):
     """Compute the (numeric) inverse of the digamma function."""
 
@@ -182,8 +262,241 @@ cpdef double inverse_digamma(double x):
 
     return y
 
+@cython.infer_types(True)
+@cython.cdivision(True)
+cpdef double inverse_digamma_newton(double x) except? -1.0:
+    """Compute the (numeric) inverse of the digamma function."""
+
+    # initialization
+    cdef double y
+
+    if x >= -2.22:
+        y = libc.math.exp(x) + 0.5
+    else:
+        y = -1.0 / (x + 0.57721566490153287)
+
+    # then run Newton-Raphson
+    cdef double numerator
+    cdef double denominator
+
+    for i in xrange(5):
+        numerator = digamma(y) - x
+        denominator = trigamma_approx2(y)
+
+        y -= numerator / denominator
+
+    return y
+
 #
-# DISTRIBUTIONS
+# RANDOM VARIATES
+#
+
+cdef numpy.int32_t _prng_ix
+cdef numpy.int32_t _prng_iy
+cdef numpy.int32_t _prng_iz
+
+set_prng_seeds()
+
+cdef void _set_internal_prng_seed(numpy.int32_t ix, numpy.int32_t iy, numpy.int32_t iz):
+    """Set the state of the internal PRNG."""
+
+    global _prng_ix
+    global _prng_iy
+    global _prng_iz
+
+    _prng_ix = (ix % 254) + 1
+    _prng_iy = (iy % 254) + 1
+    _prng_iz = (iz % 254) + 1
+
+    global _prng_normal_cache_ok
+
+    _prng_normal_cache_ok = False
+
+@cython.infer_types(True)
+@cython.cdivision(True)
+cpdef double unit_uniform_rv():
+    """
+    Generate a uniformly-distributed random variate in [0.0,1.0).
+
+    Implements the Wichmann-Hill PRNG.
+    """
+
+    global _prng_ix
+    global _prng_iy
+    global _prng_iz
+
+    _prng_ix = (171 * _prng_ix) % 30269
+    _prng_iy = (172 * _prng_iy) % 30307
+    _prng_iz = (170 * _prng_iz) % 30323
+
+    u = _prng_ix / 30269.0 + _prng_iy / 30307.0 + _prng_iz / 30323.0
+
+    return u - <numpy.int32_t>u
+
+@cython.infer_types(True)
+cdef int categorical_rv_raw(int D, double* ps, int ps_stride):
+    """Generate a categorically-distributed random variate."""
+
+    cdef void* ps_p = ps
+
+    u = unit_uniform_rv()
+
+    total = 0.0
+
+    for d in xrange(D - 1):
+        total += (<double*>(ps_p + d * ps_stride))[0]
+
+        if total > u:
+            return d
+
+    return D - 1
+
+@cython.infer_types(True)
+cdef int categorical_rv_log_raw(int D, double* logps, int logps_stride):
+    """Generate a categorically-distributed random variate."""
+
+    cdef void* logps_p = logps
+
+    u = unit_uniform_rv()
+
+    total = 0.0
+
+    for d in xrange(D - 1):
+        total += libc.math.exp((<double*>(logps_p + d * logps_stride))[0])
+
+        if total > u:
+            return d
+
+    return D - 1
+
+cdef double _prng_normal_cache
+cdef bint _prng_normal_cache_ok = False
+
+@cython.infer_types(True)
+@cython.cdivision(True)
+cpdef double unit_normal_rv():
+    """
+    Generate a (unit) normally-distributed random variate.
+
+    Adapted from Minka.
+    """
+
+    # return a value computed previously, if any
+    global _prng_normal_cache
+    global _prng_normal_cache_ok
+
+    if _prng_normal_cache_ok:
+        _prng_normal_cache_ok = False
+
+        return _prng_normal_cache
+
+    # generate a random point inside the unit circle
+    cdef double x
+    cdef double y
+    cdef double radius
+
+    while True:
+        x = 2.0 * unit_uniform_rv() - 1.0
+        y = 2.0 * unit_uniform_rv() - 1.0
+
+        radius = (x * x) + (y * y)
+
+        if radius < 1.0 and radius != 0.0:
+            break
+
+    # Box-Muller formula
+    radius = libc.math.sqrt(-2.0 * libc.math.log(radius) / radius)
+
+    x *= radius
+    y *= radius
+
+    _prng_normal_cache = y
+    _prng_normal_cache_ok = True
+
+    return x
+
+@cython.cdivision(True)
+cpdef double unit_gamma_rv(double shape) except? -1.0:
+    """
+    Generate a gamma-distributed random variate with unit scale.
+
+    See Marsaglia and Tsang, 2000; adapted from Minka.
+    """
+
+    assert shape > 0.0
+
+    # boost using Marsaglia's (1961) method
+    cdef double boost
+
+    if shape < 1.0:
+        boost = libc.math.exp(libc.math.log(unit_uniform_rv()) / shape)
+        shape += 1.0
+    else:
+        boost = 1.0
+
+    # generate the rv
+    cdef double d = shape - 1.0 / 3.0
+    cdef double c = 1.0 / libc.math.sqrt(9.0 * d)
+    cdef double v
+    cdef double x
+    cdef double u
+
+    while True:
+        while True:
+            x = unit_normal_rv()
+            v = 1.0 + c * x
+
+            if v > 0:
+                break
+
+        v = v * v * v
+        x = x * x
+        u = unit_uniform_rv()
+
+        if (u < 1.0 - 0.0331 * x * x) or (libc.math.log(u) < 0.5 * x + d * (1.0 - v + libc.math.log(v))):
+            break
+
+    return boost * d * v
+
+@cython.infer_types(True)
+@cython.cdivision(True)
+cdef int post_dirichlet_rv(
+    unsigned int D,
+    double* out,
+    unsigned int out_stride,
+    double* alphas,
+    unsigned int alpha_stride,
+    int* counts,
+    unsigned int count_stride,
+    ) except -1:
+
+    # draw samples from independent gammas
+    cdef void* out_p = out
+    cdef void* alphas_p = alphas
+    cdef void* counts_p = counts
+
+    cdef double alpha
+    cdef double count
+    cdef double l1_norm = 0.0
+
+    for d in xrange(D):
+        alpha = (<double*>(alphas_p + alpha_stride * d))[0]
+        count = (<int*>(counts_p + count_stride * d))[0]
+
+        rv = unit_gamma_rv(alpha + count)
+
+        (<double*>(out_p + out_stride * d))[0] = rv
+
+        l1_norm += rv
+
+    # then normalize to the simplex
+    for d in xrange(D):
+        (<double*>(out_p + out_stride * d))[0] /= l1_norm
+
+    return 0
+
+#
+# DISTRIBUTION FUNCTIONS
 #
 
 cdef double standard_normal_log_pdf(double x):
@@ -263,7 +576,7 @@ cpdef gamma_log_pdf(double x, double shape, double scale):
         - x / scale
 
 def dirichlet_log_pdf(alpha, vectors):
-    """Compute the log of the Dirichlet PDF."""
+    """Compute the log of the Dirichlet PDF evaluated at multiple vectors."""
 
     term_a = scipy.special.gammaln(numpy.sum(alpha, axis = -1))
     term_b = numpy.sum(scipy.special.gammaln(alpha), axis = -1)
@@ -271,36 +584,124 @@ def dirichlet_log_pdf(alpha, vectors):
 
     return term_a - term_b + term_c
 
+@cython.infer_types(True)
+cdef double dirichlet_log_pdf_raw(
+    int D,
+    double* alpha, int alpha_stride,
+    double* vector, int vector_stride,
+    ):
+    """Compute the log of the Dirichlet PDF evaluated at one vector."""
+
+    cdef void* alpha_p = alpha
+    cdef void* vector_p = vector
+
+    # first time
+    term_a = 0.0
+
+    for d in xrange(D):
+        term_a += (<double*>(alpha_p + alpha_stride * d))[0]
+
+    term_a = libc.math.lgamma(term_a)
+
+    # second term
+    term_b = 0.0
+
+    for d in xrange(D):
+        term_b += libc.math.lgamma((<double*>(alpha_p + alpha_stride * d))[0])
+
+    # third term
+    cdef double alpha_d
+    cdef double vector_d
+
+    term_c = 0.0
+
+    for d in xrange(D):
+        alpha_d = (<double*>(alpha_p + alpha_stride * d))[0]
+        vector_d = (<double*>(vector_p + vector_stride * d))[0]
+
+        term_c += (alpha_d - 1.0) * libc.math.log(vector_d)
+
+    # ...
+    return term_a - term_b + term_c
+
+@cython.infer_types(True)
+@cython.boundscheck(False)
+@cython.wraparound(False)
 @cython.cdivision(True)
-cdef double _inverse_digamma_minus(double x, double N, double c) except? -1.0:
+def dirichlet_estimate_ml(vectors):
+    """
+    Compute the maximum-likelihood Dirichlet distribution.
+
+    Implements Minka's fixed-point iteration.
+    """
+
+    cdef int N = vectors.shape[0]
+    cdef int D = vectors.shape[1]
+
+    cdef numpy.ndarray[double, ndim = 2] vectors_ND = numpy.asarray(vectors, numpy.double)
+    cdef numpy.ndarray[double, ndim = 1] log_pbar_D = numpy.zeros(D, numpy.double)
+
+    # initialization
+    cdef double sum_alpha = 0.0
+    cdef double digamma_sum_alpha = 0.5772156649015328
+    cdef double log_floor = 1e-32
+
+    for d in xrange(D):
+        for n in xrange(N):
+            log_pbar_D[d] += libc.math.log(vectors_ND[n, d] + log_floor)
+
+        log_pbar_D[d] /= N
+
+        sum_alpha += inverse_digamma_newton(digamma_sum_alpha + log_pbar_D[d])
+
+    digamma_sum_alpha = digamma(sum_alpha)
+
+    # iteration
+    cdef double sum_alpha_last = 0.0
+
+    for i in xrange(24):
+        sum_alpha = 0.0
+
+        for d in xrange(D):
+            sum_alpha += inverse_digamma_newton(digamma_sum_alpha + log_pbar_D[d])
+
+        digamma_sum_alpha = digamma(sum_alpha)
+
+        if libc.math.fabs(1.0 - sum_alpha_last / sum_alpha) < 1e-4:
+            break
+
+        sum_alpha_last = sum_alpha
+
+    # termination
+    cdef numpy.ndarray[double, ndim = 1] alpha_D = numpy.ones(D, numpy.double) * 1e-1
+
+    for d in xrange(D):
+        alpha_D[d] = inverse_digamma_newton(digamma_sum_alpha + log_pbar_D[d])
+
+    return alpha_D
+
+@cython.infer_types(True)
+@cython.cdivision(True)
+cdef double _inverse_digamma_minus_newton(double x, double t, double N, double c) except? -1.0:
     """Compute a (numeric) inverse for Dirichlet estimation."""
 
-    cdef double y = libc.math.exp(x / N)
-    cdef double d = 1.0
-    cdef double v
+    # approximate the MAP initialization with the (approximate) ML initialization
+    cdef double y
 
-    if y == 0.0:
-        return 0.0
+    if x >= -2.22:
+        y = libc.math.exp(x) + 0.5
+    else:
+        y = -1.0 / (x + 0.57721566490153287)
 
-    while d > 1e-8:
-        v = N * digamma(y) - (c - 1.0) / y
+    # then run Newton-Raphson
+    cdef double numerator
+    cdef double denominator
 
-        if v < x:
-            y += d
-        else:
-            y -= d
+    for i in xrange(32):
+        numerator = N * digamma(y) - (c - 1) / y - t - x
+        denominator = N * trigamma_approx2(y) + (c - 1) / (y * y)
 
-        d /= 2.0
-
-    #if libc.math.fabs(v - x) > 1e-8:
-        #logger.warning(
-            #"modified-digamma inversion did not converge: f(%f, %f, %f) = %f != %f",
-            #y,
-            #N,
-            #c,
-            #v,
-            #x,
-            #)
+        y -= numerator / denominator
 
     return y
 
@@ -310,7 +711,7 @@ cdef double _inverse_digamma_minus(double x, double N, double c) except? -1.0:
 @cython.cdivision(True)
 def dirichlet_estimate_map(vectors, double shape = 1.0, double scale = 1e8):
     """
-    Compute the maximum-likelihood Dirichlet distribution.
+    Compute the max a posteriori Dirichlet distribution.
 
     Implements a version of Minka's fixed-point iteration adapted to
     incorporate a gamma prior.
@@ -320,7 +721,6 @@ def dirichlet_estimate_map(vectors, double shape = 1.0, double scale = 1e8):
     cdef int D = vectors.shape[1]
 
     cdef numpy.ndarray[double, ndim = 2] vectors_ND = numpy.asarray(vectors, numpy.double)
-    cdef numpy.ndarray[double, ndim = 1] expect_p_D = numpy.zeros(D, numpy.double)
     cdef numpy.ndarray[double, ndim = 1] log_pbar_D = numpy.zeros(D, numpy.double)
     cdef numpy.ndarray[double, ndim = 1] alpha_D = numpy.ones(D, numpy.double) * 1e-1
 
@@ -337,17 +737,16 @@ def dirichlet_estimate_map(vectors, double shape = 1.0, double scale = 1e8):
         for d in xrange(D):
             constant_term += alpha_D[d]
 
-        constant_term = N * digamma(constant_term) - 1.0 / scale
+        constant_term = N * digamma_approx2(constant_term) - 1.0 / scale
 
         alpha_change = 0.0
 
         for d in xrange(D):
-            alpha_next = _inverse_digamma_minus(log_pbar_D[d] + constant_term, N, shape)
+            alpha_next = _inverse_digamma_minus_newton(log_pbar_D[d], constant_term, N, shape)
             alpha_change += libc.math.fabs(alpha_D[d] - alpha_next)
             alpha_D[d] = alpha_next
 
         if alpha_change < 1e-6:
-            print i
             return alpha_D
 
     logger.warning("Dirichlet MAP estimation did not converge; last change in alpha: %s", alpha_change)

@@ -24,18 +24,22 @@ def features_for_path(domain, task_path):
         return (["cpu_cost"] + list(names), [accountant.total.cpu_seconds] + list(values))
 
 @plac.annotations(
-    domain_name = ("name of the problem domain",),
-    tasks_root = ("path to task files", "positional", None, os.path.abspath),
+    domain_name = ("suite path, or name of the problem domain",),
+    instances_root = ("path to instances files", "positional", None, os.path.abspath),
     workers = ("submit jobs?", "option", "w", int),
     )
-def main(domain_name, tasks_root, workers = 0):
+def main(domain_name, instances_root, workers = 0):
     """Collect task features."""
 
     cargo.enable_default_logging()
 
     def yield_runs():
-        domain = borg.get_domain(domain_name)
-        paths = list(cargo.files_under(tasks_root, domain.extensions))
+        if os.path.exists(domain_name):
+            domain = borg.load_solvers(domain_name).domain
+        else:
+            domain = borg.get_domain(domain_name)
+
+        paths = list(cargo.files_under(instances_root, domain.extensions))
 
         for path in paths:
             yield (features_for_path, [domain, path])

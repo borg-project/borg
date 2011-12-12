@@ -4,7 +4,6 @@ import os
 import os.path
 import tempfile
 import contextlib
-import cargo
 import borg
 
 from . import instance
@@ -12,7 +11,7 @@ from . import solvers
 from . import features
 from . import test
 
-logger = cargo.get_logger(__name__, default_level = "INFO")
+logger = borg.get_logger(__name__, default_level = "INFO")
 
 class PseudoBooleanTask(object):
     def __init__(self, path):
@@ -26,7 +25,7 @@ class PseudoBooleanTask(object):
 
         if self.nonlinear:
             linearizer = os.path.join(borg.defaults.solvers_root, "PBSimple/PBlinearize")
-            (linearized, _) = cargo.check_call_capturing([linearizer, self.path])
+            (linearized, _) = borg.util.check_call_capturing([linearizer, self.path])
             (fd, self.linearized_path) = tempfile.mkstemp(suffix = ".opb")
             self.support_paths["linearized"] = self.linearized_path
 

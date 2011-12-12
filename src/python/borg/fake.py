@@ -1,10 +1,10 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import contextlib
+import numpy
 import borg
-import cargo
 
-logger = cargo.get_logger(__name__, default_level = "DETAIL")
+logger = borg.get_logger(__name__, default_level = "DETAIL")
 
 class FakeSolverProcess(object):
     """Provide a solver interface to stored run data."""
@@ -90,7 +90,9 @@ class FakeSolverFactory(object):
         if len(our_runs) == 0:
             raise Exception("no runs of solver \"{0}\" are recorded".format(self._solver_name))
 
-        return FakeSolverProcess(cargo.grab(our_runs))
+        run = our_runs[numpy.random.randint(len(our_runs))]
+
+        return FakeSolverProcess(run)
 
 class FakeDomain(object):
     name = "fake"
