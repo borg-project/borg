@@ -11,7 +11,7 @@ import borg
 
 logger = borg.get_logger(__name__, default_level = "INFO")
 
-def run_solver_on(suite_path, solver_name, task_path, budget):
+def run_solver_on(suite_path, solver_name, task_path, budget, store_answers):
     """Run a solver."""
 
     borg.statistics.set_prng_seeds(hash(condor.get_task().key))
@@ -35,21 +35,17 @@ def run_solver_on(suite_path, solver_name, task_path, budget):
         os.path.basename(task_path),
         )
 
-    return (solver_name, budget, cost, succeeded, answer)
-
-def appender(items):
-    def append(item):
-        items.append(item)
-
-        return items
-
-    return append
+    if store_answers:
+        return (solver_name, budget, cost, succeeded, answer)
+    else:
+        return (solver_name, budget, cost, succeeded, None)
 
 @borg.annotations(
     suite_path = ("path to the solvers suite", "positional", None, os.path.abspath),
     tasks_root = ("path to task files", "positional", None, os.path.abspath),
     budget = ("per-instance budget", "positional", None, float),
     only_missing = ("only make missing runs", "flag"),
+    store_answers = ("store answers to instances", "flag"),
     only_solver = ("only make runs of one solver", "option"),
     runs = ("number of runs", "option", "r", int),
     suffix = ("runs file suffix", "option"),
@@ -60,6 +56,7 @@ def main(
     tasks_root,
     budget,
     only_missing = False,
+    store_answers = False,
     only_solver = None,
     runs = 4,
     suffix = ".runs.csv",
@@ -104,7 +101,7 @@ def main(
                 logger.info("scheduling %i run(s) of %s on %s", count, solver_name, os.path.basename(path))
 
                 for _ in xrange(count):
-                    yield (run_solver_on, [suite_path, solver_name, path, budget])
+                    yield (run_solver_on, [suite_path, solver_name, path, budget, store_answers])
 
     for (task, row) in condor.do(yield_runs(), workers):
         # unpack run outcome
@@ -116,7 +113,7 @@ def main(
             answer_text = base64.b64encode(zlib.compress(pickle.dumps(answer)))
 
         # write it to disk
-        (_, _, cnf_path, _) = task.args
+        (_, _, cnf_path, _, _) = task.args
         csv_path = cnf_path + suffix
         existed = os.path.exists(csv_path)
 
