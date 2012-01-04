@@ -25,14 +25,14 @@ def ground_instance(asp_path, gringo_path, domain_path, ignore_errors):
     logger.debug("running %s", command)
 
     with tempfile.TemporaryFile(suffix = ".gringo") as temporary_file:
-        gringo_status = \
-            subprocess.call(
-                command,
-                stdout = temporary_file,
-                stderr = temporary_file,
-                )
+        with open("/dev/null", "wb") as null_file:
+            gringo_status = \
+                subprocess.call(
+                    command,
+                    stdout = temporary_file,
+                    stderr = null_file,
+                    )
 
-        temporary_file.flush()
         temporary_file.seek(0)
 
         if gringo_status != 0:
@@ -67,10 +67,10 @@ def main(gringo_path, domain_path, root_path, ignore_errors = False, workers = 0
 
     for (job, lparse) in condor.do(yield_jobs(), workers):
         (asp_path, _, _, _) = job.args
-        lparse_path = "{0}.lparse".format(asp_path)
+        lparse_path = "{0}.lparse.gz".format(asp_path)
 
         if lparse is not None:
-            with open(lparse_path, "wb") as lparse_file:
+            with borg.util.openz(lparse_path, "wb") as lparse_file:
                 lparse_file.write(lparse)
 
 if __name__ == "__main__":
