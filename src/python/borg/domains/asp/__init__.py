@@ -21,7 +21,7 @@ class GroundedAnswerSetInstance(object):
 
 class AnswerSetProgramming(object):
     name = "asp"
-    extensions = ["*.lparse"]
+    extensions = [".lparse", ".lparse.gz"]
 
     def __init__(self, claspre_path):
         self._claspre_path = os.path.abspath(claspre_path)
