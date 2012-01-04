@@ -13,8 +13,11 @@ logger = borg.get_logger(__name__, default_level = "INFO")
 cdef extern from "math.h":
     double INFINITY
 
-class KnapsackMultiversePlanner(object):
+class Planner(object):
     """Discretizing dynamic-programming planner."""
+
+    def __init__(self, compute_plan):
+        self._compute_plan = compute_plan
 
     def plan(self, log_survival, log_weights = None):
         """Compute a plan."""
@@ -28,7 +31,7 @@ class KnapsackMultiversePlanner(object):
         else:
             log_weights_W = log_weights
 
-        return knapsack_plan(log_survival_WSB, log_weights_W)
+        return self._compute_plan(log_survival_WSB, log_weights_W)
 
 def knapsack_plan(log_survival_WSB, log_weights_W):
     """Compute a plan."""
@@ -69,18 +72,58 @@ def knapsack_plan(log_survival_WSB, log_weights_W):
 
     plan = sorted(plan, key = heuristic)
 
-    #print "plan is:", plan
-    #print "full survival function:"
-    #with cargo.numpy_printing(precision = 2, suppress = True, linewidth = 160, threshold = 1000000):
-        #print numpy.exp(log_survival_WSB)
-    #print "marginal survival function:"
-    #with cargo.numpy_printing(precision = 2, suppress = True, linewidth = 160, threshold = 1000000):
-        #print numpy.exp(log_mean_fail_cmf_SB)
+    # ...
+    return plan
 
-    #raise SystemExit()
+class KnapsackPlanner(Planner):
+    """Discretizing dynamic-programming planner."""
+
+    def __init__(self):
+        Planner.__init__(self, knapsack_plan)
+
+def streeter_plan(log_survival_WSB, log_weights_W):
+    """Compute plan using Streeter's algorithm."""
+
+    # prepare
+    (W, S, B) = log_survival_WSB.shape
+
+    # plan
+    R = B
+    plan = []
+    log_plan_survival_W = numpy.zeros(W)
+
+    while R > 0:
+        log_post_survival_WSR = log_survival_WSB[..., :R] + log_plan_survival_W[:, None, None]
+
+        f_plan = numpy.sum(1.0 - numpy.exp(log_plan_survival_W))
+        f_post = numpy.sum(1.0 - numpy.exp(log_post_survival_WSR), axis = 0)
+        flat_sb = numpy.argmax((f_post - f_plan) / numpy.arange(1, R + 1))
+        (min_s, min_b) = action = numpy.unravel_index(flat_sb, f_post.shape)
+        #print
+        #print "...", R
+        #print 1.0 - numpy.exp(log_post_survival_WSR)
+        #print f_plan
+        #print f_post
+        #print min_s, min_b
+
+        plan.append(action)
+
+        log_plan_survival_W += log_post_survival_WSR[:, min_s, min_b]
+
+        R -= min_b + 1
 
     # ...
     return plan
+
+class StreeterPlanner(Planner):
+    """
+    Greedy approximate planner from Streeter et al.
+
+    Extended to support instance weights.
+    """
+
+    def __init__(self):
+        Planner.__init__(self, streeter_plan)
 
 cdef struct PlannerState:
     int W
@@ -236,19 +279,19 @@ class BellmanPlanner(object):
 
         (value, plan) = bellman_plan_full(&state, 0)
 
-        ## heuristically reorder the plan
-        print "plan is:", plan
+        ### heuristically reorder the plan
+        #print "plan is)", plan
 
-        log_mean_fail_cmf_SB = numpy.logaddexp.reduce(log_survival_WSB + log_weights_W[:, None, None], axis = 0)
+        #log_mean_fail_cmf_SB = numpy.logaddexp.reduce(log_survival_WSB + log_weights_W[:, None, None], axis = 0)
 
-        print "full survival function:"
-        with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 160, threshold = 1000000):
-            print log_mean_fail_cmf_SB
-        print "marginal survival function:"
-        with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 160, threshold = 1000000):
-            print log_mean_fail_cmf_SB
+        #print "full survival function:"
+        #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 160, threshold = 1000000):
+            #print log_mean_fail_cmf_SB
+        #print "marginal survival function:"
+        #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 160, threshold = 1000000):
+            #print log_mean_fail_cmf_SB
 
-        raise SystemExit()
+        #raise SystemExit()
 
         #def heuristic(pair):
             #(s, c) = pair
@@ -258,4 +301,34 @@ class BellmanPlanner(object):
         #return sorted(plan, key = heuristic)
 
         return plan
+
+class ReplanningPlanner(object):
+    """Repeatedly replan."""
+
+    def __init__(self, inner_planner):
+        self._inner_planner = inner_planner
+
+    def plan(self, log_survival, log_weights = None):
+        # plan;
+        # take first solver;
+        # assume failure;
+        # add to survival function;
+        # repeat
+        # XXX
+        pass
+
+class ResumptionPlanner(object):
+    """Include solver resumption in planning."""
+
+    def __init__(self, inner_planner):
+        self._inner_planner = inner_planner
+
+    def plan(self, log_survival, log_weights = None):
+        # plan;
+        # take first solver;
+        # assume failure;
+        # add to survival function;
+        # repeat
+        # XXX
+        pass
 

@@ -4,6 +4,64 @@ import nose.tools
 import numpy
 import borg
 
+worlds = {
+    "short": (
+        numpy.log([[[1.0, 0.2, 0.2, 0.19]]]),
+        numpy.log([1.0]),
+        [(0, 1), (0, 1)]
+        ),
+    "long": (
+        numpy.log([[[1.0, 0.2, 0.2, 0.01]]]),
+        numpy.log([1.0]),
+        [(0, 3)],
+        ),
+    "2worlds": (
+        numpy.log([
+            [[1.0, 1.0, 0.5, 0.4]],
+            [[0.2, 0.2, 0.2, 0.2]],
+            ]),
+        numpy.log([0.5, 0.5]),
+        [(0, 0), (0, 2)],
+        ),
+    }
+
+def assert_planner_ok(planner, world_name):
+    (survival, weights, expected) = worlds[world_name]
+
+    plan = planner.plan(survival, weights)
+
+    nose.tools.assert_equal(sorted(plan), expected)
+
+def test_knapsack_planner():
+    planner = borg.planners.KnapsackPlanner()
+
+    def assert_knapsack_planner_ok(world_name):
+        assert_planner_ok(planner, world_name)
+
+    yield (assert_knapsack_planner_ok, "short")
+    yield (assert_knapsack_planner_ok, "long")
+    yield (assert_knapsack_planner_ok, "2worlds")
+
+def test_streeter_planner():
+    planner = borg.planners.StreeterPlanner()
+
+    def assert_streeter_planner_ok(world_name):
+        assert_planner_ok(planner, world_name)
+
+    yield (assert_streeter_planner_ok, "short")
+    yield (assert_streeter_planner_ok, "long")
+    yield (assert_streeter_planner_ok, "2worlds")
+
+def test_bellman_planner():
+    planner = borg.planners.BellmanPlanner()
+
+    def assert_bellman_planner_ok(world_name):
+        assert_planner_ok(planner, world_name)
+
+    yield (assert_bellman_planner_ok, "short")
+    yield (assert_bellman_planner_ok, "long")
+    yield (assert_bellman_planner_ok, "2worlds")
+
 def test_bellman_planner_short():
     plan = \
         borg.planners.BellmanPlanner().plan(

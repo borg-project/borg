@@ -102,16 +102,16 @@ enable_default_logging = cargo.enable_default_logging
 
 from . import defaults
 from . import util
-from . import portfolios
 from . import models
+from . import planners
 from . import expenses
 from . import solver_io
 from . import storage
 from . import fake
 from . import unix
 from . import bregman
-from . import planners
 from . import regression
+from . import portfolios
 from . import domains
 from . import experiments
 

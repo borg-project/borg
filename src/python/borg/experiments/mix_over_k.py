@@ -24,7 +24,7 @@ def evaluate_split(run_data, model_name, K, split, train_mask, test_mask):
     else:
         raise ValueError("unrecognized model name {0}".format(model_name))
 
-    model = sampler.fit(training.solver_names, training, B = 10, T = 1)
+    model = borg.models.mean_posterior(sampler, training.solver_names, training, bins = 10)
 
     # evaluate the model
     score = numpy.mean(borg.models.run_data_log_probabilities(model, testing))

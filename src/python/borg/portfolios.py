@@ -81,8 +81,7 @@ class OraclePortfolio(object):
 
         # make a plan
         interval = data.get_common_budget() / budget_count
-        planner = borg.planners.KnapsackMultiversePlanner()
-        #planner = borg.planners.BellmanPlanner()
+        planner = borg.planners.KnapsackPlanner()
         plan = planner.plan(log_survival[None, ...])
 
         # and follow through
@@ -105,24 +104,16 @@ class OraclePortfolio(object):
 class PreplanningPortfolio(object):
     """Preplanning discrete-budget portfolio."""
 
-    def __init__(self, suite, training):
+    def __init__(self, suite, training, B = 60, planner = borg.planners.KnapsackPlanner()):
         """Initialize."""
 
-        # XXX again, fix the solver names order mess
-
-        # grab known run data
-        budget_count = 10
         self._solver_names = sorted(suite.solvers)
-        bins = training.to_bins_array(self._solver_names, budget_count).astype(numpy.double) + 1e-8 / budget_count
+
+        bins = training.to_bins_array(self._solver_names, B).astype(numpy.double) + 1e-8 / B
         rates = bins / numpy.sum(bins, axis = -1)[..., None]
         survival = 1.0 - numpy.cumsum(rates, axis = -1)
 
-        # make a plan
-        self._interval = training.get_common_budget() / budget_count
-
-        planner = borg.planners.KnapsackMultiversePlanner()
-        #planner = borg.planners.BellmanPlanner()
-
+        self._interval = training.get_common_budget() / B
         self._plan = planner.plan(numpy.log(survival[..., :-1]))
 
         logger.info("preplanned plan: %s", self._plan)
@@ -158,11 +149,8 @@ class PureModelPortfolio(object):
         self._solver_names = sorted(suite.solvers)
         self._solver_name_index = dict(map(reversed, enumerate(self._solver_names)))
 
-        print list(enumerate(self._solver_names))
-
         self._model = model
-        self._planner = borg.planners.KnapsackMultiversePlanner()
-        #self._planner = borg.planners.BellmanPlanner()
+        self._planner = borg.planners.KnapsackPlanner()
         self._regress = regress
         self._runs_limit = 256
 

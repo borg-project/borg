@@ -8,6 +8,12 @@ cimport cython
 cimport numpy
 cimport borg.statistics
 
+logger = borg.get_logger(__name__, default_level = "DEBUG")
+
+cdef extern from "math.h":
+    double INFINITY
+
+@cython.cdivision(True)
 @cython.infer_types(True)
 cdef double kl_divergence(int D, double* left, int left_stride, double* right, int right_stride):
     """Compute the KL divergence between two discrete distributions."""
@@ -32,6 +38,8 @@ class KLMeans(object):
         self._k = k
 
     @cython.infer_types(True)
+    @cython.wraparound(False)
+    @cython.boundscheck(False)
     def fit(self, points):
         """Find the cluster centers."""
 
@@ -49,10 +57,13 @@ class KLMeans(object):
         borg.statistics.assert_weights(points_NCD, axis = -1)
 
         # initialize cluster centers (k-means++)
+        logger.info("initializing %i cluster centers with k-means++", K)
+
         cdef numpy.ndarray[double, ndim = 1] divergences_N = numpy.empty(N)
         cdef numpy.ndarray[int, ndim = 1] assignments_N = numpy.empty(N, dtype = numpy.intc)
 
         cdef int k
+        cdef double min_divergence
         cdef double sum_divergences
 
         for k in xrange(K):
@@ -100,12 +111,14 @@ class KLMeans(object):
         cdef numpy.ndarray[int, ndim = 1] sizes_K = numpy.empty(K, dtype = numpy.intc)
 
         for i in xrange(I):
+            logger.info("running iteration %i of k-means", i + 1)
+
             # assign points to clusters
             changes = 0
 
             for n in xrange(N):
                 min_k = -1
-                min_divergence = numpy.inf
+                min_divergence = INFINITY
 
                 for k in xrange(K):
                     divergence = 0.0

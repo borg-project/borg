@@ -96,18 +96,28 @@ class LinearRegression(object):
     def __init__(self, run_data, model, K = 32):
         """Initialize."""
 
-        # cluster the distributions
-        features_NF = run_data.to_features_array()
+        logger.info("clustering %i RTD samples", model.log_masses.shape[0])
 
         self._model = model
         self._kl_means = borg.bregman.KLMeans(k = K).fit(numpy.exp(model.log_masses))
         self._indicators = borg.statistics.indicator(self._kl_means._assignments, K)
+
+        logger.info("fitting discriminative model to cluster assignments")
+
+        M = model.log_masses.shape[0]
+
+        features_NF = run_data.to_features_array()
+        features_MF = numpy.vstack([features_NF] * (M / len(run_data)))
+
+        assert features_MF.shape[0] == model.log_masses.shape[0]
+        assert features_MF.shape[0] == self._kl_means._assignments.shape[0]
+
         self._regression = \
             sklearn.pipeline.Pipeline([
                 ("scaler", sklearn.preprocessing.Scaler()),
                 ("estimator", sklearn.linear_model.LogisticRegression(C = 1e-1)),
                 ]) \
-                .fit(features_NF, self._kl_means._assignments)
+                .fit(features_MF, self._kl_means._assignments)
 
         (_, estimator) = self._regression.steps[-1]
 

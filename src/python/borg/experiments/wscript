@@ -9,6 +9,7 @@ def build(context):
             "mul_over_alpha.py",
             "apply_models.py",
             "simulate_runs.py",
+            "solved_vs_b.py",
             ],
         install_path = "${PYTHONDIR}/borg/experiments",
         )
