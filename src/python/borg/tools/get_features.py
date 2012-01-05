@@ -1,18 +1,11 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
-import plac
-
-if __name__ == "__main__":
-    from borg.tools.get_features import main
-
-    plac.call(main)
-
 import os.path
 import csv
-import cargo
+import condor
 import borg
 
-logger = cargo.get_logger(__name__, default_level = "INFO")
+logger = borg.get_logger(__name__, default_level = "INFO")
 
 def features_for_path(domain, task_path):
     logger.info("getting features of %s", os.path.basename(task_path))
@@ -23,7 +16,7 @@ def features_for_path(domain, task_path):
 
         return (["cpu_cost"] + list(names), [accountant.total.cpu_seconds] + list(values))
 
-@plac.annotations(
+@borg.annotations(
     domain_name = ("suite path, or name of the problem domain",),
     instances_root = ("path to instances files", "positional", None, os.path.abspath),
     workers = ("submit jobs?", "option", "w", int),
@@ -31,20 +24,18 @@ def features_for_path(domain, task_path):
 def main(domain_name, instances_root, workers = 0):
     """Collect task features."""
 
-    cargo.enable_default_logging()
-
     def yield_runs():
         if os.path.exists(domain_name):
             domain = borg.load_solvers(domain_name).domain
         else:
             domain = borg.get_domain(domain_name)
 
-        paths = list(cargo.files_under(instances_root, domain.extensions))
+        paths = list(borg.util.files_under(instances_root, domain.extensions))
 
         for path in paths:
             yield (features_for_path, [domain, path])
 
-    def collect_run(task, (names, values)):
+    for (task, (names, values)) in condor.do(yield_runs(), workers):
         (_, cnf_path) = task.args
         csv_path = cnf_path + ".features.csv"
 
@@ -52,5 +43,6 @@ def main(domain_name, instances_root, workers = 0):
             csv.writer(csv_file).writerow(names)
             csv.writer(csv_file).writerow(values)
 
-    cargo.do_or_distribute(yield_runs(), workers, collect_run)
+if __name__ == "__main__":
+    borg.script(main)
 

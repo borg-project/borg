@@ -1,7 +1,6 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import os.path
-import tempfile
 import subprocess
 import condor
 import borg
@@ -11,6 +10,7 @@ logger = borg.get_logger(__name__, default_level = "DEBUG")
 def ground_instance(asp_path, gringo_path, domain_path, ignore_errors):
     """Ground an ASP instance using Gringo."""
 
+    # prepare the gringo invocation
     (asp_path_base, _) = os.path.splitext(asp_path)
     verify_path = "{0}.verify".format(asp_path_base)
     command = [gringo_path, domain_path, asp_path]
@@ -24,16 +24,20 @@ def ground_instance(asp_path, gringo_path, domain_path, ignore_errors):
 
     logger.debug("running %s", command)
 
-    with tempfile.TemporaryFile(suffix = ".gringo") as temporary_file:
+    # then ground the instance
+    lparse_part_path = "{0}.lparse.part.{1}".format(asp_path, condor.get_process_name())
+    lparse_gz_path = "{0}.gz".format(lparse_part_path)
+
+    # XXX cleanup is not robust
+
+    with open(lparse_part_path, "wb") as part_file:
         with open("/dev/null", "wb") as null_file:
             gringo_status = \
                 subprocess.call(
                     command,
-                    stdout = temporary_file,
+                    stdout = part_file,
                     stderr = null_file,
                     )
-
-        temporary_file.seek(0)
 
         if gringo_status != 0:
             message = "gringo failed to ground {0}".format(asp_path)
@@ -47,31 +51,42 @@ def ground_instance(asp_path, gringo_path, domain_path, ignore_errors):
         else:
             logger.info("grounded %s%s", asp_path, verified)
 
-            return temporary_file.read()
+    # compress it
+    with open(lparse_part_path) as part_file:
+        with borg.util.openz(lparse_gz_path, "wb") as gz_file:
+            gz_file.write(part_file.read())
+
+    # and move it into place
+    lparse_final_path = "{0}.lparse.gz".format(asp_path)
+
+    os.unlink(lparse_part_path)
+    os.rename(lparse_gz_path, lparse_final_path)
 
 @borg.annotations(
     gringo_path = ("path to Gringo", "positional", None, os.path.abspath),
     domain_path = ("path the domain file", "positional", None, os.path.abspath),
     root_path = ("instances root directory",),
     ignore_errors = ("ignore Gringo errors", "flag"),
+    skip_existing = ("skip already-grounded instances", "flag"),
     workers = ("number of Condor workers", "option", None, int),
     )
-def main(gringo_path, domain_path, root_path, ignore_errors = False, workers = 0):
+def main(gringo_path, domain_path, root_path, ignore_errors = False, skip_existing = False, workers = 0):
     """Ground a set of ASP instances using Gringo."""
 
     asp_paths = map(os.path.abspath, borg.util.files_under(root_path, "*.asp"))
 
     def yield_jobs():
         for asp_path in asp_paths:
+            if skip_existing and os.path.exists(asp_path + ".lparse.gz"):
+                continue
+
             yield (ground_instance, [asp_path, gringo_path, domain_path, ignore_errors])
 
-    for (job, lparse) in condor.do(yield_jobs(), workers):
-        (asp_path, _, _, _) = job.args
-        lparse_path = "{0}.lparse.gz".format(asp_path)
+    jobs = list(yield_jobs())
 
-        if lparse is not None:
-            with borg.util.openz(lparse_path, "wb") as lparse_file:
-                lparse_file.write(lparse)
+    logger.info("grounding %i instances", len(jobs))
+
+    condor.do_for(jobs, workers)
 
 if __name__ == "__main__":
     borg.script(main)

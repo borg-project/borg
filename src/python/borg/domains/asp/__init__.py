@@ -1,8 +1,11 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
+import os
 import os.path
+import shutil
+import tempfile
 import contextlib
-#import borg
+import borg
 
 #solvers = borg.domains.asp.solvers
 from . import solvers
@@ -14,10 +17,26 @@ class GroundedAnswerSetInstance(object):
     def __init__(self, asp_path):
         """Initialize."""
 
-        self.path = asp_path
+        if asp_path.endswith(".gz"):
+            with borg.util.openz(asp_path) as asp_file:
+                (fd, self.path) = tempfile.mkstemp(suffix = ".lparse")
+
+                final_file = os.fdopen(fd, "wb")
+
+                shutil.copyfileobj(asp_file, final_file)
+
+                final_file.close()
+
+            self.unlink = True
+        else:
+            self.path = asp_path
+            self.unlink = False
 
     def clean(self):
         """Clean up the grounded instance."""
+
+        if self.unlink:
+            os.unlink(self.path)
 
 class AnswerSetProgramming(object):
     name = "asp"

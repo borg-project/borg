@@ -61,7 +61,7 @@ def get_features_for(asp_path, claspre_path):
 
     borg.get_accountant().charge_cpu(cost)
 
-    logger.info("collected features of %s in %.2f s", asp_path, cost)
+    logger.info("collected features of %s in %.2fs", asp_path, cost)
 
     assert len(static_names) == len(values[-1])
 
