@@ -142,5 +142,9 @@ class LinearRegression(object):
 
                 weights[m, n] = p_z / self._sizes[k]
 
+            ## XXX
+            #weights[m, numpy.argsort(weights[m, :])[:-32]] = 0.0
+            #weights[m, :] /= numpy.sum(weights[m, :])
+
         return weights
 

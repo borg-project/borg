@@ -21,27 +21,36 @@ class PortfolioMaker(object):
             portfolio = borg.portfolios.BaselinePortfolio(suite, train_data)
         elif self.name == "oracle":
             portfolio = borg.portfolios.OraclePortfolio()
-        elif self.name == "preplanning":
-            portfolio = borg.portfolios.PreplanningPortfolio(suite, train_data)
-        elif self.name == "probabilistic":
-            sampler = borg.models.MulSampler()
-            #sampler = borg.models.MulDirMixSampler()
+        else:
+            #sampler = borg.models.MulSampler()
+            sampler = borg.models.MulDirMixSampler()
             model = \
                 borg.models.mean_posterior(
                     sampler,
                     train_data.solver_names,
                     train_data,
-                    bins = 60,
+                    bins = 30,
                     chains = 1,
                     samples_per_chain = 1,
                     )
+            #model = \
+                #borg.models.posterior(
+                    #sampler,
+                    #train_data.solver_names,
+                    #train_data,
+                    #bins = 30,
+                    #)
             #import numpy
             #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 160, threshold = 1000000):
                 #print numpy.exp(model.log_masses)
-            regress = borg.regression.LinearRegression(train_data, model)
-            portfolio = borg.portfolios.PureModelPortfolio(suite, model, regress)
-        else:
-            raise ValueError("unrecognized portfolio name: {0}".format(self.name))
+
+            if self.name == "preplanning":
+                portfolio = borg.portfolios.PreplanningPortfolio(suite, model)
+            elif self.name == "probabilistic":
+                regress = borg.regression.LinearRegression(train_data, model)
+                portfolio = borg.portfolios.PureModelPortfolio(suite, model, regress)
+            else:
+                raise ValueError("unrecognized portfolio name: {0}".format(self.name))
 
         return borg.solver_io.RunningPortfolioFactory(portfolio, suite)
 

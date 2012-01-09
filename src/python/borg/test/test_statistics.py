@@ -1,11 +1,9 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
-import sys
 import numpy
 import scipy.stats
 import scipy.special
 import nose.tools
-import cargo
 import borg
 
 def test_unit_uniform_rv():
@@ -79,14 +77,14 @@ def test_gamma_log_pdf():
             scipy.stats.gamma.logpdf(x, 1.1, scale = 2.0),
             )
 
-    with cargo.numpy_errors(all = "raise"):
+    with borg.util.numpy_errors(all = "raise"):
         for i in xrange(4):
             x = numpy.random.rand() * 10
 
             yield (assert_ok, x)
 
 def test_dirichlet_estimate_ml_simple():
-    with cargo.numpy_errors(all = "raise"):
+    with borg.util.numpy_errors(all = "raise"):
         a = 1e-2
         b = 1.0 - 1e-2
 
@@ -100,7 +98,7 @@ def test_dirichlet_estimate_ml_simple():
         nose.tools.assert_almost_equal(mean[1], b, places = 1)
 
 def test_dirichlet_estimate_map_simple():
-    with cargo.numpy_errors(all = "raise"):
+    with borg.util.numpy_errors(all = "raise"):
         a = 1e-2
         b = 1.0 - 1e-2
 
@@ -114,7 +112,7 @@ def test_dirichlet_estimate_map_simple():
         nose.tools.assert_almost_equal(mean[1], b, places = 1)
 
 def test_dirichlet_estimate_ml_zeros():
-    with cargo.numpy_errors(all = "raise"):
+    with borg.util.numpy_errors(all = "raise"):
         a = 0.0
         b = 1.0
 
@@ -127,7 +125,7 @@ def test_dirichlet_estimate_ml_zeros():
         nose.tools.assert_almost_equal(mean[1], b, places = 1)
 
 def test_dirichlet_estimate_map_zeros():
-    with cargo.numpy_errors(all = "raise"):
+    with borg.util.numpy_errors(all = "raise"):
         a = 0.0
         b = 1.0
 
@@ -140,7 +138,7 @@ def test_dirichlet_estimate_map_zeros():
         nose.tools.assert_almost_equal(mean[1], b, places = 1)
 
 def test_dirichlet_estimate_ml_disjoint():
-    with cargo.numpy_errors(all = "raise"):
+    with borg.util.numpy_errors(all = "raise"):
         a = 0.0
         b = 1.0
 
@@ -150,7 +148,7 @@ def test_dirichlet_estimate_ml_disjoint():
         nose.tools.assert_almost_equal(alpha[0], alpha[1])
 
 def test_dirichlet_estimate_map_disjoint():
-    with cargo.numpy_errors(all = "raise"):
+    with borg.util.numpy_errors(all = "raise"):
         a = 0.0
         b = 1.0
 
@@ -167,7 +165,7 @@ def test_dirichlet_estimate_ml_random():
         nose.tools.assert_almost_equal(estimate[0], alpha[0], places = 1)
         nose.tools.assert_almost_equal(estimate[1], alpha[1], places = 1)
 
-    with cargo.numpy_errors(all = "raise"):
+    with borg.util.numpy_errors(all = "raise"):
         for i in xrange(8):
             alpha = numpy.random.dirichlet(numpy.ones(2)) + 1e-1
 
@@ -181,11 +179,26 @@ def test_dirichlet_estimate_map_random():
         nose.tools.assert_almost_equal(estimate[0], alpha[0], places = 1)
         nose.tools.assert_almost_equal(estimate[1], alpha[1], places = 1)
 
-    with cargo.numpy_errors(all = "raise"):
+    with borg.util.numpy_errors(all = "raise"):
         for i in xrange(8):
             alpha = numpy.random.dirichlet(numpy.ones(2)) + 1e-1
 
             yield (assert_ok, alpha.tolist())
+
+def test_dcm_log_pdf():
+    def assert_ok(vector, alpha):
+        density = borg.statistics.dcm_pdf(alpha, vector)
+        log_density = borg.statistics.dcm_log_pdf(alpha, vector)
+
+        nose.tools.assert_almost_equal(log_density, numpy.log(density))
+
+    with borg.util.numpy_errors(all = "raise"):
+        for i in xrange(8):
+            yield (
+                assert_ok,
+                numpy.random.randint(4, size = 4),
+                numpy.random.rand(4),
+                )
 
 def test_dcm_estimate_ml_simple():
     counts = numpy.array([[4, 4], [4, 4]], numpy.intc)
@@ -206,7 +219,32 @@ def test_dcm_estimate_ml_random():
         nose.tools.assert_almost_equal(estimate[0], alpha[0], places = 1)
         nose.tools.assert_almost_equal(estimate[1], alpha[1], places = 1)
 
-    with cargo.numpy_errors(all = "raise"):
+    with borg.util.numpy_errors(all = "raise"):
+        for i in xrange(8):
+            alpha = numpy.random.dirichlet(numpy.ones(2)) + numpy.random.rand() + 1e-1
+
+            yield (assert_ok, alpha.tolist())
+
+def test_dcm_estimate_ml_wallach_simple():
+    counts = numpy.array([[4, 4], [4, 4]], numpy.intc)
+    alpha = borg.statistics.dcm_estimate_ml_wallach(counts)
+
+    nose.tools.assert_almost_equal(alpha[0], alpha[1])
+
+def test_dcm_estimate_ml_wallach_random():
+    def assert_ok(alpha):
+        vectors = numpy.random.dirichlet(alpha, 65536)
+        counts = numpy.empty_like(vectors).astype(numpy.intc)
+
+        for n in xrange(vectors.shape[0]):
+            counts[n] = numpy.random.multinomial(8, vectors[n])
+
+        estimate = borg.statistics.dcm_estimate_ml_wallach(counts)
+
+        nose.tools.assert_almost_equal(estimate[0], alpha[0], places = 1)
+        nose.tools.assert_almost_equal(estimate[1], alpha[1], places = 1)
+
+    with borg.util.numpy_errors(all = "raise"):
         for i in xrange(8):
             alpha = numpy.random.dirichlet(numpy.ones(2)) + numpy.random.rand() + 1e-1
 

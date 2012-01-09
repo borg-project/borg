@@ -22,19 +22,34 @@ def evaluate_split(run_data, model_name, mixture, independent, instance_count, t
         training = training_filtered.collect_systematic(mixture)
 
     # build the model
-    B = 10
-    T = 1
-
     if model_name == "mul_alpha=0.1":
-        model = borg.models.MulSampler(alpha = 0.1).fit(training.solver_names, training, B, T)
+        sampler = borg.models.MulSampler(alpha = 0.1)
     elif model_name == "mul-dir":
-        model = borg.models.MulDirSampler().fit(training.solver_names, training, B, T)
+        sampler = borg.models.MulDirSampler()
     elif model_name == "mul-dirmix":
-        model = borg.models.MulDirMixSampler().fit(training.solver_names, training, B, T)
+        sampler = borg.models.MulDirMixSampler()
     elif model_name == "mul-dirmatmix":
-        model = borg.models.MulDirMatMixSampler().fit(training.solver_names, training, B, T)
+        sampler = borg.models.MulDirMatMixSampler()
     else:
         raise Exception("unrecognized model name \"{0}\"".format(model_name))
+
+    model = \
+        borg.models.mean_posterior(
+            sampler,
+            training.solver_names,
+            training,
+            bins = 30,
+            chains = 1,
+            samples_per_chain = 1,
+            )
+    ## XXX
+    #model = \
+        #borg.models.posterior(
+            #sampler,
+            #training.solver_names,
+            #training,
+            #bins = 30,
+            #)
 
     # evaluate the model
     logger.info("scoring model on %i instances", len(testing))
@@ -77,7 +92,8 @@ def main(out_path, experiments, workers = 0, local = False):
             run_data = get_run_data(experiment["run_data"])
             validation = sklearn.cross_validation.KFold(len(run_data), 10)
             max_instance_count = numpy.floor(0.9 * len(run_data)) - 10
-            instance_counts = map(int, map(round, numpy.r_[10:max_instance_count:16j]))
+            #instance_counts = map(int, map(round, numpy.r_[10:max_instance_count:16j]))
+            instance_counts = [int(max_instance_count / 2)]
 
             for (train_mask, test_mask) in validation:
                 for instance_count in instance_counts:

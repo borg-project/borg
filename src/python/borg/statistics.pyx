@@ -138,6 +138,9 @@ def floored_log(array, floor = 1e-64):
 def to_log_survival(probabilities, axis):
     """Convert a discrete distribution to log survival-function values."""
 
+    #assert_probabilities(probabilities)
+    assert_weights(probabilities, axis = -1)
+
     return floored_log(1.0 - numpy.cumsum(probabilities, axis = axis))
 
 def indicator(indices, D, dtype = numpy.intc):
@@ -333,6 +336,15 @@ cpdef double unit_uniform_rv():
 
     return u - <numpy.int32_t>u
 
+def categorical_rv(ps):
+    """Generate a categorically-distributed random variate."""
+
+    (D,) = ps.shape
+
+    cdef numpy.ndarray[double, ndim = 1] ps_D = ps
+
+    return categorical_rv_raw(D, &ps_D[0], ps_D.strides[0])
+
 @cython.infer_types(True)
 cdef int categorical_rv_raw(int D, double* ps, int ps_stride):
     """Generate a categorically-distributed random variate."""
@@ -351,18 +363,27 @@ cdef int categorical_rv_raw(int D, double* ps, int ps_stride):
 
     return D - 1
 
+def categorical_rv_log(logps):
+    """Generate a categorically-distributed random variate."""
+
+    (D,) = logps.shape
+
+    cdef numpy.ndarray[double, ndim = 1] logps_D = logps
+
+    return categorical_rv_log_raw(D, &logps_D[0], logps_D.strides[0])
+
 @cython.infer_types(True)
 cdef int categorical_rv_log_raw(int D, double* logps, int logps_stride):
     """Generate a categorically-distributed random variate."""
 
     cdef void* logps_p = logps
 
-    u = unit_uniform_rv()
+    u = libc.math.log(unit_uniform_rv())
 
-    total = 0.0
+    total = -INFINITY
 
     for d in xrange(D - 1):
-        total += libc.math.exp((<double*>(logps_p + d * logps_stride))[0])
+        total = log_plus(total, (<double*>(logps_p + d * logps_stride))[0])
 
         if total > u:
             return d
@@ -575,6 +596,14 @@ cpdef gamma_log_pdf(double x, double shape, double scale):
         - shape * libc.math.log(scale) \
         - x / scale
 
+def dirichlet_pdf(alpha, vector):
+    """Compute the density of a Dirichlet at a vector."""
+
+    product = numpy.prod(vector**(alpha - 1.0))
+    normalizer = numpy.prod(scipy.special.gamma(alpha)) / scipy.special.gamma(numpy.sum(alpha))
+
+    return product / normalizer
+
 def dirichlet_log_pdf(alpha, vectors):
     """Compute the log of the Dirichlet PDF evaluated at multiple vectors."""
 
@@ -623,6 +652,55 @@ cdef double dirichlet_log_pdf_raw(
 
     # ...
     return term_a - term_b + term_c
+
+def dcm_pdf(alpha, vector):
+    """Compute the DCM PDF."""
+
+    sum_alpha = numpy.sum(alpha, axis = -1)
+    sum_vector = numpy.sum(vector, axis = -1)
+
+    term_l = scipy.special.gamma(sum_alpha) / scipy.special.gamma(sum_alpha + sum_vector)
+    term_r = numpy.prod(scipy.special.gamma(vector + alpha) / scipy.special.gamma(alpha), axis = -1)
+
+    return term_l * term_r
+
+@cython.wraparound(False)
+@cython.boundscheck(False)
+cdef double dcm_log_pdf_raw(
+    int D,
+    double* alpha, int alpha_stride,
+    int* counts, int counts_stride,
+    ):
+    """Compute the log of the DCM PDF."""
+
+    #cdef numpy.ndarray[double, ndim = 1] alpha_D = alpha
+    #cdef numpy.ndarray[int, ndim = 1] counts_D = counts
+    cdef void* alpha_p = alpha
+    cdef void* counts_p = counts
+    cdef double total = 0.0
+    cdef int d
+
+    for d in xrange(D):
+        total += (<double*>(alpha_p + alpha_stride * d))[0]
+
+    cdef double log_density = libc.math.lgamma(total)
+
+    for d in xrange(D):
+        total += (<int*>(counts_p + counts_stride * d))[0]
+
+    log_density -= libc.math.lgamma(total)
+
+    cdef double alpha_d
+    cdef int counts_d
+
+    for d in xrange(D):
+        alpha_d = (<double*>(alpha_p + alpha_stride * d))[0]
+        counts_d = (<int*>(counts_p + counts_stride * d))[0]
+
+        log_density += libc.math.lgamma(counts_d + alpha_d)
+        log_density -= libc.math.lgamma(alpha_d)
+
+    return log_density
 
 @cython.infer_types(True)
 @cython.boundscheck(False)
@@ -753,22 +831,10 @@ def dirichlet_estimate_map(vectors, double shape = 1.0, double scale = 1e8):
 
     return alpha_D
 
-def dcm_pdf(vector, alpha):
-    """Compute the DCM PDF."""
-
-    sum_alpha = numpy.sum(alpha, axis = -1)
-    sum_vector = numpy.sum(vector, axis = -1)
-
-    term_l = scipy.special.gamma(sum_alpha) / scipy.special.gamma(sum_alpha + sum_vector)
-    term_r = numpy.prod(scipy.special.gamma(vector + alpha) / scipy.special.gamma(alpha), axis = -1)
-
-    return term_l * term_r
-
-def dcm_log_pdf(vector, alpha):
-    """Compute the log of the DCM PDF."""
-
-    return numpy.log(dcm_pdf(vector, alpha))
-
+@cython.wraparound(False)
+@cython.infer_types(True)
+@cython.boundscheck(False)
+@cython.cdivision(True)
 def dcm_estimate_ml(counts, weights = None):
     """
     Compute the maximum-likelihood DCM distribution.
@@ -799,6 +865,10 @@ def dcm_estimate_ml(counts, weights = None):
     cdef double denominator
     cdef double numerator
     cdef double change
+    cdef double alpha_d
+    cdef double alpha_sum
+
+    # XXX use a digamma approximation?
 
     for i in xrange(1024):
         concentration = 0.0
@@ -810,10 +880,11 @@ def dcm_estimate_ml(counts, weights = None):
 
         for n in xrange(N):
             denominator += weights_N[n] * digamma(sum_counts_N[n] + concentration)
-            
+
         denominator -= total_weight * digamma(concentration)
 
         change = 0.0
+        alpha_sum = 0.0
 
         for d in xrange(D):
             if alpha_D[d] > 0.0:
@@ -821,45 +892,164 @@ def dcm_estimate_ml(counts, weights = None):
 
                 for n in xrange(N):
                     numerator += weights_N[n] * digamma(counts_ND[n, d] + alpha_D[d])
-                    
+
                 numerator -= total_weight * digamma(alpha_D[d])
 
                 alpha_d = alpha_D[d] * numerator / denominator
 
-                change += abs(alpha_D[d] - alpha_d)
+                change += libc.math.fabs(alpha_D[d] - alpha_d)
+                alpha_sum += alpha_d
 
                 alpha_D[d] = alpha_d
+
+        if change < 1e-8 or alpha_sum > 8.0: # XXX
+        #if change < 1e-8:
+            break
+
+    # XXX hackishly avoid slightly-negative parameters
+    assert numpy.all(alpha_D >= -1e8)
+    return numpy.abs(alpha_D)
+    #return alpha_D
+
+@cython.wraparound(False)
+@cython.infer_types(True)
+@cython.boundscheck(False)
+@cython.cdivision(True)
+def dcm_estimate_ml_wallach(counts, weights = None):
+    """
+    Compute the maximum-likelihood DCM distribution.
+
+    Implements Wallach's digamma recurrence-relation modification to Minka's
+    fixed-point iteration.
+    """
+
+    cdef int N = counts.shape[0]
+    cdef int D = counts.shape[1]
+    cdef int M = numpy.max(counts)
+    cdef int L = numpy.max(numpy.sum(counts, axis = -1))
+
+    if weights is None:
+        weights = numpy.ones(N, numpy.double)
+
+    alpha = numpy.sum(counts, axis = 0, dtype = numpy.double)
+    alpha /= numpy.sum(alpha)
+
+    cdef numpy.ndarray[int, ndim = 2] counts_ND = counts
+    cdef numpy.ndarray[double, ndim = 1] alpha_D = alpha
+    cdef numpy.ndarray[double, ndim = 1] weights_N = weights
+    cdef numpy.ndarray[double, ndim = 1] appearances_L = numpy.zeros(L, numpy.double)
+    cdef numpy.ndarray[double, ndim = 2] appearances_MD = numpy.zeros((M, D), numpy.double)
+
+    cdef int n
+    cdef int d
+    cdef int l
+    cdef int m
+    cdef double numerator
+    cdef double denominator
+    cdef double alpha_sum
+    cdef double inner_sum
+    cdef double change
+    cdef double next_alpha_d
+
+    for n in xrange(N):
+        for d in xrange(D):
+            m = counts_ND[n, d]
+
+            if m > 0:
+                appearances_MD[m - 1, d] += weights_N[n]
+
+        l = 0
+
+        for d in xrange(D):
+            l += counts_ND[n, d]
+
+        if l > 0:
+            appearances_L[l - 1] += weights_N[n]
+
+    for i in xrange(1024):
+        alpha_sum = 0.0
+
+        for d in xrange(D):
+            alpha_sum += alpha_D[d]
+
+        denominator = 0.0
+        inner_sum = 0.0
+
+        for l in xrange(L):
+            inner_sum += 1.0 / (l + alpha_sum)
+            denominator += appearances_L[l] * inner_sum
+
+        change = 0.0
+
+        for d in xrange(D):
+            numerator = 0.0
+            inner_sum = 0.0
+
+            for m in xrange(M):
+                inner_sum += 1.0 / (m + alpha_D[d])
+                numerator += appearances_MD[m, d] * inner_sum
+
+            next_alpha_d = alpha_D[d] * numerator / denominator
+            change += libc.math.fabs(alpha_D[d] - next_alpha_d)
+            alpha_D[d] = next_alpha_d
 
         if change < 1e-8:
             break
 
     return alpha_D
 
-def dcm_mixture_estimate_ml(counts, K):
+@cython.wraparound(False)
+@cython.infer_types(True)
+@cython.boundscheck(False)
+@cython.cdivision(True)
+def dcm_mixture_estimate_ml(counts, int K):
     """Fit a DCM mixture using EM."""
 
     # mise en place
-    (N, D) = counts.shape
-
-    counts_ND = counts
+    cdef int N = counts.shape[0]
+    cdef int D = counts.shape[1]
 
     # initialization
     initial_n_K = numpy.random.randint(N, size = K)
 
-    components_KD = counts_ND[initial_n_K]
-    components_KD += 1e-8
-    components_KD /= numpy.sum(components_KD, axis = 1)[:, None]
+    uniques = sorted(set(map(tuple, counts)), key = lambda _: numpy.random.rand())
+    components = numpy.empty((K, D))
 
-    log_densities_KN = numpy.empty((K, N), numpy.double)
+    for k_ in xrange(K):
+        components[k_] = uniques[k_ % len(uniques)]
+
+    #components = counts[initial_n_K].astype(numpy.double)
+    components /= numpy.sum(components, axis = -1)[..., None]
+    components += 1e-1
+
+    cdef numpy.ndarray[int, ndim = 2] counts_ND = counts
+    cdef numpy.ndarray[double, ndim = 2] components_KD = components
+    cdef numpy.ndarray[double, ndim = 2] log_densities_KN = numpy.empty((K, N), numpy.double)
 
     # expectation maximization
-    previous_ll = -numpy.inf
+    cdef unsigned int components_KD_stride1 = components_KD.strides[1]
+    cdef unsigned int counts_ND_stride1 = counts_ND.strides[1]
 
-    for i in xrange(512):
+    cdef double previous_ll = -INFINITY
+
+    cdef int i
+    cdef int k
+    cdef int n
+
+    # XXX ll does not always improve...
+    for i in xrange(16):
         # compute new responsibilities
         for k in xrange(K):
             for n in xrange(N):
-                log_densities_KN[k, n] = dcm_log_pdf(components_KD[k], counts_ND[n])
+                log_densities_KN[k, n] = \
+                    dcm_log_pdf_raw(
+                        D,
+                        &components_KD[k, 0], components_KD_stride1,
+                        &counts_ND[n, 0], counts_ND_stride1,
+                        )
+
+        #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 240, threshold = 1000000):
+            #print log_densities_KN.T
 
         log_responsibilities_KN = numpy.copy(log_densities_KN)
         log_responsibilities_KN -= numpy.logaddexp.reduce(log_responsibilities_KN, axis = 0)
@@ -867,26 +1057,58 @@ def dcm_mixture_estimate_ml(counts, K):
         log_weights_K = numpy.logaddexp.reduce(log_responsibilities_KN, axis = 1)
         log_weights_K -= numpy.log(N)
 
-        # compute ll and check for convergence
-        ll = numpy.logaddexp.reduce(log_weights_K[:, None] + log_densities_KN, axis = 0)
-        ll = numpy.sum(ll)
+        #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 240, threshold = 1000000):
+            #print log_responsibilities_KN.T
+            #print log_weights_K
 
+        # compute ll
+        ll_each = numpy.logaddexp.reduce(log_weights_K[:, None] + log_densities_KN, axis = 0)
+        ll = numpy.sum(ll_each)
+
+        # check for convergence
         delta_ll = ll - previous_ll
         previous_ll = ll
 
         if delta_ll >= 0.0:
-            logger.debug("ll change at EM iteration %i is %f", i, ll)
+            logger.debug("ll at EM iteration %i is %f", i, ll)
 
             if delta_ll <= 1e-8:
                 break
         else:
-            logger.warning("ll change at EM iteration %i is %f <-- DECLINE", i, ll)
+            logger.warning("ll at EM iteration %i is %f <-- DECLINE", i, ll)
 
         # compute new components
         responsibilities_KN = numpy.exp(log_responsibilities_KN)
 
         for k in xrange(K):
-            components_KD[k] = dcm_estimate_ml(counts_ND, responsibilities_KN[k])
+            components_KD[k] = dcm_estimate_ml_wallach(counts_ND, responsibilities_KN[k])
 
-    return components_KD
+            components_KD[k] += 1e-16 # XXX
+            #components_KD[k] += numpy.random.rand(D) * 1e-8 # XXX
+
+        ## reassign duplicate components
+        #least_fitted = numpy.argsort(ll_each)
+        #m = 0
+
+        #for k in xrange(K):
+            #for j in xrange(k + 1, K):
+                #if numpy.all(numpy.abs(components_KD[k, :] - components_KD[j, :]) < 1e-8):
+                    #n = least_fitted[m]
+
+                    #print "splitting components {0} and {1} (using instance {2})".format(k, j, n)
+
+                    ##n = numpy.random.randint(N)
+                    ##n = categorical_rv(1.0 - numpy.exp(ll_each))
+
+                    #components_KD[j, :] = counts_ND[n, :] / numpy.sum(counts_ND[n, :]) + 1e-8
+                    #components_KD[j, :] /= numpy.sum(counts_ND[n, :])
+
+                    #m += 1
+
+        #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 240, threshold = 1000000):
+            #print components_KD
+
+    assert_log_weights(log_weights_K)
+
+    return (components_KD, log_responsibilities_KN, log_weights_K)
 

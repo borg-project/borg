@@ -81,6 +81,61 @@ class KnapsackPlanner(Planner):
     def __init__(self):
         Planner.__init__(self, knapsack_plan)
 
+def max_length_knapsack_plan(max_length, log_survival_WSB, log_weights_W):
+    """Compute a plan subject to a maximum-length constraint."""
+
+    # XXX
+    log_survival_SB = numpy.logaddexp.reduce(log_survival_WSB + log_weights_W[:, None, None], axis = 0)
+
+    with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 240, threshold = 1000000):
+        print 1.0 - numpy.exp(log_survival_SB)
+
+    # prepare
+    (W, S, B) = log_survival_WSB.shape
+    C = B + 1
+    L = max_length
+
+    # generate the value table and associated policy
+    values_WCL = numpy.zeros((W, C, L))
+    policy = {}
+
+    for b in xrange(1, B + 1):
+        for l in xrange(L):
+            if l == 0:
+                region_WSb = log_survival_WSB[..., :b]
+            else:
+                region_WSb = log_survival_WSB[..., :b] + values_WCL[:, None, b - 1::-1, l - 1]
+
+            weighted_Sb = numpy.logaddexp.reduce(region_WSb + log_weights_W[:, None, None], axis = 0)
+            i = numpy.argmin(weighted_Sb)
+            (s, c_) = numpy.unravel_index(i, weighted_Sb.shape)
+
+            values_WCL[:, b, l] = region_WSb[:, s, c_]
+            policy[(b, l)] = (s, c_)
+
+    # build a plan from the policy
+    plan = []
+    b = B
+    l = L - 1
+
+    while b > 0 and l >= 0:
+        (s, c) = policy[(b, l)]
+        b -= c + 1
+        l -= 1
+
+        plan.append((s, c))
+
+    return plan
+
+class MaxLengthKnapsackPlanner(Planner):
+    """Discretizing dynamic-programming planner."""
+
+    def __init__(self, max_length):
+        def plan(log_survival, log_weights):
+            return max_length_knapsack_plan(max_length, log_survival, log_weights)
+
+        Planner.__init__(self, plan)
+
 def streeter_plan(log_survival_WSB, log_weights_W):
     """Compute plan using Streeter's algorithm."""
 
@@ -301,6 +356,25 @@ class BellmanPlanner(object):
         #return sorted(plan, key = heuristic)
 
         return plan
+
+class ReorderingPlanner(Planner):
+    """Plan, then heuristically reorder."""
+
+    def __init__(self, inner_planner):
+        """Initialize."""
+
+        def compute_plan(log_survival_WSB, log_weights_W):
+            plan = inner_planner.plan(log_survival_WSB, log_weights_W)
+            log_mean_fail_cmf_SB = numpy.logaddexp.reduce(log_survival_WSB + log_weights_W[:, None, None], axis = 0)
+
+            def efficiency(pair):
+                (s, c) = pair
+
+                return log_mean_fail_cmf_SB[s, c] / (c + 1)
+
+            return sorted(plan, key = efficiency)
+
+        Planner.__init__(self, compute_plan)
 
 class ReplanningPlanner(object):
     """Repeatedly replan."""

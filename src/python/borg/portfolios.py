@@ -104,17 +104,16 @@ class OraclePortfolio(object):
 class PreplanningPortfolio(object):
     """Preplanning discrete-budget portfolio."""
 
-    def __init__(self, suite, training, B = 60, planner = borg.planners.KnapsackPlanner()):
+    def __init__(self, suite, model, planner = None):
         """Initialize."""
 
+        if planner is None:
+            planner = borg.planners.KnapsackPlanner()
+            #planner = borg.planners.ReorderingPlanner(borg.planners.MaxLengthKnapsackPlanner(12))
+
         self._solver_names = sorted(suite.solvers)
-
-        bins = training.to_bins_array(self._solver_names, B).astype(numpy.double) + 1e-8 / B
-        rates = bins / numpy.sum(bins, axis = -1)[..., None]
-        survival = 1.0 - numpy.cumsum(rates, axis = -1)
-
-        self._interval = training.get_common_budget() / B
-        self._plan = planner.plan(numpy.log(survival[..., :-1]))
+        self._model = model
+        self._plan = planner.plan(self._model.log_survival[..., :-1])
 
         logger.info("preplanned plan: %s", self._plan)
 
@@ -124,7 +123,7 @@ class PreplanningPortfolio(object):
         remaining = budget.cpu_seconds
 
         for (s, b) in self._plan:
-            this_budget = (b + 1) * self._interval
+            this_budget = (b + 1) * self._model.interval
 
             assert remaining - this_budget > -1e-1
 
@@ -150,6 +149,7 @@ class PureModelPortfolio(object):
         self._solver_name_index = dict(map(reversed, enumerate(self._solver_names)))
 
         self._model = model
+        #self._planner = borg.planners.ReorderingPlanner(borg.planners.MaxLengthKnapsackPlanner(6))
         self._planner = borg.planners.KnapsackPlanner()
         self._regress = regress
         self._runs_limit = 256
@@ -165,12 +165,10 @@ class PureModelPortfolio(object):
         (feature_names, feature_values) = suite.domain.compute_features(task)
         feature_dict = dict(zip(feature_names, feature_values))
         feature_values_sorted = [feature_dict[f] for f in sorted(feature_names)]
+
         (predicted_weights,) = numpy.log(self._regress.predict([feature_values_sorted]))
 
-        #if self._plan is None:
         plan = self._planner.plan(self._model.log_survival[..., :-1], predicted_weights)
-
-        #plan = self._plan
 
         for (s, b) in plan:
             this_budget = (b + 1) * self._model.interval
@@ -183,50 +181,6 @@ class PureModelPortfolio(object):
 
             if suite.domain.is_final(task, answer):
                 return answer
-
-        return None
-
-    #def __call__(self, task, suite, budget):
-        #"""Run the portfolio."""
-
-        #with borg.accounting():
-            #return self._solve(task, suite, budget)
-
-    def _solve(self, task, suite, budget):
-        """Run the portfolio."""
-
-        # select a solver
-        failures = []
-        answer = None
-
-        for i in xrange(self._runs_limit):
-            # make a plan
-            posterior = self._model.condition(failures)
-            position = sum(c + 1 for (_, c) in failures)
-            plan_key = (position, tuple(sorted(failures)))
-            plan = self._plan_cache.get(plan_key)
-
-            if plan is None:
-                plan = self._planner.plan(posterior.log_survival[..., :-position - 1], posterior.log_weights)
-
-                self._plan_cache[plan_key] = plan
-
-            if len(plan) == 0:
-                break
-
-            #print "plan", plan
-
-            # and follow through
-            (plan0_s, plan0_c) = plan[0]
-            plan0_budget = self._model.interval * (plan0_c + 1)
-
-            process = suite.solvers[self._solver_names[plan0_s]].start(task)
-            answer = process.run_then_stop(plan0_budget)
-
-            if suite.domain.is_final(task, answer):
-                return answer
-
-            failures.append((plan0_s, plan0_c))
 
         return None
 
