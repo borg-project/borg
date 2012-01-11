@@ -543,42 +543,64 @@ def mul_dir_mix_fit(counts):
     counts_NSD = counts
     (N, S, D) = counts_NSD.shape
     K = 64
-    T = N * 4
+    T = N
 
     samples_TSD = numpy.empty((T, S, D), numpy.double)
     alphas_KSD = numpy.empty((K, S, D), numpy.double)
     log_weights_SK = numpy.empty((S, K), numpy.double)
-    log_responsibilities_KSN = numpy.empty((K, S, N), numpy.double)
-    log_post_weights_KSN = numpy.empty((K, S, N), numpy.double)
+    log_densities_KSN = numpy.empty((K, S, N), numpy.double)
 
     for s in xrange(S):
         print ">>>> ESTIMATING RTDS FOR SOLVER", s
 
         (
             alphas_KSD[:, s, :],
-            log_responsibilities_KSN[:, s, :],
+            log_densities_KSN[:, s, :],
             log_weights_SK[s, :],
             ) = \
             borg.statistics.dcm_mixture_estimate_ml(counts_NSD[:, s, :], K)
 
-        log_post_weights_KSN[:, s, :] = log_responsibilities_KSN[:, s, :]
-        log_post_weights_KSN[:, s, :] += log_weights_SK[s, :, None]
-        log_post_weights_KSN[:, s, :] -= numpy.logaddexp.reduce(log_post_weights_KSN[:, s, :], axis = 0)
+        #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 200, threshold = 1000000):
+            #print alphas_KSD[:, s, :]
 
-    borg.statistics.assert_log_weights(log_post_weights_KSN, axis = -1)
+    log_post_weights_KSN = log_densities_KSN.copy()
+    log_post_weights_KSN += log_weights_SK.T[..., None]
+    log_post_weights_KSN -= numpy.logaddexp.reduce(log_post_weights_KSN, axis = 0)
+
+    borg.statistics.assert_log_weights(log_post_weights_KSN, axis = 0)
 
     for t in xrange(T):
         n = t % N
 
+        #print "++++", n
+
         for s in xrange(S):
-            k = borg.statistics.categorical_rv_log(log_post_weights_KSN[:, s, n])
+            #k = borg.statistics.categorical_rv_log(log_post_weights_KSN[:, s, n])
+            #k = numpy.argmax(log_post_weights_KSN[:, s, n])
 
-            samples_TSD[t, s, :] = alphas_KSD[k, s, :]
+            #samples_TSD[t, s, :] = alphas_KSD[k, s, :]
 
-        samples_TSD[t, ...] += counts_NSD[n, ...]
-        samples_TSD[t, ...] /= numpy.sum(samples_TSD[t, ...], axis = -1)[..., None]
+            thetas = alphas_KSD[:, s, :] + counts_NSD[n, s, :]
+            thetas /= numpy.sum(thetas, axis = -1)[..., None]
+            thetas *= numpy.exp(log_post_weights_KSN[:, s, n])[..., None]
+
+            samples_TSD[t, s, :] = numpy.sum(thetas, axis = 0)
+
+            #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 200, threshold = 1000000):
+                #print numpy.exp(log_post_weights_KSN[:, s, n])
+
+            # squash distribution
+
+        #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 200, threshold = 1000000):
+            #print counts_NSD[n]
+            #print samples_TSD[t]
+
+        #samples_TSD[t, ...] += counts_NSD[n, ...]
+        #samples_TSD[t, ...] /= numpy.sum(samples_TSD[t, ...], axis = -1)[..., None]
 
     assert numpy.all(samples_TSD >= 0.0)
+
+    #raise SystemExit()
 
     return [samples_TSD]
 

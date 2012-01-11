@@ -523,7 +523,7 @@ cdef int post_dirichlet_rv(
 cdef double standard_normal_log_pdf(double x):
     """Compute the log of the standard normal PDF."""
 
-    return -(x * x) / 2.0 - libc.math.log(libc.math.M_2_PI) / 2.0
+    return -(x * x) / 2.0 - libc.math.log(2.0 * libc.math.M_PI) / 2.0
 
 cdef double standard_normal_log_cdf(double x):
     """Compute the log of the standard normal CDF."""
@@ -533,8 +533,8 @@ cdef double standard_normal_log_cdf(double x):
 cdef double normal_log_pdf(double mu, double sigma, double x):
     """Compute the log of the normal PDF."""
 
-    cdef double lhs = ((x - mu) * (x - mu)) / (2.0 * sigma * sigma)
-    cdef double rhs = libc.math.log(libc.math.M_2_PI * sigma * sigma) / 2.0
+    cdef double lhs = -(x - mu) * (x - mu) / (2.0 * sigma * sigma)
+    cdef double rhs = libc.math.log(libc.math.sqrt(2.0 * libc.math.M_PI * sigma * sigma))
 
     return lhs - rhs
 
@@ -902,7 +902,7 @@ def dcm_estimate_ml(counts, weights = None):
 
                 alpha_D[d] = alpha_d
 
-        if change < 1e-8 or alpha_sum > 8.0: # XXX
+        if change < 1e-8 or alpha_sum > 2.0: # XXX
         #if change < 1e-8:
             break
 
@@ -911,11 +911,7 @@ def dcm_estimate_ml(counts, weights = None):
     return numpy.abs(alpha_D)
     #return alpha_D
 
-@cython.wraparound(False)
-@cython.infer_types(True)
-@cython.boundscheck(False)
-@cython.cdivision(True)
-def dcm_estimate_ml_wallach(counts, weights = None):
+def dcm_estimate_ml_wallach_raw(alpha, counts, weights):
     """
     Compute the maximum-likelihood DCM distribution.
 
@@ -928,28 +924,17 @@ def dcm_estimate_ml_wallach(counts, weights = None):
     cdef int M = numpy.max(counts)
     cdef int L = numpy.max(numpy.sum(counts, axis = -1))
 
-    if weights is None:
-        weights = numpy.ones(N, numpy.double)
-
-    alpha = numpy.sum(counts, axis = 0, dtype = numpy.double)
-    alpha /= numpy.sum(alpha)
-
     cdef numpy.ndarray[int, ndim = 2] counts_ND = counts
     cdef numpy.ndarray[double, ndim = 1] alpha_D = alpha
     cdef numpy.ndarray[double, ndim = 1] weights_N = weights
     cdef numpy.ndarray[double, ndim = 1] appearances_L = numpy.zeros(L, numpy.double)
     cdef numpy.ndarray[double, ndim = 2] appearances_MD = numpy.zeros((M, D), numpy.double)
 
+    # compute appearance histograms
     cdef int n
     cdef int d
     cdef int l
     cdef int m
-    cdef double numerator
-    cdef double denominator
-    cdef double alpha_sum
-    cdef double inner_sum
-    cdef double change
-    cdef double next_alpha_d
 
     for n in xrange(N):
         for d in xrange(D):
@@ -966,12 +951,22 @@ def dcm_estimate_ml_wallach(counts, weights = None):
         if l > 0:
             appearances_L[l - 1] += weights_N[n]
 
+    # run through the fixed-point iteration
+    cdef double numerator
+    cdef double denominator
+    cdef double alpha_sum
+    cdef double inner_sum
+    cdef double change
+    cdef double next_alpha_d
+
     for i in xrange(1024):
+        # compute the magnitude of alpha
         alpha_sum = 0.0
 
         for d in xrange(D):
             alpha_sum += alpha_D[d]
 
+        # compute the update-ratio denominator
         denominator = 0.0
         inner_sum = 0.0
 
@@ -979,6 +974,7 @@ def dcm_estimate_ml_wallach(counts, weights = None):
             inner_sum += 1.0 / (l + alpha_sum)
             denominator += appearances_L[l] * inner_sum
 
+        # compute the per-dimensional numerators
         change = 0.0
 
         for d in xrange(D):
@@ -990,13 +986,33 @@ def dcm_estimate_ml_wallach(counts, weights = None):
                 numerator += appearances_MD[m, d] * inner_sum
 
             next_alpha_d = alpha_D[d] * numerator / denominator
+
+            if next_alpha_d < 1e-16:
+                next_alpha_d = 1e-16
+
             change += libc.math.fabs(alpha_D[d] - next_alpha_d)
             alpha_D[d] = next_alpha_d
 
-        if change < 1e-8:
+        #if change < 1e-8 or alpha_sum > 16.0:
+        if change < 1e-10:
             break
 
-    return alpha_D
+    # XXX
+    #if numpy.sum(alpha) > 128.0:
+        #alpha *= 128.0 / numpy.sum(alpha)
+
+def dcm_estimate_ml_wallach(counts, weights = None):
+    """Compute the maximum-likelihood DCM distribution."""
+
+    if weights is None:
+        weights = numpy.ones(counts.shape[0], numpy.double)
+
+    alpha = numpy.sum(counts, axis = 0, dtype = numpy.double)
+    alpha /= numpy.sum(alpha)
+
+    dcm_estimate_ml_wallach_raw(alpha, counts, weights)
+
+    return alpha
 
 @cython.wraparound(False)
 @cython.infer_types(True)
@@ -1018,8 +1034,8 @@ def dcm_mixture_estimate_ml(counts, int K):
     for k_ in xrange(K):
         components[k_] = uniques[k_ % len(uniques)]
 
-    #components = counts[initial_n_K].astype(numpy.double)
     components /= numpy.sum(components, axis = -1)[..., None]
+    #components += 1.0
     components += 1e-1
 
     cdef numpy.ndarray[int, ndim = 2] counts_ND = counts
@@ -1036,8 +1052,7 @@ def dcm_mixture_estimate_ml(counts, int K):
     cdef int k
     cdef int n
 
-    # XXX ll does not always improve...
-    for i in xrange(16):
+    for i in xrange(64):
         # compute new responsibilities
         for k in xrange(K):
             for n in xrange(N):
@@ -1048,18 +1063,11 @@ def dcm_mixture_estimate_ml(counts, int K):
                         &counts_ND[n, 0], counts_ND_stride1,
                         )
 
-        #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 240, threshold = 1000000):
-            #print log_densities_KN.T
-
         log_responsibilities_KN = numpy.copy(log_densities_KN)
         log_responsibilities_KN -= numpy.logaddexp.reduce(log_responsibilities_KN, axis = 0)
 
         log_weights_K = numpy.logaddexp.reduce(log_responsibilities_KN, axis = 1)
         log_weights_K -= numpy.log(N)
-
-        #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 240, threshold = 1000000):
-            #print log_responsibilities_KN.T
-            #print log_weights_K
 
         # compute ll
         ll_each = numpy.logaddexp.reduce(log_weights_K[:, None] + log_densities_KN, axis = 0)
@@ -1081,10 +1089,9 @@ def dcm_mixture_estimate_ml(counts, int K):
         responsibilities_KN = numpy.exp(log_responsibilities_KN)
 
         for k in xrange(K):
-            components_KD[k] = dcm_estimate_ml_wallach(counts_ND, responsibilities_KN[k])
+            dcm_estimate_ml_wallach_raw(components_KD[k], counts_ND, responsibilities_KN[k])
 
-            components_KD[k] += 1e-16 # XXX
-            #components_KD[k] += numpy.random.rand(D) * 1e-8 # XXX
+            components_KD[k] += 1e-16
 
         ## reassign duplicate components
         #least_fitted = numpy.argsort(ll_each)
@@ -1095,7 +1102,7 @@ def dcm_mixture_estimate_ml(counts, int K):
                 #if numpy.all(numpy.abs(components_KD[k, :] - components_KD[j, :]) < 1e-8):
                     #n = least_fitted[m]
 
-                    #print "splitting components {0} and {1} (using instance {2})".format(k, j, n)
+                    ##print "splitting components {0} and {1} (using instance {2})".format(k, j, n)
 
                     ##n = numpy.random.randint(N)
                     ##n = categorical_rv(1.0 - numpy.exp(ll_each))
@@ -1105,10 +1112,178 @@ def dcm_mixture_estimate_ml(counts, int K):
 
                     #m += 1
 
-        #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 240, threshold = 1000000):
-            #print components_KD
+    assert_log_weights(log_weights_K)
+
+    #return (components_KD, log_responsibilities_KN, log_weights_K)
+    return (components_KD, log_densities_KN, log_weights_K)
+
+def log_normal_estimate_ml(samples, ns, weights):
+    """
+    Estimate a three-parameter log-normal distribution.
+
+    The location parameter is assumed to be zero.
+    """
+
+    R = samples.shape[0]
+
+    # establish our range
+    min_sample = None
+    weights_sum = 0.0
+
+    for r in xrange(1, R):
+        n = ns[r]
+
+        if weights[n] > 1e-6:
+            if min_sample is None or min_sample > samples[r]:
+                min_sample = samples[r]
+
+            weights_sum += weights[n]
+
+    if min_sample is None:
+        min_sample = 0.0
+
+    # search over thetas
+    best_mu = 0.0
+    best_sigma = 0.0
+    best_theta = 0.0
+    best_density = None
+
+    print "----"
+
+    for theta in numpy.r_[0.0:min_sample:10j]:
+        # compute the max-likelihood mu
+        mu = 0.0
+
+        for r in xrange(R):
+            n = ns[r]
+
+            if weights[n] > 1e-6:
+                mu += weights[n] * libc.math.log(samples[r] - theta + 1e-16)
+
+        mu /= weights_sum
+
+        # compute the max-likelihood sigma
+        sigma = 0.0
+
+        for r in xrange(R):
+            n = ns[r]
+
+            if weights[n] > 1e-6:
+                sigma += weights[n] * (libc.math.log(samples[r] - theta + 1e-16) - mu)**2.0
+
+        sigma /= weights_sum
+        sigma = libc.math.sqrt(sigma)
+
+        # compute the density
+        density = 0.0
+
+        for r in xrange(R):
+            n = ns[r]
+
+            if weights[n] > 1e-6:
+                density += weights[n] * normal_log_pdf(mu, sigma, libc.math.log(samples[r] - theta))
+
+        print "$$$$ {0} : {1} (mu = {2}; sigma = {3})".format(theta, density, mu, sigma)
+
+        if best_density is None or best_density < density:
+            best_mu = mu
+            best_sigma = sigma
+            best_theta = theta
+            best_density = density
+
+    return (best_mu, best_sigma, best_theta)
+
+#@cython.wraparound(False)
+#@cython.infer_types(True)
+#@cython.boundscheck(False)
+#@cython.cdivision(True)
+def log_normal_mixture_estimate_ml(times, ns, failures, double bound, int K):
+    """Fit a right-censored log-normal mixture using EM."""
+
+    # mise en place
+    cdef int R = times.shape[0]
+    cdef int N = failures.shape[0]
+
+    # initialization
+    log_bound = libc.math.log(bound)
+
+    cdef numpy.ndarray[double, ndim = 1] mus_K = numpy.r_[0.0:log_bound - log_bound / K:K * 1j]
+    cdef numpy.ndarray[double, ndim = 1] sigmas_K = numpy.random.rand(K) * 10.0
+    cdef numpy.ndarray[double, ndim = 1] thetas_K = numpy.zeros(K)
+    cdef numpy.ndarray[double, ndim = 2] log_densities_KN = numpy.empty((K, N), numpy.double)
+
+    times_R = times
+    ns_R = ns
+    failures_N = failures
+
+    # expectation maximization
+    cdef int i
+    cdef int k
+    cdef int n
+    cdef double previous_ll = -INFINITY
+
+    for i in xrange(8):
+        print ">>>>", i
+
+        # compute new responsibilities
+        log_densities_KN[:] = 0.0
+
+        for k in xrange(K):
+            print "@", k, "(mu = {0}; sigma = {1}; theta = {2})".format(mus_K[k], sigmas_K[k], thetas_K[k])
+            skip_N = [False] * N
+
+            for r in xrange(R):
+                n = ns_R[r]
+                time = times_R[r]
+
+                if skip_N[n]:
+                    pass
+                elif time > thetas_K[k]:
+                    density = normal_log_pdf(mus_K[k], sigmas_K[k], libc.math.log(time - thetas_K[k]))
+                    #print n, "::", time, ":", density
+                    log_densities_KN[k, n] += density
+                else:
+                    #print n, "::", time, ": NA"
+                    log_densities_KN[k, n] = -1e6
+                    skip_N[n] = True
+
+        log_responsibilities_KN = numpy.copy(log_densities_KN)
+        log_responsibilities_KN -= numpy.logaddexp.reduce(log_responsibilities_KN, axis = 0)
+
+        log_weights_K = numpy.logaddexp.reduce(log_responsibilities_KN, axis = 1)
+        log_weights_K -= numpy.log(N)
+
+        # compute ll
+        ll_each = numpy.logaddexp.reduce(log_weights_K[:, None] + log_densities_KN, axis = 0)
+        ll = numpy.sum(ll_each)
+
+        with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 200, threshold = 1000000):
+            #print mus_K
+            #print sigmas_K
+            #print thetas_K
+            print numpy.exp(log_weights_K)
+            #print log_responsibilities_KN
+
+        # check for convergence
+        delta_ll = ll - previous_ll
+        previous_ll = ll
+
+        if delta_ll >= 0.0:
+            logger.debug("ll at EM iteration %i is %f", i, ll)
+
+            if delta_ll <= 1e-8:
+                break
+        else:
+            logger.warning("ll at EM iteration %i is %f <-- DECLINE", i, ll)
+
+        # compute new components
+        responsibilities_KN = numpy.exp(log_responsibilities_KN)
+
+        for k in xrange(K):
+            (mus_K[k], sigmas_K[k], thetas_K[k]) = \
+                log_normal_estimate_ml(times_R, ns_R, responsibilities_KN[k, :])
 
     assert_log_weights(log_weights_K)
 
-    return (components_KD, log_responsibilities_KN, log_weights_K)
+    return (mus_K, sigmas_K, thetas_K)
 

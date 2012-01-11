@@ -29,7 +29,7 @@ class PortfolioMaker(object):
                     sampler,
                     train_data.solver_names,
                     train_data,
-                    bins = 30,
+                    bins = 60,
                     chains = 1,
                     samples_per_chain = 1,
                     )
@@ -131,6 +131,8 @@ def main(out_path, runs, repeats = 4, workers = 0, local = False):
 
         for (_, rows) in condor.do(yield_jobs(), workers, local):
             writer.writerows(rows)
+
+            out_file.flush()
 
 if __name__ == "__main__":
     borg.script(main)

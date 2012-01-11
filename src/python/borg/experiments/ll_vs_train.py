@@ -118,6 +118,8 @@ def main(out_path, experiments, workers = 0, local = False):
         for (_, row) in condor.do(yield_jobs(), workers, local):
             writer.writerow(row)
 
+            out_file.flush()
+
 if __name__ == "__main__":
     borg.script(main)
 

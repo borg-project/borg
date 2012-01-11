@@ -2,6 +2,7 @@
 
 import nose
 import numpy
+import scipy.stats
 import borg
 
 cimport numpy
@@ -28,6 +29,20 @@ class TestCases(object):
             assert_routine_ok(
                 numpy.random.rand(16),
                 numpy.random.dirichlet(numpy.ones(16)),
+                )
+
+    def test_normal_log_pdf(self):
+        def assert_routine_ok(x, mu, sigma):
+            v_ours = borg.statistics.normal_log_pdf(mu, sigma, x)
+            v_true = scipy.stats.norm.logpdf(x, loc = mu, scale = sigma)
+
+            nose.tools.assert_almost_equal(v_ours, v_true)
+
+        for i in xrange(8):
+            assert_routine_ok(
+                numpy.random.normal() * 10,
+                numpy.random.normal() * 10,
+                numpy.random.rand() * 10,
                 )
 
     def test_categorical_rv_raw(self):

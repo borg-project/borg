@@ -250,3 +250,30 @@ def test_dcm_estimate_ml_wallach_random():
 
             yield (assert_ok, alpha.tolist())
 
+def test_log_normal_mixture_estimate_ml():
+    def assert_ok(mus, sigmas, thetas):
+        instances_per_component = 4
+        samples_per_instance = 4
+        times = []
+        ns = []
+        n = 0
+
+        for (mu, sigma, theta) in zip(mus, sigmas, thetas):
+            for _ in xrange(instances_per_component):
+                ns += [n] * samples_per_instance
+                times += list(numpy.exp(numpy.random.normal(mu, sigma, samples_per_instance)) + theta)
+                n += 1
+
+        borg.statistics.log_normal_mixture_estimate_ml(
+            numpy.array(times),
+            numpy.array(ns),
+            numpy.zeros(instances_per_component * len(mus)),
+            numpy.max(times) * 2.0,
+            len(thetas),
+            )
+
+        # XXX actually assert something
+
+    with borg.util.numpy_errors(all = "raise"):
+        yield (assert_ok, [0.0, 10.0], [1.0, 5.0], [10.0, 0.0])
+
