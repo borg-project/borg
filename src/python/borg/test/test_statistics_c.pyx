@@ -45,6 +45,21 @@ class TestCases(object):
                 numpy.random.rand() * 10,
                 )
 
+    def test_log_normal_log_pdf(self):
+        def assert_routine_ok(x, mu, sigma, theta):
+            v_ours = borg.statistics.log_normal_log_pdf(mu, sigma, theta, x)
+            v_true = scipy.stats.lognorm.logpdf(x, sigma, loc = theta, scale = numpy.exp(mu))
+
+            nose.tools.assert_almost_equal(v_ours, v_true)
+
+        for i in xrange(8):
+            mu = numpy.random.rand() * 10
+            sigma = numpy.random.rand() * 10 + 1e-2
+            theta = numpy.random.rand() * 10
+            x = scipy.stats.lognorm.rvs(sigma, loc = theta, scale = numpy.exp(mu))
+
+            assert_routine_ok(x, mu, sigma, theta)
+
     def test_categorical_rv_raw(self):
         def assert_routine_ok(ps):
             S = 65535

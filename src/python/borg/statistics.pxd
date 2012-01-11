@@ -35,6 +35,8 @@ cdef double normal_log_cdf(double mu, double sigma, double x)
 cdef double truncated_normal_log_pdf(double a, double b, double mu, double sigma, double x)
 cdef double truncated_normal_log_cdf(double a, double b, double mu, double sigma, double x)
 
+cdef double log_normal_log_pdf(double mu, double sigma, double theta, double x)
+
 cdef double dirichlet_log_pdf_raw(
     int D,
     double* alpha, int alpha_stride,

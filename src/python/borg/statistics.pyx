@@ -564,6 +564,14 @@ cdef double truncated_normal_log_cdf(double a, double b, double mu, double sigma
 
     return log_minus(upper_lhs, upper_rhs) - log_minus(lower_lhs, lower_rhs)
 
+cdef double log_normal_log_pdf(double mu, double sigma, double theta, double x):
+    """Compute the log of the (three-parameter) log-normal PDF."""
+
+    cdef double lhs = -(libc.math.log(x - theta) - mu)**2.0 / (2.0 * sigma * sigma)
+    cdef double rhs = libc.math.log((x - theta) * sigma * libc.math.sqrt(2.0 * libc.math.M_PI))
+
+    return lhs - rhs
+
 cpdef double multinomial_log_pdf(numpy.ndarray theta, numpy.ndarray counts):
     """Compute the log of the multinomial PDF."""
 
@@ -1130,7 +1138,7 @@ def log_normal_estimate_ml(samples, ns, weights):
     min_sample = None
     weights_sum = 0.0
 
-    for r in xrange(1, R):
+    for r in xrange(R):
         n = ns[r]
 
         if weights[n] > 1e-6:
@@ -1141,6 +1149,7 @@ def log_normal_estimate_ml(samples, ns, weights):
 
     if min_sample is None:
         min_sample = 0.0
+        weights_sum = numpy.sum(weights[ns])
 
     # search over thetas
     best_mu = 0.0
@@ -1150,7 +1159,7 @@ def log_normal_estimate_ml(samples, ns, weights):
 
     print "----"
 
-    for theta in numpy.r_[0.0:min_sample:10j]:
+    for theta in numpy.r_[0.0:min_sample - min_sample / 64.0:64j]:
         # compute the max-likelihood mu
         mu = 0.0
 
@@ -1158,7 +1167,7 @@ def log_normal_estimate_ml(samples, ns, weights):
             n = ns[r]
 
             if weights[n] > 1e-6:
-                mu += weights[n] * libc.math.log(samples[r] - theta + 1e-16)
+                mu += weights[n] * libc.math.log(samples[r] - theta)
 
         mu /= weights_sum
 
@@ -1169,7 +1178,7 @@ def log_normal_estimate_ml(samples, ns, weights):
             n = ns[r]
 
             if weights[n] > 1e-6:
-                sigma += weights[n] * (libc.math.log(samples[r] - theta + 1e-16) - mu)**2.0
+                sigma += weights[n] * (libc.math.log(samples[r] - theta) - mu)**2.0
 
         sigma /= weights_sum
         sigma = libc.math.sqrt(sigma)
@@ -1181,7 +1190,7 @@ def log_normal_estimate_ml(samples, ns, weights):
             n = ns[r]
 
             if weights[n] > 1e-6:
-                density += weights[n] * normal_log_pdf(mu, sigma, libc.math.log(samples[r] - theta))
+                density += weights[n] * log_normal_log_pdf(mu, sigma, theta, samples[r])
 
         print "$$$$ {0} : {1} (mu = {2}; sigma = {3})".format(theta, density, mu, sigma)
 
@@ -1199,6 +1208,8 @@ def log_normal_estimate_ml(samples, ns, weights):
 #@cython.cdivision(True)
 def log_normal_mixture_estimate_ml(times, ns, failures, double bound, int K):
     """Fit a right-censored log-normal mixture using EM."""
+
+    print repr(times)
 
     # mise en place
     cdef int R = times.shape[0]
@@ -1222,7 +1233,7 @@ def log_normal_mixture_estimate_ml(times, ns, failures, double bound, int K):
     cdef int n
     cdef double previous_ll = -INFINITY
 
-    for i in xrange(8):
+    for i in xrange(64):
         print ">>>>", i
 
         # compute new responsibilities
@@ -1239,7 +1250,7 @@ def log_normal_mixture_estimate_ml(times, ns, failures, double bound, int K):
                 if skip_N[n]:
                     pass
                 elif time > thetas_K[k]:
-                    density = normal_log_pdf(mus_K[k], sigmas_K[k], libc.math.log(time - thetas_K[k]))
+                    density = log_normal_log_pdf(mus_K[k], sigmas_K[k], thetas_K[k], time)
                     #print n, "::", time, ":", density
                     log_densities_KN[k, n] += density
                 else:
@@ -1262,7 +1273,7 @@ def log_normal_mixture_estimate_ml(times, ns, failures, double bound, int K):
             #print sigmas_K
             #print thetas_K
             print numpy.exp(log_weights_K)
-            #print log_responsibilities_KN
+            print numpy.exp(log_responsibilities_KN)
 
         # check for convergence
         delta_ll = ll - previous_ll
