@@ -248,6 +248,34 @@ class RunData(object):
 
         return (successes_NS, failures_NS, durations_NSR)
 
+    def to_times_arrays(self):
+        """Return run durations as per-solver arrays."""
+
+        S = len(self.solver_names)
+        N = len(self.run_lists)
+
+        times_lists = [[] for _ in xrange(S)]
+        ns_lists = [[] for _ in xrange(S)]
+        failures_NS = numpy.zeros((N, S), numpy.intc)
+        instance_ids = sorted(self.run_lists)
+
+        for (n, instance_id) in enumerate(instance_ids):
+            runs = self.run_lists[instance_id]
+
+            for run in runs:
+                s = self.solver_names.index(run.solver)
+
+                if run.success:
+                    times_lists[s].append(run.cost)
+                    ns_lists[s].append(n)
+                else:
+                    failures_NS[n, s] += 1
+
+        times_arrays = map(numpy.array, times_lists)
+        ns_arrays = map(numpy.array, ns_lists)
+
+        return (times_arrays, ns_arrays, failures_NS)
+
     def to_bins_array(self, solver_names, B):
         """Return discretized run duration counts."""
 

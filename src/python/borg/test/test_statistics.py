@@ -251,31 +251,37 @@ def test_dcm_estimate_ml_wallach_random():
             yield (assert_ok, alpha.tolist())
 
 def test_log_normal_mixture_estimate_ml():
-    def assert_ok(mus, sigmas, thetas):
+    def assert_ok(mus, sigmas, thetas, terminus):
         instances_per_component = 2
         samples_per_instance = 6
         times = []
         ns = []
+        censored = []
         n = 0
-
-        prng = numpy.random.RandomState(42)
 
         for (mu, sigma, theta) in zip(mus, sigmas, thetas):
             for _ in xrange(instances_per_component):
-                ns += [n] * samples_per_instance
-                times += list(numpy.exp(prng.normal(mu, sigma, samples_per_instance)) + theta)
+                values = numpy.exp(numpy.random.normal(mu, sigma, samples_per_instance)) + theta
+                uncensored = list(values[values <= terminus])
+                times += uncensored
+                censored += [numpy.sum(values > terminus)]
+                ns += [n] * len(uncensored)
                 n += 1
+
+        print repr(times)
+        print repr(ns)
+        print repr(censored)
 
         borg.statistics.log_normal_mixture_estimate_ml(
             numpy.array(times),
             numpy.array(ns),
-            numpy.zeros(instances_per_component * len(mus)),
-            numpy.max(times) * 2.0,
+            numpy.array(censored),
+            terminus,
             len(thetas),
             )
 
         # XXX actually assert something
 
-    with borg.util.numpy_errors(all = "raise"):
-        yield (assert_ok, [0.0, 10.0], [1.0, 2.0], [10.0, 0.0])
+    #with borg.util.numpy_errors(all = "raise"):
+    yield (assert_ok, [0.0, 10.0], [1.0, 2.0], [10.0, 0.0], 1e4)
 

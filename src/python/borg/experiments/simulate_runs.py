@@ -23,16 +23,16 @@ class PortfolioMaker(object):
             portfolio = borg.portfolios.OraclePortfolio()
         else:
             #sampler = borg.models.MulSampler()
-            sampler = borg.models.MulDirMixSampler()
-            model = \
-                borg.models.mean_posterior(
-                    sampler,
-                    train_data.solver_names,
-                    train_data,
-                    bins = 60,
-                    chains = 1,
-                    samples_per_chain = 1,
-                    )
+            #sampler = borg.models.MulDirMixSampler()
+            #model = \
+                #borg.models.mean_posterior(
+                    #sampler,
+                    #train_data.solver_names,
+                    #train_data,
+                    #bins = 60,
+                    #chains = 1,
+                    #samples_per_chain = 1,
+                    #)
             #model = \
                 #borg.models.posterior(
                     #sampler,
@@ -43,6 +43,7 @@ class PortfolioMaker(object):
             #import numpy
             #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 160, threshold = 1000000):
                 #print numpy.exp(model.log_masses)
+            model = borg.models.LogNormalMixEstimator()(train_data, 60)
 
             if self.name == "preplanning":
                 portfolio = borg.portfolios.PreplanningPortfolio(suite, model)

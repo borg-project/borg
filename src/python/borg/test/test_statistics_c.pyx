@@ -31,6 +31,26 @@ class TestCases(object):
                 numpy.random.dirichlet(numpy.ones(16)),
                 )
 
+    def test_standard_normal_log_pdf(self):
+        def assert_routine_ok(x):
+            v_ours = borg.statistics.standard_normal_log_pdf(x)
+            v_true = scipy.stats.norm.logpdf(x)
+
+            nose.tools.assert_almost_equal(v_ours, v_true)
+
+        for i in xrange(8):
+            assert_routine_ok(numpy.random.normal())
+
+    def test_standard_normal_log_cdf(self):
+        def assert_routine_ok(x):
+            v_ours = borg.statistics.standard_normal_log_cdf(x)
+            v_true = scipy.stats.norm.logcdf(x)
+
+            nose.tools.assert_almost_equal(v_ours, v_true)
+
+        for i in xrange(8):
+            assert_routine_ok(numpy.random.normal())
+
     def test_normal_log_pdf(self):
         def assert_routine_ok(x, mu, sigma):
             v_ours = borg.statistics.normal_log_pdf(mu, sigma, x)
@@ -40,9 +60,23 @@ class TestCases(object):
 
         for i in xrange(8):
             assert_routine_ok(
-                numpy.random.normal() * 10,
-                numpy.random.normal() * 10,
-                numpy.random.rand() * 10,
+                numpy.random.normal(),
+                numpy.random.normal(),
+                numpy.random.rand() + 1.0,
+                )
+
+    def test_normal_log_cdf(self):
+        def assert_routine_ok(x, mu, sigma):
+            v_ours = borg.statistics.normal_log_cdf(mu, sigma, x)
+            v_true = scipy.stats.norm.logcdf(x, loc = mu, scale = sigma)
+
+            nose.tools.assert_almost_equal(v_ours, v_true, places = 5)
+
+        for i in xrange(8):
+            assert_routine_ok(
+                numpy.random.normal(),
+                numpy.random.normal(),
+                numpy.random.rand() + 1.0,
                 )
 
     def test_log_normal_log_pdf(self):
@@ -51,6 +85,23 @@ class TestCases(object):
             v_true = scipy.stats.lognorm.logpdf(x, sigma, loc = theta, scale = numpy.exp(mu))
 
             nose.tools.assert_almost_equal(v_ours, v_true)
+
+        for i in xrange(8):
+            mu = numpy.random.rand() * 10
+            sigma = numpy.random.rand() * 10 + 1e-2
+            theta = numpy.random.rand() * 10
+            x = scipy.stats.lognorm.rvs(sigma, loc = theta, scale = numpy.exp(mu))
+
+            assert_routine_ok(x, mu, sigma, theta)
+
+    def test_log_normal_log_cdf(self):
+        def assert_routine_ok(x, mu, sigma, theta):
+            v_ours = borg.statistics.log_normal_log_cdf(mu, sigma, theta, x)
+            v_true = scipy.stats.lognorm.logcdf(x, sigma, loc = theta, scale = numpy.exp(mu))
+
+            nose.tools.assert_almost_equal(v_ours, v_true)
+
+        assert_routine_ok(6000.0, 2.17, 0.28, 0.0)
 
         for i in xrange(8):
             mu = numpy.random.rand() * 10

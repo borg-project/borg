@@ -22,34 +22,29 @@ def evaluate_split(run_data, model_name, mixture, independent, instance_count, t
         training = training_filtered.collect_systematic(mixture)
 
     # build the model
-    if model_name == "mul_alpha=0.1":
-        sampler = borg.models.MulSampler(alpha = 0.1)
-    elif model_name == "mul-dir":
-        sampler = borg.models.MulDirSampler()
-    elif model_name == "mul-dirmix":
-        sampler = borg.models.MulDirMixSampler()
-    elif model_name == "mul-dirmatmix":
-        sampler = borg.models.MulDirMatMixSampler()
+    bins = 30
+    samplers = {
+        "mul_alpha=0.1": borg.models.MulSampler(alpha = 0.1),
+        "mul-dir": borg.models.MulDirSampler(),
+        "mul-dirmix": borg.models.MulDirMixSampler(),
+        "mul-dirmatmix": borg.models.MulDirMatMixSampler(),
+        }
+
+    if model_name in samplers:
+        model = \
+            borg.models.mean_posterior(
+                samplers[model_name],
+                training.solver_names,
+                training,
+                bins = bins,
+                chains = 1,
+                samples_per_chain = 1,
+                )
+    elif model_name == "log-normal":
+        estimator = borg.models.LogNormalMixEstimator()
+        model = estimator(training, bins)
     else:
         raise Exception("unrecognized model name \"{0}\"".format(model_name))
-
-    model = \
-        borg.models.mean_posterior(
-            sampler,
-            training.solver_names,
-            training,
-            bins = 30,
-            chains = 1,
-            samples_per_chain = 1,
-            )
-    ## XXX
-    #model = \
-        #borg.models.posterior(
-            #sampler,
-            #training.solver_names,
-            #training,
-            #bins = 30,
-            #)
 
     # evaluate the model
     logger.info("scoring model on %i instances", len(testing))
