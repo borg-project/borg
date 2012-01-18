@@ -101,6 +101,7 @@ class TestCases(object):
 
             nose.tools.assert_almost_equal(v_ours, v_true)
 
+        assert_routine_ok(1.2, 0.0, 1.0, 0.0)
         assert_routine_ok(6000.0, 2.17, 0.28, 0.0)
 
         for i in xrange(8):
@@ -110,6 +111,16 @@ class TestCases(object):
             x = scipy.stats.lognorm.rvs(sigma, loc = theta, scale = numpy.exp(mu))
 
             assert_routine_ok(x, mu, sigma, theta)
+
+    def test_binomial_log_pmf(self):
+        def assert_routine_ok(p, N, n):
+            v_ours = borg.statistics.binomial_log_pmf(p, N, n)
+            v_true = scipy.stats.binom.logpmf(n, N, p)
+
+            nose.tools.assert_almost_equal(v_ours, v_true)
+
+        for i in xrange(8):
+            assert_routine_ok(numpy.random.rand(), 10, numpy.random.randint(10))
 
     def test_categorical_rv_raw(self):
         def assert_routine_ok(ps):

@@ -38,6 +38,8 @@ cdef double truncated_normal_log_cdf(double a, double b, double mu, double sigma
 cdef double log_normal_log_pdf(double mu, double sigma, double theta, double x)
 cdef double log_normal_log_cdf(double mu, double sigma, double theta, double x)
 
+cdef double binomial_log_pmf(double p, int N, int n)
+
 cdef double dirichlet_log_pdf_raw(
     int D,
     double* alpha, int alpha_stride,

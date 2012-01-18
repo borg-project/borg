@@ -583,6 +583,16 @@ cdef double log_normal_log_cdf(double mu, double sigma, double theta, double x):
 
     return standard_normal_log_cdf(v)
 
+cdef double binomial_log_pmf(double p, int N, int n):
+    """Compute the log of the binomial PMF."""
+
+    return \
+        libc.math.lgamma(1.0 + N) \
+        + n * libc.math.log(p) \
+        + (N - n) * libc.math.log(1.0 - p) \
+        - libc.math.lgamma(1.0 + n) \
+        - libc.math.lgamma(1.0 + N - n)
+
 cpdef double multinomial_log_pdf(numpy.ndarray theta, numpy.ndarray counts):
     """Compute the log of the multinomial PDF."""
 
@@ -1136,12 +1146,104 @@ def dcm_mixture_estimate_ml(counts, int K):
     #return (components_KD, log_responsibilities_KN, log_weights_K)
     return (components_KD, log_densities_KN, log_weights_K)
 
-def log_normal_estimate_ml(samples, ns, weights, censored, terminus):
-    """
-    Estimate a right-censored three-parameter log-normal distribution.
+class RightCensoredLogNormalObjective(object):
+    """Weighted data log-likelihood under a right-censored log-normal distribution."""
 
-    The location parameter is assumed to be zero.
-    """
+    def __init__(self, samples, ns, weights, censored, terminus):
+        self._samples = samples
+        self._ns = ns
+        self._weights = weights
+        self._censored = censored
+        self._terminus = terminus
+
+    #def log_pdf(self, mu, sigma, theta):
+    def objective(self, arguments):
+        """Compute the log likelihood."""
+
+        # ...
+        (mu, sigma, theta) = arguments
+
+        assert sigma > 0.0
+
+        R = self._samples.shape[0]
+
+        # compute the density
+        left_p = 1e-2
+        right_p = 1.0 - left_p
+        log_fail_p = log_minus(0.0, log_normal_log_cdf(mu, sigma, theta, self._terminus))
+        log_density = self._censored * log_fail_p
+
+        for r in xrange(R):
+            n = self._ns[r]
+
+            if self._samples[r] >= theta:
+                log_density += self._weights[n] * log_normal_log_pdf(mu, sigma, theta, self._samples[r])
+            #else:
+                #log_density += libc.math.log(left_p) - libc.math.log(theta)
+
+        print mu, sigma, theta, "->", log_density
+
+        return -log_density
+
+    #def gradient(self, arguments):
+        #"""Compute the derivative of the log likelihood."""
+
+        ## ...
+        #(mu, sigma, theta) = arguments
+        ##(mu, sigma) = arguments
+        ##(mu,) = arguments
+        ##sigma = 1.0
+        ##theta = 0.0
+
+        #if sigma <= 0.0:
+            #print mu, sigma, theta, "->", 1e16
+            #return 1e16
+
+        #R = self._samples.shape[0]
+
+        ## compute the density
+        #left_p = 0.01
+        #right_p = 1.0 - left_p
+        #density = self._censored * log_minus(0.0, log_normal_log_cdf(mu, sigma, theta, self._terminus))
+
+        #for r in xrange(R):
+            #if self._samples[r] < theta:
+                #print mu, sigma, theta, "->", 1e16
+                #return 1e16
+                ##density += libc.math.log(left_p)
+            #else:
+                ##density += libc.math.log(right_p)
+                #density += log_normal_log_pdf(mu, sigma, theta, self._samples[r])
+
+        #print mu, sigma, theta, "->", density
+
+        #return -density
+
+def log_normal_estimate_ml(samples, ns, weights, censored, terminus):
+    """Estimate a right-censored three-parameter log-normal distribution."""
+
+    print "::", censored
+
+    ll = RightCensoredLogNormalObjective(samples, ns, weights, censored, terminus)
+
+    (optimum, _, _) = \
+        scipy.optimize.fmin_l_bfgs_b(
+        #scipy.optimize.fmin_tnc(
+            ll.objective,
+            [-1.0, 2.0, 0.0],
+            approx_grad = True,
+            bounds = [
+                (None, None),
+                (1e-4, None),
+                #(0.0, max(0.0, numpy.max(samples) - 1e-4)),
+                (0.0, max(0.0, numpy.min(samples) - 1e-4)),
+                ]
+            )
+
+    return optimum
+
+def log_normal_estimate_ml_XXX(samples, ns, weights, censored, terminus):
+    """Estimate a right-censored three-parameter log-normal distribution."""
 
     R = samples.shape[0]
 
@@ -1181,8 +1283,8 @@ def log_normal_estimate_ml(samples, ns, weights, censored, terminus):
     best_density = None
 
     # XXX
-    for theta in numpy.r_[0.0:min_sample - min_sample / 64.0:64j]:
-    #for theta in [0.0]:
+    #for theta in numpy.r_[0.0:min_sample - min_sample / 64.0:64j]:
+    for theta in [0.0]:
         # compute the max-likelihood mu
         mu = 0.0
 
@@ -1211,22 +1313,27 @@ def log_normal_estimate_ml(samples, ns, weights, censored, terminus):
 
         # correct for censorship
         h = censored_sum / (censored_sum + weights_sum)
-        xih = (sigma * sigma) / (mu - log_terminus)**2.0
+        xih = (sigma * sigma) / (mu - theta - log_terminus)**2.0
         phi_nxih = libc.math.exp(standard_normal_log_pdf(-xih))
-        f_nxih = libc.math.exp(standard_normal_log_pdf(-xih))
+        f_nxih = libc.math.exp(standard_normal_log_cdf(-xih))
         z_nxih = phi_nxih / (1.0 - f_nxih)
         y_h_xih = (h / (1.0 - h)) * z_nxih
         lambdah = y_h_xih / (y_h_xih - xih)
 
-        print "before:"
+        print "#### before (theta = {0})".format(theta)
+        print h, "h"
+        print xih, "xih"
+        print phi_nxih, "phi_nxih"
+        print f_nxih, "f_nxih"
+        print z_nxih, "z_nxih"
+        print y_h_xih, "y_h_xih"
         print mu, sigma
         print lambdah
 
-        sigma = libc.math.sqrt(sigma * sigma + lambdah * (mu - log_terminus)**2.0)
-        mu = mu - lambdah * (mu - log_terminus)
+        sigma = libc.math.sqrt(sigma * sigma + lambdah * (mu - theta - log_terminus)**2.0)
+        mu = mu - lambdah * (mu - theta - log_terminus)
 
-        print "after:"
-        print mu, sigma
+        assert not numpy.isnan(sigma)
 
         # compute the density
         density = 0.0
@@ -1249,6 +1356,8 @@ def log_normal_estimate_ml(samples, ns, weights, censored, terminus):
     assert numpy.isfinite(best_mu)
     assert numpy.isfinite(best_sigma)
     assert numpy.isfinite(best_theta)
+
+    print "***", best_mu, best_sigma, best_theta
 
     return (best_mu, best_sigma, best_theta)
 
