@@ -477,32 +477,19 @@ def mul_dir_mix_fit(counts):
 
     samples_TSD = numpy.empty((T, S, D), numpy.double)
     alphas_KSD = numpy.empty((K, S, D), numpy.double)
-    log_weights_SK = numpy.empty((S, K), numpy.double)
-    log_densities_KSN = numpy.empty((K, S, N), numpy.double)
+    log_responsibilities_KSN = numpy.empty((K, S, N), numpy.double)
 
     for s in xrange(S):
         print ">>>> ESTIMATING RTDS FOR SOLVER", s
 
         (
             alphas_KSD[:, s, :],
-            log_densities_KSN[:, s, :],
-            log_weights_SK[s, :],
+            log_responsibilities_KSN[:, s, :],
             ) = \
             borg.statistics.dcm_mixture_estimate_ml(counts_NSD[:, s, :], K)
 
-        #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 200, threshold = 1000000):
-            #print alphas_KSD[:, s, :]
-
-    log_post_weights_KSN = log_densities_KSN.copy()
-    log_post_weights_KSN += log_weights_SK.T[..., None]
-    log_post_weights_KSN -= numpy.logaddexp.reduce(log_post_weights_KSN, axis = 0)
-
-    borg.statistics.assert_log_weights(log_post_weights_KSN, axis = 0)
-
     for t in xrange(T):
         n = t % N
-
-        #print "++++", n
 
         for s in xrange(S):
             #k = borg.statistics.categorical_rv_log(log_post_weights_KSN[:, s, n])
@@ -512,25 +499,16 @@ def mul_dir_mix_fit(counts):
 
             thetas = alphas_KSD[:, s, :] + counts_NSD[n, s, :]
             thetas /= numpy.sum(thetas, axis = -1)[..., None]
-            thetas *= numpy.exp(log_post_weights_KSN[:, s, n])[..., None]
+            thetas *= numpy.exp(log_responsibilities_KSN[:, s, n])[..., None]
 
             samples_TSD[t, s, :] = numpy.sum(thetas, axis = 0)
 
-            #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 200, threshold = 1000000):
-                #print numpy.exp(log_post_weights_KSN[:, s, n])
-
-            # squash distribution
-
         #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 200, threshold = 1000000):
+            #print "# instance", t
             #print counts_NSD[n]
             #print samples_TSD[t]
 
-        #samples_TSD[t, ...] += counts_NSD[n, ...]
-        #samples_TSD[t, ...] /= numpy.sum(samples_TSD[t, ...], axis = -1)[..., None]
-
     assert numpy.all(samples_TSD >= 0.0)
-
-    #raise SystemExit()
 
     return [samples_TSD]
 
@@ -648,8 +626,7 @@ class LogNormalMixEstimator(object):
         mus_SK = numpy.empty((S, K), numpy.double)
         sigmas_SK = numpy.empty((S, K), numpy.double)
         thetas_SK = numpy.empty((S, K), numpy.double)
-        log_weights_SK = numpy.empty((S, K), numpy.double)
-        log_densities_SKN = numpy.empty((S, K, N), numpy.double)
+        log_responsibilities_SKN = numpy.empty((S, K, N), numpy.double)
 
         for s in xrange(S):
             print ">>>> ESTIMATING RTDS FOR SOLVER", s
@@ -658,10 +635,9 @@ class LogNormalMixEstimator(object):
                 mus_SK[s, :],
                 sigmas_SK[s, :],
                 thetas_SK[s, :],
-                log_weights_SK[s, :],
-                log_densities_SKN[s, :],
+                log_responsibilities_SKN[s, :],
                 ) = \
-                borg.statistics.log_normal_mixture_estimate_ml(
+                borg.statistics.log_normal_mixture_estimate_ml_em(
                     times_SR[s],
                     ns_SR[s],
                     failures_NS[:, s],
@@ -669,22 +645,17 @@ class LogNormalMixEstimator(object):
                     K,
                     )
 
-        log_post_weights_SKN = log_densities_SKN.copy()
-        log_post_weights_SKN += log_weights_SK[..., None]
-        log_post_weights_SKN -= numpy.logaddexp.reduce(log_post_weights_SKN, axis = 1)[:, None, :]
-
-        borg.statistics.assert_log_weights(log_post_weights_SKN, axis = 1)
+            borg.statistics.assert_log_weights(log_responsibilities_SKN[s, :], axis = 0)
 
         # extract (discrete) samples
         samples_TSD = numpy.empty((T, S, D), numpy.double)
 
         #for t in xrange(T):
-        for t in xrange(32):
+        for t in xrange(32): # XXX
             n = t % N
 
             for s in xrange(S):
-                #k = borg.statistics.categorical_rv_log(log_post_weights_KSN[:, s, n])
-                k = numpy.argmax(log_post_weights_SKN[s, :, n])
+                k = numpy.argmax(log_responsibilities_SKN[s, :, n])
 
                 for d in xrange(D):
                     below = \
@@ -714,7 +685,7 @@ class LogNormalMixEstimator(object):
 
                 print samples_TSD[t]
 
-        assert numpy.all(samples_TSD >= 0.0)
+            assert numpy.all(samples_TSD[t] >= 0.0)
 
         raise SystemExit()
 

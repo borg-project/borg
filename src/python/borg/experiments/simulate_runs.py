@@ -40,9 +40,6 @@ class PortfolioMaker(object):
                     #train_data,
                     #bins = 30,
                     #)
-            #import numpy
-            #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 160, threshold = 1000000):
-                #print numpy.exp(model.log_masses)
             model = borg.models.LogNormalMixEstimator()(train_data, 60)
 
             if self.name == "preplanning":
