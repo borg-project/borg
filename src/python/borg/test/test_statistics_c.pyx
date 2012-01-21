@@ -122,6 +122,20 @@ class TestCases(object):
         for i in xrange(8):
             assert_routine_ok(numpy.random.rand(), 10, numpy.random.randint(10))
 
+    def test_multinomial_log_pmf(self):
+        def assert_routine_ok(p, N, n):
+            v_ours = \
+                borg.statistics.multinomial_log_pmf(
+                    numpy.array([p, 1.0 - p], dtype = numpy.double),
+                    numpy.array([n, N - n], dtype = numpy.intc),
+                    )
+            v_true = scipy.stats.binom.logpmf(n, N, p)
+
+            nose.tools.assert_almost_equal(v_ours, v_true)
+
+        for i in xrange(8):
+            assert_routine_ok(numpy.random.rand(), 10, numpy.random.randint(10))
+
     def test_categorical_rv_raw(self):
         def assert_routine_ok(ps):
             S = 65535

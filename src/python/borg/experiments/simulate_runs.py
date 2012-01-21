@@ -13,6 +13,8 @@ class PortfolioMaker(object):
         self.name = portfolio_name
 
     def __call__(self, suite, train_data):
+        train_data = train_data.only_successful().collect_systematic([4])
+
         if self.name == "random":
             portfolio = borg.portfolios.RandomPortfolio()
         elif self.name == "uniform":
@@ -22,29 +24,36 @@ class PortfolioMaker(object):
         elif self.name == "oracle":
             portfolio = borg.portfolios.OraclePortfolio()
         else:
-            #sampler = borg.models.MulSampler()
-            #sampler = borg.models.MulDirMixSampler()
-            #model = \
-                #borg.models.mean_posterior(
-                    #sampler,
-                    #train_data.solver_names,
-                    #train_data,
-                    #bins = 60,
-                    #chains = 1,
-                    #samples_per_chain = 1,
-                    #)
-            #model = \
-                #borg.models.posterior(
-                    #sampler,
-                    #train_data.solver_names,
-                    #train_data,
-                    #bins = 30,
-                    #)
-            model = borg.models.LogNormalMixEstimator()(train_data, 60)
+            if self.name.endswith("-mul"):
+                sampler = borg.models.MulSampler()
+                #sampler = borg.models.MulDirMixSampler()
+                model = \
+                    borg.models.mean_posterior(
+                        sampler,
+                        train_data.solver_names,
+                        train_data,
+                        bins = 60,
+                        chains = 1,
+                        samples_per_chain = 1,
+                        )
+                #model = \
+                    #borg.models.posterior(
+                        #sampler,
+                        #train_data.solver_names,
+                        #train_data,
+                        #bins = 60,
+                        #)
+            elif self.name.endswith("-log"):
+                #model = borg.models.LogNormalMixEstimator()(train_data, 60)
+                model = borg.models.DiscreteLogNormalMixEstimator()(train_data, 60)
+            elif self.name.endswith("-mean"):
+                model = borg.models.DeterministicEstimator()(train_data, 60)
+            else:
+                raise ValueError("unrecognized portfolio name: {0}".format(self.name))
 
-            if self.name == "preplanning":
+            if self.name.startswith("preplanning-"):
                 portfolio = borg.portfolios.PreplanningPortfolio(suite, model)
-            elif self.name == "probabilistic":
+            elif self.name.startswith("probabilistic-"):
                 regress = borg.regression.LinearRegression(train_data, model)
                 portfolio = borg.portfolios.PureModelPortfolio(suite, model, regress)
             else:

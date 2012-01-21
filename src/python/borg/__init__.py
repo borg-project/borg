@@ -98,7 +98,14 @@ def script(main):
     #return decorator
 
 annotations = plac.annotations
-enable_default_logging = cargo.enable_default_logging
+
+def enable_default_logging():
+    if not enable_default_logging.enabled:
+        cargo.enable_default_logging()
+
+        enable_default_logging.enabled = True
+
+enable_default_logging.enabled = False
 
 from . import defaults
 from . import util

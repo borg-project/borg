@@ -112,6 +112,22 @@ class RunData(object):
 
         return self.filter(*(id_ for (id_, m) in zip(self.ids, mask) if m))
 
+    def only_successful(self):
+        """Return only instances on which some solver succeeded."""
+
+        data = RunData(self.solver_names)
+
+        for (id_, run_list) in self.run_lists.iteritems():
+            if any(run.success for run in run_list):
+                for run in run_list:
+                    data.add_run(id_, run)
+
+                data.add_feature_vector(id_, self.feature_vectors[id_])
+
+        data.common_budget = self.common_budget
+
+        return data
+
     def collect_systematic(self, counts):
         """Get a systematic subset of the data."""
 
