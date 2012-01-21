@@ -11,6 +11,7 @@ def build(context):
             "simulate.py",
             "evaluate_regression.py",
             "bundle_run_data.py",
+            "ground.py",
             ],
         install_path = "${PYTHONDIR}/borg/tools",
         )

@@ -9,4 +9,5 @@ def build(context):
     context.recurse("max_sat")
     context.recurse("pb")
     context.recurse("sat")
+    context.recurse("asp")
 

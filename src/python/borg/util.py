@@ -5,16 +5,14 @@ import bz2
 import sys
 import gzip
 import json
-import fnmatch
 import traceback
 import contextlib
 import subprocess
 import numpy
 
-def files_under(path, pattern = "*"):
-    """Iterate over the set of paths to files in the specified directory tree."""
+def files_under(path, extensions = None):
+    """Iterate over paths in the specified directory tree."""
 
-    # walk the directory tree
     if os.path.isfile(path):
         walked = [path]
     else:
@@ -25,13 +23,13 @@ def files_under(path, pattern = "*"):
 
         walked = walk_path()
 
-    # filter names
-    if isinstance(pattern, str):
-        pattern = [pattern]
-
-    for name in walked:
-        if any(fnmatch.fnmatch(name, p) for p in pattern):
+    if extensions is None:
+        for name in walked:
             yield name
+    else:
+        for name in walked:
+            if any(name.endswith(e) for e in extensions):
+                yield name
 
 def openz(path, mode = "rb", closing = True):
     """Open a file, transparently [de]compressing it if a known extension is present."""

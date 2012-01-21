@@ -11,18 +11,19 @@ logger = borg.get_logger(__name__, default_level = "INFO")
     bundle_path = ("path to new bundle",),
     root_path = ("instances root directory",),
     runs_extension = ("runs files extension",),
+    features_extension = ("features files extension",),
     )
-def main(bundle_path, root_path, runs_extension):
+def main(bundle_path, root_path, runs_extension = ".runs.csv", features_extension = ".features.csv"):
     """Bundle together run and feature data."""
 
     # list relevant files
-    features_extension = ".features.csv"
-    runs_paths = map(os.path.abspath, borg.util.files_under(root_path, "*{0}".format(runs_extension)))
-    features_paths = map(os.path.abspath, borg.util.files_under(root_path, "*{0}".format(features_extension)))
+    
+    runs_paths = map(os.path.abspath, borg.util.files_under(root_path, [runs_extension]))
+    features_paths = map(os.path.abspath, borg.util.files_under(root_path, [features_extension]))
 
     # write the bundle
     os.mkdir(bundle_path)
-    csv.field_size_limit(1000000000)
+    csv.field_size_limit(1000 * 1000 * 1000)
 
     logger.info("bundling run data from %i files", len(runs_paths))
 
