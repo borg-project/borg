@@ -95,7 +95,7 @@ def main(
 
             for solver_name in solver_names:
                 if only_missing and run_data is not None:
-                    count = runs - numpy.sum(run_data.solver == solver_name)
+                    count = max(0, runs - numpy.sum(run_data.solver == solver_name))
                 else:
                     count = runs
 
