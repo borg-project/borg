@@ -1,6 +1,7 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import numpy
+import sklearn.cluster
 import sklearn.pipeline
 import sklearn.linear_model
 import borg
@@ -90,34 +91,92 @@ class ConstantRegression(object):
 
         return prediction_M
 
-class LinearRegression(object):
-    """Linear regression model."""
+def cluster_kl(model, K):
+    """Cluster RTDs according to KL divergence."""
 
-    def __init__(self, run_data, model, K = 32):
+    kl_means = borg.bregman.KLMeans(k = K).fit(numpy.exp(model.log_masses))
+
+    return kl_means._assignments
+
+def plan_affinities(log_survival_WSB):
+    """Compute plan-based distances between instances."""
+
+    # ...
+    (W, S, B) = log_survival_WSB.shape
+
+    # compute individual plan probabilities
+    ps_W = numpy.empty(W)
+
+    for w in xrange(W):
+        (_, log_fail_p) = \
+            borg.planners.knapsack_plan(
+                log_survival_WSB[w:w + 1, :, :-1],
+                numpy.array([0.0]),
+                give_log_fail = True,
+                )
+
+        ps_W[w] = 1.0 - numpy.exp(log_fail_p)
+
+    affinity_WW = numpy.empty((W, W))
+
+    for w in xrange(W):
+        for v in xrange(w, W):
+            (_, log_fail_p) = \
+                borg.planners.knapsack_plan(
+                    log_survival_WSB[[w, v], :, :-1],
+                    numpy.zeros(2) - numpy.log(2),
+                    give_log_fail = True,
+                    )
+            p = 1.0 - numpy.exp(log_fail_p)
+
+            affinity_WW[w, v] = 1.0 - (max(ps_W[w], ps_W[v]) - p)
+            affinity_WW[v, w] = affinity_WW[w, v]
+
+            assert affinity_WW[v, w] > -1e-8
+            assert affinity_WW[v, w] < 1.0 + 1e-8
+
+        print w
+
+    return affinity_WW
+
+def cluster_plan(model, K):
+    """Cluster RTDs according to plan similarity."""
+
+    affinities = plan_affinities(model.log_survival)
+    spectral = sklearn.cluster.SpectralClustering(k = K).fit(affinities)
+
+    return spectral.labels_
+
+class ClusteredLogisticRegression(object):
+    """Logistic regression model with spectral clustering."""
+
+    def __init__(self, model, cluster = cluster_plan, K = 4):
         """Initialize."""
 
         logger.info("clustering %i RTD samples", model.log_masses.shape[0])
 
         self._model = model
-        self._kl_means = borg.bregman.KLMeans(k = K).fit(numpy.exp(model.log_masses))
-        self._indicators = borg.statistics.indicator(self._kl_means._assignments, K)
+        self._labels = cluster(model, K)
+        self._indicators = borg.statistics.indicator(self._labels, K)
+
+        #for k in xrange(K):
+            #print "** cluster", k
+            #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 200, threshold = 1000000):
+                #print numpy.exp(model.log_masses[self._labels == k])
 
         logger.info("fitting discriminative model to cluster assignments")
 
-        M = model.log_masses.shape[0]
+        features_NF = model.features
 
-        features_NF = run_data.to_features_array()
-        features_MF = numpy.vstack([features_NF] * (M / len(run_data)))
-
-        assert features_MF.shape[0] == model.log_masses.shape[0]
-        assert features_MF.shape[0] == self._kl_means._assignments.shape[0]
+        assert features_NF.shape[0] == model.log_masses.shape[0]
+        assert features_NF.shape[0] == self._labels.shape[0]
 
         self._regression = \
             sklearn.pipeline.Pipeline([
                 ("scaler", sklearn.preprocessing.Scaler()),
                 ("estimator", sklearn.linear_model.LogisticRegression(C = 1e-1)),
                 ]) \
-                .fit(features_MF, self._kl_means._assignments)
+                .fit(features_NF, self._labels)
 
         (_, estimator) = self._regression.steps[-1]
 
@@ -137,14 +196,10 @@ class LinearRegression(object):
 
         for m in xrange(M):
             for n in xrange(N):
-                k = self._kl_means._assignments[n]
+                k = self._labels[n]
                 p_z = prediction[m, self._indices[k]]
 
                 weights[m, n] = p_z / self._sizes[k]
-
-            ## XXX
-            #weights[m, numpy.argsort(weights[m, :])[:-32]] = 0.0
-            #weights[m, :] /= numpy.sum(weights[m, :])
 
         return weights
 

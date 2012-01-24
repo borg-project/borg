@@ -128,6 +128,22 @@ class RunData(object):
 
         return data
 
+    def only_nonempty(self):
+        """Return only instances on which some solver succeeded."""
+
+        data = RunData(self.solver_names)
+
+        for (id_, run_list) in self.run_lists.iteritems():
+            if len(run_list) > 0:
+                for run in run_list:
+                    data.add_run(id_, run)
+
+                data.add_feature_vector(id_, self.feature_vectors[id_])
+
+        data.common_budget = self.common_budget
+
+        return data
+
     def collect_systematic(self, counts):
         """Get a systematic subset of the data."""
 
@@ -139,6 +155,8 @@ class RunData(object):
 
             for solver in self.solver_names:
                 runs = sorted(self.runs_on(id_, solver), key = lambda _: random.random())
+
+                assert len(runs) >= count
 
                 sampled.add_runs((id_, run) for run in runs[:count])
 

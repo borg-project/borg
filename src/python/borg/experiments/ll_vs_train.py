@@ -85,7 +85,7 @@ def main(out_path, experiments, workers = 0, local = False):
             logger.info("preparing experiment: %s", experiment)
 
             run_data = get_run_data(experiment["run_data"])
-            validation = sklearn.cross_validation.KFold(len(run_data), 10)
+            validation = sklearn.cross_validation.KFold(len(run_data), 10, indices = False)
             max_instance_count = numpy.floor(0.9 * len(run_data)) - 10
             #instance_counts = map(int, map(round, numpy.r_[10:max_instance_count:16j]))
             instance_counts = [int(max_instance_count / 2)]

@@ -53,7 +53,7 @@ def main(out_path, experiments, workers = 0, local = False):
             logger.info("preparing experiment: %s", experiment)
 
             run_data = get_run_data(experiment["run_data"])
-            validation = sklearn.cross_validation.KFold(len(run_data), 5)
+            validation = sklearn.cross_validation.KFold(len(run_data), 5, indices = False)
             (train_mask, test_mask) = iter(validation).next()
             training = run_data.masked(train_mask).collect_systematic([2])
             testing = run_data.masked(test_mask).collect_systematic([4])

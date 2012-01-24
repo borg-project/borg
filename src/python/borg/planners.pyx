@@ -33,7 +33,7 @@ class Planner(object):
 
         return self._compute_plan(log_survival_WSB, log_weights_W)
 
-def knapsack_plan(log_survival_WSB, log_weights_W):
+def knapsack_plan(log_survival_WSB, log_weights_W, give_log_fail = False):
     """Compute a plan."""
 
     # prepare
@@ -73,7 +73,10 @@ def knapsack_plan(log_survival_WSB, log_weights_W):
     plan = sorted(plan, key = heuristic)
 
     # ...
-    return plan
+    if give_log_fail:
+        return (plan, numpy.logaddexp.reduce(log_weights_W + values_WB1[:, B]))
+    else:
+        return plan
 
 class KnapsackPlanner(Planner):
     """Discretizing dynamic-programming planner."""

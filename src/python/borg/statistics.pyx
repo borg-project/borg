@@ -27,7 +27,7 @@ def assert_probabilities(array):
     """Assert that an array contains only valid probabilities."""
 
     assert numpy.all(array >= 0.0)
-    assert numpy.all(array <= 1.0)
+    assert numpy.all(array <= 1.0 + 1e-16)
 
 def assert_log_probabilities(array):
     """Assert that an array contains only valid probabilities."""
@@ -146,7 +146,7 @@ def to_log_survival(probabilities, axis):
     return floored_log(1.0 - numpy.cumsum(probabilities, axis = axis))
 
 def indicator(indices, D, dtype = numpy.intc):
-    """Convert a vector of indices to a matrix of indicator vectors."""
+    """Convert a vector of indices into a matrix of indicator vectors."""
 
     (N,) = indices.shape
 
@@ -506,7 +506,7 @@ cdef int post_dirichlet_rv(
         alpha = (<double*>(alphas_p + alpha_stride * d))[0]
         count = (<int*>(counts_p + count_stride * d))[0]
 
-        rv = unit_gamma_rv(alpha + count)
+        rv = unit_gamma_rv(alpha + count) + 1e-64 # XXX
 
         (<double*>(out_p + out_stride * d))[0] = rv
 
@@ -1021,7 +1021,7 @@ def dcm_mixture_estimate_ml(counts, int K):
     cdef int k
     cdef int n
 
-    for i in xrange(64):
+    for i in xrange(128):
         # compute new responsibilities
         for k in xrange(K):
             for n in xrange(N):
@@ -1065,6 +1065,97 @@ def dcm_mixture_estimate_ml(counts, int K):
     assert_log_weights(log_responsibilities_KN, axis = 0)
 
     return (components_KD, log_responsibilities_KN)
+
+@cython.wraparound(False)
+@cython.infer_types(True)
+@cython.boundscheck(False)
+@cython.cdivision(True)
+def dcm_matrix_mixture_estimate_ml(counts, int K):
+    """Fit a DCM mixture using EM."""
+
+    # mise en place
+    cdef int N = counts.shape[0]
+    cdef int S = counts.shape[1]
+    cdef int D = counts.shape[2]
+
+    # initialization
+    counts_strings = map(str, counts)
+    counts_dict = dict(zip(counts_strings, counts))
+    uniques = sorted(set(counts_strings), key = lambda _: numpy.random.rand())
+    components = numpy.empty((K, S, D), numpy.double)
+
+    for k_ in xrange(K):
+        components[k_] = counts_dict[uniques[k_ % len(uniques)]]
+
+    components /= numpy.sum(components, axis = -1)[..., None] + 1e-32
+    components += 1e-1
+
+    cdef numpy.ndarray[int, ndim = 3] counts_NSD = counts
+    cdef numpy.ndarray[double, ndim = 3] components_KSD = components
+    cdef numpy.ndarray[double, ndim = 2] log_densities_KN = numpy.empty((K, N), numpy.double)
+
+    log_weights_K = numpy.zeros(K) - libc.math.log(K)
+
+    # expectation maximization
+    cdef unsigned int components_KSD_stride2 = components_KSD.strides[2]
+    cdef unsigned int counts_NSD_stride2 = counts_NSD.strides[2]
+
+    cdef double previous_ll = -INFINITY
+
+    cdef int i
+    cdef int k
+    cdef int n
+    cdef int s
+
+    for i in xrange(256):
+        # compute new responsibilities
+        for k in xrange(K):
+            for n in xrange(N):
+                log_densities_KN[k, n] = 0.0
+
+                for s in xrange(S):
+                    log_densities_KN[k, n] += \
+                        dcm_log_pdf_raw(
+                            D,
+                            &components_KSD[k, s, 0], components_KSD_stride2,
+                            &counts_NSD[n, s, 0], counts_NSD_stride2,
+                            )
+
+        log_responsibilities_KN = log_densities_KN + log_weights_K[..., None]
+        log_responsibilities_KN -= numpy.logaddexp.reduce(log_responsibilities_KN, axis = 0)
+
+        log_weights_K = numpy.logaddexp.reduce(log_responsibilities_KN, axis = 1)
+        log_weights_K -= numpy.log(N)
+
+        # compute ll
+        ll_each = numpy.logaddexp.reduce(log_weights_K[:, None] + log_densities_KN, axis = 0)
+        ll = numpy.sum(ll_each)
+
+        # check for convergence
+        delta_ll = ll - previous_ll
+        previous_ll = ll
+
+        if delta_ll >= 0.0:
+            logger.debug("ll at EM iteration %i is %f", i, ll)
+
+            if delta_ll <= 1e-8:
+                break
+        else:
+            logger.warning("ll at EM iteration %i is %f <-- DECLINE", i, ll)
+
+        # compute new components
+        responsibilities_KN = numpy.exp(log_responsibilities_KN)
+
+        for k in xrange(K):
+            for s in xrange(S):
+                dcm_estimate_ml_wallach_raw(components_KSD[k, s, :], counts_NSD[:, s, :], responsibilities_KN[k])
+
+                components_KSD[k, s, :] += 1e-16
+
+    assert numpy.all(numpy.isfinite(components_KSD))
+    assert_log_weights(log_responsibilities_KN, axis = 0)
+
+    return (components_KSD, log_responsibilities_KN)
 
 cdef class RightCensoredLogNormalPartial(object):
     """Weighted data l-l under a right-censored log-normal distribution."""
@@ -1393,7 +1484,7 @@ def discrete_log_normal_mixture_estimate_ml(counts, double terminus, int K):
                         ],
                     )
 
-            print "@", k, "(mu = {0}; sigma = {1}; theta = {2})".format(mus_K[k], sigmas_K[k], thetas_K[k])
+            #print "@", k, "(mu = {0}; sigma = {1}; theta = {2})".format(mus_K[k], sigmas_K[k], thetas_K[k])
 
         # compute new responsibilities (E step)
         for k in xrange(K):

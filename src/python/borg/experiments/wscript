@@ -8,6 +8,7 @@ def build(context):
             "mix_over_k.py",
             "mul_over_alpha.py",
             "apply_models.py",
+            "simulate_iid.py",
             "simulate_runs.py",
             "solved_vs_b.py",
             ],

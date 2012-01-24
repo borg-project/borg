@@ -145,7 +145,14 @@ def posterior(sampler, solver_names, training, bins):
 class MultinomialModel(object):
     """Multinomial mixture model."""
 
-    def __init__(self, interval, log_survival, log_weights = None, log_masses = None, clusters = None):
+    def __init__(
+        self,
+        interval,
+        log_survival,
+        log_weights = None,
+        log_masses = None,
+        features = None,
+        ):
         """Initialize."""
 
         (N, _, _) = log_survival.shape
@@ -159,7 +166,7 @@ class MultinomialModel(object):
             self._log_weights_N = log_weights
 
         self._log_masses_NSC = log_masses
-        self._clusters_NK = clusters
+        self._features = features
 
         borg.statistics.assert_log_weights(self._log_weights_N)
         borg.statistics.assert_log_survival(self._log_survival_NSC, 2)
@@ -202,70 +209,10 @@ class MultinomialModel(object):
         return self._log_masses_NSC
 
     @property
-    def clusters(self):
-        """Possible cluster assignments."""
+    def features(self):
+        """Features of associates instances."""
 
-        return self._clusters_NK
-
-class DeterministicEstimator(object):
-    def __init__(self, int K = 32):
-        self._K = K
-
-    def __call__(self, run_data, bins):
-        """Fit parameters of the log-normal mixture model."""
-
-        # ...
-        counts_NSD = run_data.to_bins_array(run_data.solver_names, bins)
-        budget = run_data.get_common_budget()
-        interval = budget / bins
-
-        (N, S, D) = counts_NSD.shape
-        K = self._K
-
-        # estimate training RTDs
-        ps_SKD = numpy.empty((S, K, D), numpy.double)
-        log_responsibilities_SKN = numpy.empty((S, K, N), numpy.double)
-
-        for s in xrange(S):
-            print ">>>> ESTIMATING RTDS FOR SOLVER", s
-
-            (
-                ps_SKD[s, :, :],
-                log_responsibilities_SKN[s, :, :],
-                ) = \
-                borg.statistics.discrete_log_normal_mixture_estimate_ml(
-                    counts_NSD[:, s, :],
-                    budget,
-                    K,
-                    )
-
-            borg.statistics.assert_log_weights(log_responsibilities_SKN[s, :], axis = 0)
-
-        samples_NSD = numpy.empty((N, S, D))
-
-        for n in xrange(N):
-            for s in xrange(S):
-                #k = borg.statistics.categorical_rv_log(log_post_weights_KSN[:, s, n])
-                #k = numpy.argmax(log_post_weights_KSN[:, s, n])
-
-                thetas = numpy.copy(ps_SKD[s, :, :])
-                thetas *= numpy.exp(log_responsibilities_SKN[s, :, n])[..., None]
-
-                samples_NSD[n, s, :] = numpy.sum(thetas, axis = 0)
-
-            with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 200, threshold = 1000000):
-                print "# instance", n
-                print counts_NSD[n]
-                print samples_NSD[n]
-
-        #raise SystemExit()
-
-        return \
-            MultinomialModel(
-                interval,
-                borg.statistics.to_log_survival(samples_NSD, axis = -1),
-                log_masses = borg.statistics.floored_log(samples_NSD),
-                )
+        return self._features
 
 class MulSampler(object):
     def __init__(self, alpha = 1e-4):
@@ -299,6 +246,8 @@ class MulSampler(object):
                         &alpha_D[0], alpha_D_stride0,
                         &counts_NSD[n, s, 0], counts_NSD_stride2,
                         )
+
+                    borg.statistics.assert_weights(thetas_NSD[n, s, :], axis = -1)
 
             # record sample?
             if burn_in <= i and (i - burn_in) % spacing == 0:
@@ -527,12 +476,11 @@ class MulDirMixSampler(object):
         return theta_samples
 
     def sample(self, counts, int stored = 1, int burn_in = 1000, int spacing = 50):
-        return mul_dir_mix_fit(counts)
+        return mul_dir_mix_fit(counts, self._K)
 
-def mul_dir_mix_fit(counts):
+def mul_dir_mix_fit(counts, int K):
     counts_NSD = counts
     (N, S, D) = counts_NSD.shape
-    K = 64
     T = N
 
     samples_TSD = numpy.empty((T, S, D), numpy.double)
@@ -552,10 +500,11 @@ def mul_dir_mix_fit(counts):
         n = t % N
 
         for s in xrange(S):
-            #k = borg.statistics.categorical_rv_log(log_post_weights_KSN[:, s, n])
-            #k = numpy.argmax(log_post_weights_KSN[:, s, n])
+            #k = borg.statistics.categorical_rv_log(log_responsibilities_KSN[:, s, n])
+            #k = numpy.argmax(log_responsibilities_KSN[:, s, n])
 
-            #samples_TSD[t, s, :] = alphas_KSD[k, s, :]
+            #samples_TSD[t, s, :] = alphas_KSD[k, s, :] + counts_NSD[n, s, :]
+            #samples_TSD[t, s, :] /= numpy.sum(samples_TSD[t, s, :])
 
             thetas = alphas_KSD[:, s, :] + counts_NSD[n, s, :]
             thetas /= numpy.sum(thetas, axis = -1)[..., None]
@@ -572,98 +521,71 @@ def mul_dir_mix_fit(counts):
 
     return [samples_TSD]
 
-class MulDirMatMixSampler(object):
+class MulDirMatMixEstimator(object):
     def __init__(self, K = 16):
         self._K = K
 
-    @cython.infer_types(True)
-    def sample(self, counts, int stored = 4, int burn_in = 1000, int spacing = 100):
-        """Sample parameters of the DCM mixture model using Gibbs."""
+    def __call__(self, run_data, bins, full_data):
+        # ...
+        counts_NSD = run_data.to_bins_array(run_data.solver_names, bins)
+        features_NF = run_data.to_features_array()
+        full_NSD = full_data.to_bins_array(full_data.solver_names, bins)
+        interval = run_data.get_common_budget() / bins
 
-        cdef int N = counts.shape[0]
-        cdef int S = counts.shape[1]
-        cdef int D = counts.shape[2]
-        cdef int K = self._K
+        (N, S, D) = counts_NSD.shape
+        (_, F) = features_NF.shape
+        K = self._K
 
-        cdef numpy.ndarray[int, ndim = 3] counts_NSD = numpy.asarray(counts, numpy.intc)
-        cdef numpy.ndarray[double, ndim = 1] eta_K = numpy.ones(K, numpy.double)
-        cdef numpy.ndarray[double, ndim = 1] pi_K = numpy.random.dirichlet(numpy.ones(K) + 1e-1)
-        cdef numpy.ndarray[int, ndim = 1] zs_N = numpy.random.randint(K, size = N).astype(numpy.intc)
-        cdef numpy.ndarray[double, ndim = 3] alphas_SKD = numpy.ones((S, K, D), numpy.double) + 1e-1
-        cdef numpy.ndarray[double, ndim = 3] thetas_NSD = numpy.empty((N, S, D), numpy.double)
-        cdef numpy.ndarray[double, ndim = 1] log_posterior_K = numpy.empty(K, numpy.double)
-        cdef numpy.ndarray[int, ndim = 1] z_counts_K = numpy.empty(K, numpy.intc)
+        # fit model
+        (alphas_KSD, log_responsibilities_KN) = \
+            borg.statistics.dcm_matrix_mixture_estimate_ml(counts_NSD, K)
 
-        cdef unsigned int thetas_NSD_stride2 = thetas_NSD.strides[2]
-        cdef unsigned int alphas_SKD_stride2 = alphas_SKD.strides[2]
-        cdef unsigned int counts_NSD_stride2 = counts_NSD.strides[2]
-        cdef unsigned int log_posterior_K_stride0 = log_posterior_K.strides[0]
+        # extract RTD samples
+        #P = 8
+        T = N * K
+        samples_TSD = numpy.empty((T, S, D), numpy.double)
+        log_weights_T = numpy.empty(T, numpy.double)
+        features_TF = numpy.empty((T, F), numpy.double)
 
-        theta_samples = []
-
-        for i in xrange(burn_in + (stored - 1) * spacing + 1):
-            # sample multinomial components
-            for s in xrange(S):
-                for n in xrange(N):
-                    borg.statistics.post_dirichlet_rv(
-                        D,
-                        &thetas_NSD[n, s, 0], thetas_NSD_stride2,
-                        &alphas_SKD[s, zs_N[n], 0], alphas_SKD_stride2,
-                        &counts_NSD[n, s, 0], counts_NSD_stride2,
-                        )
-
-            thetas_NSD[n, s, thetas_NSD[n, s] < 1e-32] = 1e-32
-
-            # sample cluster assignments
-            for n in xrange(N):
-                total = 0.0
-
-                for k in xrange(K):
-                    log_posterior_K[k] = libc.math.log(pi_K[k])
-
-                    for s in xrange(S):
-                        log_posterior_K[k] += \
-                            borg.statistics.dirichlet_log_pdf_raw(
-                                D,
-                                &alphas_SKD[s, k, 0], alphas_SKD_stride2,
-                                &thetas_NSD[n, s, 0], thetas_NSD_stride2,
-                                )
-
-                    total = borg.statistics.log_plus(total, log_posterior_K[k])
-
-                for k in xrange(K):
-                    log_posterior_K[k] -= total
-
-                zs_N[n] = borg.statistics.categorical_rv_log_raw(K, &log_posterior_K[0], log_posterior_K_stride0)
-
-            # optimize the Dirichlets
-            for s in xrange(S):
-                for k in xrange(K):
-                    cluster_thetas_XD = thetas_NSD[numpy.nonzero(zs_N[:] == k)[0], s, :]
-
-                    if cluster_thetas_XD.size > 0:
-                        alphas_SKD[s, k, :] = borg.statistics.dirichlet_estimate_ml(cluster_thetas_XD)
-                    else:
-                        alphas_SKD[s, k, :] = numpy.random.gamma(1.1, 1, size = D)
-
-            alphas_SKD += 1e-32
-
-            # sample pis
+        for n in xrange(N):
             for k in xrange(K):
-                z_counts_K[k] = 0
+                t = n * K + k
+                #k = borg.statistics.categorical_rv_log(log_responsibilities_KN[:, n])
+                #k = numpy.argmax(log_responsibilities_KN[:, n])
 
-            for n in xrange(N):
-                z_counts_K[zs_N[n]] += 1
+                log_weights_T[t] = log_responsibilities_KN[k, n] - numpy.log(N)
+                features_TF[t, :] = features_NF[n, :]
 
-            pi_K[:] = numpy.random.dirichlet(eta_K + z_counts_K)
+                for s in xrange(S):
+                    samples_TSD[t, s, :] = alphas_KSD[k, s, :] + counts_NSD[n, s, :]
+                    samples_TSD[t, s, :] /= numpy.sum(samples_TSD[t, s, :])
 
-            # record a sample?
-            if burn_in <= i and (i - burn_in) % spacing == 0:
-                theta_samples.append(thetas_NSD.copy())
+                    #thetas = alphas_KSD[:, s, :] + counts_NSD[n, s, :]
+                    #thetas *= numpy.exp(log_responsibilities_KN[:, n])[..., None]
 
-                logger.info("recorded sample at Gibbs iteration %i", i)
+                    #samples_NSD[n, s, :] = numpy.sum(thetas, axis = 0)
+                    #samples_NSD[n, s, :] /= numpy.sum(samples_NSD[n, s, :])
 
-        return theta_samples
+                    borg.statistics.assert_weights(samples_TSD[t, s, :], axis = -1)
+
+                #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 200, threshold = 1000000):
+                    #print "# t =", t, "n =", n, "k =", k, "({0})".format(numpy.exp(log_responsibilities_KN[k, n]))
+                    #print counts_NSD[n]
+                    #print full_NSD[sorted(full_data.ids).index(sorted(run_data.ids)[n])]
+                    #print alphas_KSD[k]
+                    #print samples_TSD[t]
+
+        #raise SystemExit()
+
+        assert numpy.all(samples_TSD >= 0.0)
+
+        return \
+            MultinomialModel(
+                interval,
+                borg.statistics.to_log_survival(samples_TSD, axis = -1),
+                log_masses = borg.statistics.floored_log(samples_TSD),
+                features = features_TF,
+                )
 
 class LogNormalMixEstimator(object):
     def __init__(self, int K = 8):

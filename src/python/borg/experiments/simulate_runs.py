@@ -1,8 +1,12 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
+# XXX feature computation time
+
 import os.path
 import csv
 import uuid
+import random
+import sklearn
 import condor
 import borg
 
@@ -10,54 +14,90 @@ logger = borg.get_logger(__name__, default_level = "INFO")
 
 class PortfolioMaker(object):
     def __init__(self, portfolio_name):
+        name_parts = portfolio_name.split(":")
+
         self.name = portfolio_name
+        self.subname = name_parts[0]
+        self.variants = name_parts[1:]
 
-    def __call__(self, suite, train_data):
-        train_data = train_data.only_successful().collect_systematic([4])
+    def __call__(self, suite, train_data, instances):
+        #train_data = train_data.only_successful().collect_systematic([4])
+        #train_data = train_data.only_successful()
 
-        if self.name == "random":
+        # XXX
+        full_data = train_data
+        ids = sorted(train_data.run_lists, key = lambda _: random.random())[:instances]
+        train_data = train_data.filter(*ids)
+
+        if "10.sys" in self.variants:
+            train_data = train_data.collect_systematic([1, 0]).only_nonempty()
+        elif "20.sys" in self.variants:
+            train_data = train_data.collect_systematic([2, 0]).only_nonempty()
+        elif "10.ind" in self.variants:
+            train_data = train_data.collect_independent([1, 0]).only_nonempty()
+        #if "1" in self.variants:
+            #train_data = train_data.collect_systematic([1])
+        #elif "2" in self.variants:
+            #train_data = train_data.collect_systematic([2])
+        #elif "3" in self.variants:
+            #train_data = train_data.collect_systematic([3])
+        #elif "4" in self.variants:
+            #train_data = train_data.collect_systematic([4])
+        #elif "5" in self.variants:
+            #train_data = train_data.collect_systematic([5])
+        #elif "6" in self.variants:
+            #train_data = train_data.collect_systematic([6])
+
+        if self.subname == "random":
             portfolio = borg.portfolios.RandomPortfolio()
-        elif self.name == "uniform":
+        elif self.subname == "uniform":
             portfolio = borg.portfolios.UniformPortfolio()
-        elif self.name == "baseline":
+        elif self.subname == "baseline":
             portfolio = borg.portfolios.BaselinePortfolio(suite, train_data)
-        elif self.name == "oracle":
+        elif self.subname == "oracle":
             portfolio = borg.portfolios.OraclePortfolio()
         else:
-            if self.name.endswith("-mul"):
+            bins = 10
+
+            if self.subname.endswith("-mul"):
                 sampler = borg.models.MulSampler()
-                #sampler = borg.models.MulDirMixSampler()
                 model = \
                     borg.models.mean_posterior(
                         sampler,
                         train_data.solver_names,
                         train_data,
-                        bins = 60,
-                        chains = 1,
-                        samples_per_chain = 1,
+                        bins = bins,
                         )
+            elif self.subname.endswith("-dir"):
+                #sampler = borg.models.MulDirMixSampler()
                 #model = \
-                    #borg.models.posterior(
+                    #borg.models.mean_posterior(
                         #sampler,
                         #train_data.solver_names,
                         #train_data,
-                        #bins = 60,
+                        #bins = bins,
                         #)
-            elif self.name.endswith("-log"):
-                #model = borg.models.LogNormalMixEstimator()(train_data, 60)
-                model = borg.models.DiscreteLogNormalMixEstimator()(train_data, 60)
-            elif self.name.endswith("-mean"):
-                model = borg.models.DeterministicEstimator()(train_data, 60)
+                model = borg.models.MulDirMatMixEstimator()(train_data, bins, full_data)
+            elif self.subname.endswith("-log"):
+                #model = borg.models.LogNormalMixEstimator()(train_data, bins)
+                model = borg.models.DiscreteLogNormalMixEstimator()(train_data, bins)
+            elif self.subname.endswith("-mean"):
+                model = borg.models.DeterministicEstimator()(train_data, bins)
             else:
-                raise ValueError("unrecognized portfolio name: {0}".format(self.name))
+                raise ValueError("unrecognized portfolio subname: {0}".format(self.subname))
 
-            if self.name.startswith("preplanning-"):
+            if self.subname.startswith("preplanning-"):
                 portfolio = borg.portfolios.PreplanningPortfolio(suite, model)
-            elif self.name.startswith("probabilistic-"):
-                regress = borg.regression.LinearRegression(train_data, model)
+            elif self.subname.startswith("probabilistic-"):
+                if "plan" in self.variants:
+                    cluster = borg.regression.cluster_plan
+                else:
+                    cluster = borg.regression.cluster_kl
+
+                regress = borg.regression.ClusteredLogisticRegression(model, cluster = cluster)
                 portfolio = borg.portfolios.PureModelPortfolio(suite, model, regress)
             else:
-                raise ValueError("unrecognized portfolio name: {0}".format(self.name))
+                raise ValueError("unrecognized portfolio subname: {0}".format(self.subname))
 
         return borg.solver_io.RunningPortfolioFactory(portfolio, suite)
 
@@ -68,13 +108,17 @@ class SolverMaker(object):
     def __call__(self, suite, train_data):
         return suite.solvers[self.name]
 
-def simulate_run(run, maker, train_data, test_data):
+def simulate_run(run, maker, train_data, test_data, instances):
     """Simulate portfolio execution on a train/test split."""
+
+    # make explicit the number of test runs
+    #test_data = test_data.collect_systematic([8])
 
     split_id = uuid.uuid4()
     budget = test_data.common_budget
     suite = borg.fake.FakeSuite(test_data)
-    solver = maker(suite, train_data)
+    solver = maker(suite, train_data, instances)
+    successes = 0
     rows = []
 
     for instance_id in test_data.run_lists:
@@ -97,11 +141,21 @@ def simulate_run(run, maker, train_data, test_data):
 
             success_str = "TRUE" if succeeded else "FALSE"
 
-            rows.append([run["category"], instance, maker.name, budget, cpu_cost, success_str, None, split_id])
+            #rows.append([run["category"], maker.name, budget, cpu_cost, success_str, split_id, instances])
 
-    rows.append([run["category"], None, maker.name, budget, budget, "FALSE", None, split_id])
+            if succeeded:
+                successes += 1
 
-    return rows
+    #return rows
+
+    logger.info(
+        "%s had %i successes over %i instances",
+        maker.name,
+        successes,
+        len(test_data),
+        )
+
+    return [(run["category"], maker.name, instances, successes)]
 
 @borg.annotations(
     out_path = ("results CSV output path"),
@@ -120,7 +174,12 @@ def main(out_path, runs, repeats = 4, workers = 0, local = False):
     def yield_jobs():
         for run in runs:
             train_data = get_run_data(run["train_bundle"])
-            test_data = get_run_data(run["test_bundle"])
+
+            if run["test_bundle"] is "-":
+                validation = sklearn.cross_validation.KFold(len(train_data), repeats, indices = False)
+                data_sets = [(train_data.masked(v), train_data.masked(e)) for (v, e) in validation]
+            else:
+                data_sets = [(train_data, get_run_data(run["test_bundle"]))] * repeats
 
             if run["portfolio_name"] == "-":
                 makers = map(SolverMaker, train_data.solver_names)
@@ -128,13 +187,19 @@ def main(out_path, runs, repeats = 4, workers = 0, local = False):
                 makers = [PortfolioMaker(run["portfolio_name"])]
 
             for maker in makers:
-                for _ in xrange(repeats):
-                    yield (simulate_run, [run, maker, train_data, test_data])
+                for (train_data, test_data) in data_sets:
+                    #import numpy
+                    #for instances in map(int, map(round, numpy.r_[10.0:150.0:32j])):
+                    for instances in [60]:
+                        #for _ in xrange(16):
+                        for _ in [0]:
+                            yield (simulate_run, [run, maker, train_data, test_data, instances])
 
     with borg.util.openz(out_path, "wb") as out_file:
         writer = csv.writer(out_file)
 
-        writer.writerow(["category", "path", "solver", "budget", "cost", "success", "answer", "split"])
+        #writer.writerow(["category", "solver", "budget", "cost", "success", "split", "instances"])
+        writer.writerow(["category", "solver", "instances", "successes"])
 
         for (_, rows) in condor.do(yield_jobs(), workers, local):
             writer.writerows(rows)
