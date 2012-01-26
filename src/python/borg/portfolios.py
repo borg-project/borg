@@ -154,6 +154,7 @@ class PureModelPortfolio(object):
         self._regress = regress
         self._planner = planner
         self._solver_names = sorted(suite.solvers)
+        self._runs_limit = 256
 
     def __call__(self, task, suite, budget):
         """Run the portfolio."""
@@ -169,34 +170,36 @@ class PureModelPortfolio(object):
                 (predicted_weights,) = numpy.log(self._regress.predict([feature_values_sorted]))
                 initial_model = self._model.with_weights(predicted_weights)
 
-            print "feature computation took", accountant.total.cpu_seconds, "CPU seconds"
-
             # compute and execute a solver schedule
             plan = []
             failures = []
 
-            while True:
+            for i in xrange(self._runs_limit):
                 elapsed = accountant.total.cpu_seconds
 
                 if budget.cpu_seconds <= elapsed:
                     break
 
                 if len(plan) == 0:
-                    print "---- (re)planning ----"
                     model = initial_model.condition(failures)
-                    base_b = int(elapsed / model.interval)
-                    plan = self._planner.plan(model.log_survival[..., base_b:-1], model.log_weights)
+                    remaining = budget.cpu_seconds - elapsed
+                    remaining_b = int(numpy.ceil(remaining / model.interval))
+                    plan = \
+                        self._planner.plan(
+                            model.log_survival[..., :remaining_b],
+                            model.log_weights,
+                            )
 
                 (s, b) = plan.pop(0)
                 remaining = budget.cpu_seconds - accountant.total.cpu_seconds
-                duration = min(remaining, (base_b + b + 1) * model.interval)
+                duration = min(remaining, (b + 1) * model.interval)
                 process = suite.solvers[self._solver_names[s]].start(task)
                 answer = process.run_then_stop(duration)
 
                 if suite.domain.is_final(task, answer):
                     return answer
                 else:
-                    failures.append((s, base_b + b))
+                    failures.append((s, b))
 
             return None
 

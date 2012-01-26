@@ -175,8 +175,7 @@ class ClusteredLogisticRegression(object):
         self._regression = \
             sklearn.pipeline.Pipeline([
                 ("scaler", sklearn.preprocessing.Scaler()),
-                #("estimator", sklearn.linear_model.LogisticRegression(C = 1e-1)),
-                ("estimator", sklearn.neighbors.KNeighborsClassifier()),
+                ("estimator", sklearn.linear_model.LogisticRegression(C = 1e-1)),
                 ]) \
                 .fit(features_NF, self._labels)
 
@@ -190,33 +189,20 @@ class ClusteredLogisticRegression(object):
     def predict(self, features):
         """Predict RTD probabilities."""
 
-        #features = numpy.asarray(features)
-
-        #(M, F) = features.shape
-        #(N, K) = self._indicators.shape
-
-        #prediction = self._regression.predict_proba(features)
-        #weights = numpy.empty((M, N))
-
-        #for m in xrange(M):
-            #for n in xrange(N):
-                #k = self._labels[n]
-                #p_z = prediction[m, self._indices[k]]
-
-                #weights[m, n] = p_z / self._sizes[k]
-
-        #return weights
-
         features = numpy.asarray(features)
 
         (M, F) = features.shape
         (N, K) = self._indicators.shape
 
-        neighbors = self._regression.kneighbors(features, return_distance = False)
-        weights = numpy.zeros((M, N))
+        prediction = self._regression.predict_proba(features)
+        weights = numpy.empty((M, N))
 
         for m in xrange(M):
-            weights[neighbors[m]] = 1.0 / neighbors.shape[1]
+            for n in xrange(N):
+                k = self._labels[n]
+                p_z = prediction[m, self._indices[k]]
+
+                weights[m, n] = p_z / self._sizes[k]
 
         return weights
 

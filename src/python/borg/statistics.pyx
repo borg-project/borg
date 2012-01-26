@@ -1107,7 +1107,7 @@ def dcm_matrix_mixture_estimate_ml(counts, int K):
     cdef int n
     cdef int s
 
-    for i in xrange(256):
+    for i in xrange(128):
         # compute new responsibilities
         for k in xrange(K):
             for n in xrange(N):
@@ -1148,9 +1148,11 @@ def dcm_matrix_mixture_estimate_ml(counts, int K):
 
         for k in xrange(K):
             for s in xrange(S):
-                dcm_estimate_ml_wallach_raw(components_KSD[k, s, :], counts_NSD[:, s, :], responsibilities_KN[k])
-
+                #dcm_estimate_ml_wallach_raw(components_KSD[k, s, :], counts_NSD[:, s, :], responsibilities_KN[k])
                 #components_KSD[k, s, :] += 1e-16
+
+                components_KSD[k, s, :] = numpy.sum((counts_NSD[:, s, :] + 1e-4) * responsibilities_KN[k, :, None], axis = 0)
+                #components_KSD[k, s, :] *= 1e-2 / numpy.sum(components_KSD[k, s, :])
                 components_KSD[k, s, :] *= 1e6 / numpy.sum(components_KSD[k, s, :])
 
     assert numpy.all(numpy.isfinite(components_KSD))
@@ -1366,16 +1368,25 @@ def discrete_log_normal_matrix_mixture_estimate_ml(counts, double terminus, int 
 
     # initialization
     cdef numpy.ndarray[int, ndim = 3] counts_NSD = numpy.asarray(counts, dtype = numpy.intc)
-    cdef numpy.ndarray[double, ndim = 2] mus_KS = numpy.random.rand(K, S)
+    cdef numpy.ndarray[double, ndim = 2] mus_KS = numpy.random.rand(K, S) * 10.0
     cdef numpy.ndarray[double, ndim = 2] sigmas_KS = numpy.random.rand(K, S)
     cdef numpy.ndarray[double, ndim = 2] thetas_KS = numpy.zeros((K, S))
     cdef numpy.ndarray[double, ndim = 3] ps_KSD = numpy.empty((K, S, D))
     cdef numpy.ndarray[double, ndim = 2] log_densities_KN = numpy.empty((K, N), numpy.double)
 
-    log_responsibilities_KN = numpy.zeros((K, N)) - INFINITY
+    #log_responsibilities_KN = numpy.zeros((K, N)) - INFINITY
 
-    for k in xrange(K):
-        log_responsibilities_KN[k, numpy.random.randint(N)] = 0.0
+    #strings = map(str, counts_NSD)
+    #uniques = list(set(strings))
+    #indices = dict(zip(strings, xrange(N)))
+
+    #for k in xrange(K):
+        #n = indices[uniques[k % len(uniques)]]
+
+        #log_responsibilities_KN[k, n] = 0.0
+
+        #print "*** initializing", k
+        #print counts_NSD[n]
 
     log_weights_K = numpy.zeros(K) - libc.math.log(K)
     log_weights_K -= numpy.logaddexp.reduce(log_weights_K)
@@ -1386,29 +1397,6 @@ def discrete_log_normal_matrix_mixture_estimate_ml(counts, double terminus, int 
     cdef int counts_NSD_stride2 = counts_NSD.strides[2]
 
     for i in xrange(64):
-        # compute new components (M step)
-        for k in xrange(K):
-            for s in xrange(S):
-                ll = \
-                    DiscreteLogNormalObjective(
-                        counts_NSD[:, s, :],
-                        terminus,
-                        log_responsibilities_KN[k, :],
-                        )
-                ((mus_KS[k, s], sigmas_KS[k, s], thetas_KS[k, s]), _, _) = \
-                    scipy.optimize.fmin_l_bfgs_b(
-                        ll.objective,
-                        [mus_KS[k, s], sigmas_KS[k, s], thetas_KS[k, s]],
-                        approx_grad = True,
-                        bounds = [
-                            (None, None),
-                            (1e-4, None),
-                            (0.0, terminus),
-                            ],
-                        )
-
-                #print "@", k, "(mu = {0}; sigma = {1}; theta = {2})".format(mus_K[k], sigmas_K[k], thetas_K[k])
-
         # compute new responsibilities (E step)
         log_densities_KN[:] = log_weights_K[..., None]
 
@@ -1450,11 +1438,28 @@ def discrete_log_normal_matrix_mixture_estimate_ml(counts, double terminus, int 
 
         assert not numpy.isnan(ll)
 
-    with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 200, threshold = 1000000):
-        print "!@#!@#"
-        print mus_KS
-        print sigmas_KS
-        print thetas_KS
+        # compute new components (M step)
+        for k in xrange(K):
+            for s in xrange(S):
+                ll = \
+                    DiscreteLogNormalObjective(
+                        counts_NSD[:, s, :],
+                        terminus,
+                        log_responsibilities_KN[k, :],
+                        )
+                ((mus_KS[k, s], sigmas_KS[k, s], thetas_KS[k, s]), _, _) = \
+                    scipy.optimize.fmin_l_bfgs_b(
+                        ll.objective,
+                        [mus_KS[k, s], sigmas_KS[k, s], thetas_KS[k, s]],
+                        approx_grad = True,
+                        bounds = [
+                            (None, None),
+                            (1e-4, None),
+                            (0.0, terminus),
+                            ],
+                        )
+
+                #print "@", k, "(mu = {0}; sigma = {1}; theta = {2})".format(mus_K[k], sigmas_K[k], thetas_K[k])
 
     return (ps_KSD, log_responsibilities_KN)
 

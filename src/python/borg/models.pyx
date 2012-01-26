@@ -340,7 +340,7 @@ def mul_dir_mix_fit(counts, int K):
     return [samples_TSD]
 
 class MulDirMatMixEstimator(object):
-    def __init__(self, K = 128):
+    def __init__(self, K = 32):
         self._K = K
 
     def __call__(self, run_data, bins, full_data):
@@ -359,16 +359,63 @@ class MulDirMatMixEstimator(object):
             borg.statistics.dcm_matrix_mixture_estimate_ml(counts_NSD, K)
 
         # extract RTD samples
-        T = N * K
+        #T = N * K
         #T = N
+        T = K
         samples_TSD = numpy.empty((T, S, D), numpy.double)
         log_weights_T = numpy.empty(T, numpy.double)
         features_TF = numpy.empty((T, F), numpy.double)
+
+        samples_TSD = alphas_KSD / numpy.sum(alphas_KSD, axis = -1)[..., None] # XXX
+        log_weights_T = numpy.logaddexp.reduce(log_responsibilities_KN, axis = -1) - numpy.log(N)
+
+        #for t in xrange(T):
+            ##for s in xrange(S):
+                ##z = numpy.argmax(samples_TSD[t, s])
+                ##samples_TSD[t, s, :] = 0
+                ##samples_TSD[t, s, z] = 1
+
+            #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 200, threshold = 1000000):
+                #print
+                #print "@ component", t, "; weight", numpy.exp(log_weights_T[t]) * N
+                #print repr(alphas_KSD[t])
+                #print samples_TSD[t]
+                #print "----"
+                #print counts_NSD[numpy.argsort(log_responsibilities_KN[t, :])[-4:][::-1]]
+
+        return \
+            MultinomialModel(
+                interval,
+                borg.statistics.to_log_survival(samples_TSD, axis = -1),
+                log_masses = borg.statistics.floored_log(samples_TSD),
+                log_weights = log_weights_T,
+                #features = features_TF,
+                )
 
         for n in xrange(N):
             #t = n
             #k = borg.statistics.categorical_rv_log(log_responsibilities_KN[:, n])
             #k = numpy.argmax(log_responsibilities_KN[:, n])
+
+            #log_weights_T[t] = -numpy.log(T)
+
+            #map_KSD = alphas_KSD + counts_NSD[None, n]
+            #map_KSD /= numpy.sum(map_KSD, axis = -1)[..., None]
+            #map_KSD *= numpy.exp(log_responsibilities_KN[:, n])[..., None, None]
+            #map_SD = numpy.sum(map_KSD, axis = 0)
+
+            #for s in xrange(S):
+                ##samples_TSD[t, s, :] = 0.0
+                ##samples_TSD[t, s, numpy.argmax(map_SD[s, :])] = 1.0
+                #samples_TSD[t, s, :] = map_SD[s, :]
+
+                #borg.statistics.assert_weights(samples_TSD[t, s, :], axis = -1)
+
+            #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 200, threshold = 1000000):
+                #print "# t =", t, "n =", n
+                #print counts_NSD[n]
+                #print full_NSD[sorted(full_data.ids).index(sorted(run_data.ids)[n])]
+                #print samples_TSD[t]
 
             for k in xrange(K):
                 t = n * K + k
@@ -377,8 +424,10 @@ class MulDirMatMixEstimator(object):
                 features_TF[t, :] = features_NF[n, :]
 
                 for s in xrange(S):
-                    samples_TSD[t, s, :] = alphas_KSD[k, s, :] + counts_NSD[n, s, :]
-                    samples_TSD[t, s, :] /= numpy.sum(samples_TSD[t, s, :])
+                    #samples_TSD[t, s, :] = alphas_KSD[k, s, :] + counts_NSD[n, s, :]
+                    #samples_TSD[t, s, :] /= numpy.sum(samples_TSD[t, s, :])
+                    samples_TSD[t, s, :] = 0.0
+                    samples_TSD[t, s, numpy.argmax(alphas_KSD[k, s, :])] = 1.0
 
                     #thetas = alphas_KSD[:, s, :] + counts_NSD[n, s, :]
                     #thetas *= numpy.exp(log_responsibilities_KN[:, n])[..., None]
@@ -388,12 +437,13 @@ class MulDirMatMixEstimator(object):
 
                     borg.statistics.assert_weights(samples_TSD[t, s, :], axis = -1)
 
-                #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 200, threshold = 1000000):
-                    #print "# t =", t, "n =", n, "k =", k, "({0})".format(numpy.exp(log_responsibilities_KN[k, n]))
-                    #print counts_NSD[n]
-                    #print full_NSD[sorted(full_data.ids).index(sorted(run_data.ids)[n])]
-                    #print alphas_KSD[k]
-                    #print samples_TSD[t]
+                #if numpy.exp(log_responsibilities_KN[k, n]) > 1e-1:
+                    #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 200, threshold = 1000000):
+                        #print "# t =", t, "n =", n, "k =", k, "({0})".format(numpy.exp(log_responsibilities_KN[k, n]))
+                        #print counts_NSD[n]
+                        #print full_NSD[sorted(full_data.ids).index(sorted(run_data.ids)[n])]
+                        #print alphas_KSD[k]
+                        #print samples_TSD[t]
 
         #raise SystemExit()
 
@@ -404,6 +454,7 @@ class MulDirMatMixEstimator(object):
                 interval,
                 borg.statistics.to_log_survival(samples_TSD, axis = -1),
                 log_masses = borg.statistics.floored_log(samples_TSD),
+                log_weights = log_weights_T,
                 features = features_TF,
                 )
 
@@ -471,11 +522,12 @@ class DiscreteLogNormalMatMixEstimator(object):
     def __init__(self, int K = 16):
         self._K = K
 
-    def __call__(self, run_data, bins):
+    def __call__(self, run_data, bins, full_data):
         """Fit parameters of the log-normal linked mixture model."""
 
         # ...
         counts_NSD = run_data.to_bins_array(run_data.solver_names, bins)
+        full_NSD = full_data.to_bins_array(full_data.solver_names, bins)
         budget = run_data.get_common_budget()
         interval = budget / bins
 
@@ -492,9 +544,9 @@ class DiscreteLogNormalMatMixEstimator(object):
 
         borg.statistics.assert_log_weights(log_responsibilities_KN, axis = 0)
 
-        #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 200, threshold = 1000000):
-            #print "&&&&"
-            #print ps_KSD
+        with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 200, threshold = 1000000):
+            print "&&&&"
+            print ps_KSD
 
         samples_NSD = numpy.empty((N, S, D))
 
@@ -511,9 +563,10 @@ class DiscreteLogNormalMatMixEstimator(object):
             with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 200, threshold = 1000000):
                 print "# instance", n
                 print counts_NSD[n]
+                print full_NSD[sorted(full_data.ids).index(sorted(run_data.ids)[n])]
                 print samples_NSD[n]
 
-        raise SystemExit()
+        #raise SystemExit()
 
         return \
             MultinomialModel(

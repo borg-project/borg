@@ -2,7 +2,6 @@
 
 import os.path
 import csv
-import random
 import itertools
 import collections
 import numpy
@@ -152,11 +151,11 @@ class RunData(object):
         sampled = RunData(self.solver_names, common_budget = self.common_budget)
         iter_count = itertools.cycle(counts)
 
-        for id_ in sorted(self.ids, key = lambda _: random.random()):
+        for id_ in sorted(self.ids, key = lambda _: numpy.random.rand()):
             count = next(iter_count)
 
             for solver in self.solver_names:
-                runs = sorted(self.runs_on(id_, solver), key = lambda _: random.random())
+                runs = sorted(self.runs_on(id_, solver), key = lambda _: numpy.random.rand())
 
                 assert len(runs) >= count
 
@@ -174,9 +173,9 @@ class RunData(object):
         for solver in self.solver_names:
             iter_count = itertools.cycle(counts)
 
-            for id_ in sorted(self.ids, key = lambda _: random.random()):
+            for id_ in sorted(self.ids, key = lambda _: numpy.random.rand()):
                 count = next(iter_count)
-                runs = sorted(self.runs_on(id_, solver), key = lambda _: random.random())
+                runs = sorted(self.runs_on(id_, solver), key = lambda _: numpy.random.rand())
 
                 sampled.add_runs((id_, run) for run in runs[:count])
 
