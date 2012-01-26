@@ -71,10 +71,12 @@ class RunData(object):
         assert id_ not in self.feature_vectors
         assert isinstance(vector, collections.Mapping)
 
+        names = [k for k in vector if k != "cpu_cost"]
+
         if self.common_features is None:
-            self.common_features = sorted(vector)
+            self.common_features = sorted(names)
         else:
-            assert self.common_features == sorted(vector)
+            assert self.common_features == sorted(names)
 
         self.feature_vectors[id_] = vector
 
@@ -224,12 +226,12 @@ class RunData(object):
 
         assert set(self.feature_vectors) == set(self.run_lists)
 
-        N = len(self.feature_vectors)
+        N = len(self.ids)
         F = len(self.common_features)
 
         feature_values_NF = numpy.empty((N, F), numpy.double)
 
-        for (n, instance_id) in enumerate(sorted(self.feature_vectors)):
+        for (n, instance_id) in enumerate(sorted(self.ids)):
             features = self.feature_vectors[instance_id]
 
             for (f, name) in enumerate(self.common_features):
@@ -377,9 +379,6 @@ class RunData(object):
             feature_records = numpy.recfromcsv("{0}.features.csv".format(path))
             feature_dict = dict(zip(feature_records.dtype.names, feature_records.tolist()))
 
-            del feature_dict["cpu_cost"]
-            #feature_dict = {"nvars": feature_dict["nvars"]}
-
             training.add_feature_vector(path, feature_dict)
 
         return training
@@ -437,8 +436,6 @@ class RunData(object):
 
                 for row in csv_reader:
                     feature_dict = dict(zip(columns[1:], map(float, row[1:])))
-
-                    del feature_dict["cpu_cost"]
 
                     run_data.add_feature_vector(row[0], feature_dict)
 

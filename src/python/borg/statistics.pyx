@@ -1150,190 +1150,13 @@ def dcm_matrix_mixture_estimate_ml(counts, int K):
             for s in xrange(S):
                 dcm_estimate_ml_wallach_raw(components_KSD[k, s, :], counts_NSD[:, s, :], responsibilities_KN[k])
 
-                components_KSD[k, s, :] += 1e-16
+                #components_KSD[k, s, :] += 1e-16
+                components_KSD[k, s, :] *= 1e6 / numpy.sum(components_KSD[k, s, :])
 
     assert numpy.all(numpy.isfinite(components_KSD))
     assert_log_weights(log_responsibilities_KN, axis = 0)
 
     return (components_KSD, log_responsibilities_KN)
-
-cdef class RightCensoredLogNormalPartial(object):
-    """Weighted data l-l under a right-censored log-normal distribution."""
-
-    cdef numpy.ndarray _samples
-    cdef numpy.ndarray _ns
-    cdef numpy.ndarray _censored
-    cdef double _terminus
-    cdef numpy.ndarray _log_responsibilities
-    cdef int _R
-    cdef int _N
-
-    def __init__(self, samples, ns, censored, terminus, log_responsibilities):
-        self._samples = samples
-        self._ns = ns
-        self._censored = censored
-        self._terminus = terminus
-        self._log_responsibilities = log_responsibilities
-        self._R = samples.shape[0]
-        self._N = log_responsibilities.shape[0]
-
-    @cython.cdivision(True)
-    @cython.wraparound(False)
-    @cython.boundscheck(False)
-    @cython.infer_types(True)
-    def objective(self, arguments):
-        """Compute the log likelihood."""
-
-        # ...
-        cdef double mu = arguments[0]
-        cdef double sigma = arguments[1]
-        cdef double theta = arguments[2]
-
-        cdef numpy.ndarray[double, ndim = 1] samples_R = self._samples
-        cdef numpy.ndarray[int, ndim = 1] ns_R = self._ns
-        cdef numpy.ndarray[int, ndim = 1] censored_N = self._censored
-        cdef numpy.ndarray[double, ndim = 1] log_responsibilities_N = self._log_responsibilities
-
-        # compute the density
-        cdef double log_u = libc.math.log(1e-2)
-        cdef double log_1_u = log_minus(0.0, log_u)
-        cdef double log_fail_p = log_1_u + log_minus(0.0, log_normal_log_cdf(mu, sigma, theta, self._terminus))
-
-        cdef int r = 0
-        cdef int n
-
-        if log_fail_p == -INFINITY:
-            log_fail_p = -1e6
-
-        cdef numpy.ndarray[double, ndim = 1] log_densities_N = numpy.zeros(self._N)
-
-        for r in xrange(self._R):
-            n = ns_R[r]
-
-            log_densities_N[n] += \
-                log_plus(
-                    log_u - libc.math.log(self._terminus),
-                    log_1_u + log_normal_log_pdf(mu, sigma, theta, samples_R[r] + 1e-8),
-                    )
-
-        cdef double log_density = 0.0
-
-        for n in xrange(self._N):
-            log_densities_N[n] += censored_N[n] * log_fail_p
-
-            log_density += libc.math.exp(log_responsibilities_N[n]) * log_densities_N[n]
-
-        return -log_density
-
-@cython.wraparound(False)
-@cython.infer_types(True)
-@cython.boundscheck(False)
-@cython.cdivision(True)
-def log_normal_mixture_estimate_ml_em(times, ns, censored, double terminus, int K):
-    """Fit a right-censored log-normal mixture using EM."""
-
-    # mise en place
-    cdef int R = times.shape[0]
-    cdef int N = censored.shape[0]
-
-    assert len(times) == len(ns)
-
-    # initialization
-    log_terminus = libc.math.log(terminus)
-
-    thetas = [0.0] * (K / 3)
-    thetas += [1000.0] * (K / 3)
-    thetas += [2000.0] * (K - len(thetas))
-
-    cdef numpy.ndarray[double, ndim = 1] mus_K = numpy.zeros(K)
-    cdef numpy.ndarray[double, ndim = 1] sigmas_K = numpy.random.rand(K) * 10.0
-    cdef numpy.ndarray[double, ndim = 1] thetas_K = numpy.array(thetas)
-    cdef numpy.ndarray[double, ndim = 2] log_densities_KN = numpy.empty((K, N), numpy.double)
-    cdef numpy.ndarray[double, ndim = 1] times_R = times + 1.0
-    cdef numpy.ndarray[int, ndim = 1] ns_R = numpy.asarray(ns, dtype = numpy.intc)
-    cdef numpy.ndarray[int, ndim = 1] censored_N = numpy.asarray(censored, dtype = numpy.intc)
-
-    log_weights_K = numpy.zeros(K) - libc.math.log(K)
-
-    # expectation maximization
-    cdef int i
-    cdef int k
-    cdef int n
-    cdef double previous_ll = -INFINITY
-
-    for i in xrange(128):
-        print ">>>>", i
-
-        # compute new responsibilities (E step)
-        for k in xrange(K):
-            log_u = libc.math.log(1e-2)
-            log_1_u = log_minus(0.0, log_u)
-            log_fail_p = log_1_u + log_minus(0.0, log_normal_log_cdf(mus_K[k], sigmas_K[k], thetas_K[k], terminus))
-
-            print "@", k, "(mu = {0}; sigma = {1}; theta = {2}) [f = {3}] :: {4}".format(mus_K[k], sigmas_K[k], thetas_K[k], numpy.exp(log_fail_p), numpy.exp(log_weights_K[k]))
-
-            if log_fail_p == -INFINITY:
-                log_fail_p = -1e6
-
-            for n in xrange(N):
-                log_densities_KN[k, n] = log_weights_K[k] + censored_N[n] * log_fail_p
-
-            for r in xrange(R):
-                log_densities_KN[k, ns_R[r]] += \
-                    log_plus(
-                        log_u - log_terminus,
-                        log_1_u + log_normal_log_pdf(mus_K[k], sigmas_K[k], thetas_K[k], times_R[r] + 1e-8),
-                        )
-
-        log_responsibilities_KN = numpy.copy(log_densities_KN)
-        log_responsibilities_KN -= numpy.logaddexp.reduce(log_responsibilities_KN, axis = 0)
-
-        log_weights_K = numpy.logaddexp.reduce(log_responsibilities_KN, axis = 1)
-        log_weights_K -= numpy.log(N)
-
-        assert_log_weights(log_weights_K)
-        assert_log_weights(log_responsibilities_KN, axis = 0)
-
-        # compute ll and check for convergence
-        ll_each = numpy.logaddexp.reduce(log_densities_KN, axis = 0)
-        ll = numpy.sum(ll_each)
-
-        delta_ll = ll - previous_ll
-        previous_ll = ll
-
-        if delta_ll >= 0.0:
-            logger.debug("ll at EM iteration %i is %f", i, ll)
-
-            if delta_ll <= 1e-8:
-                break
-        else:
-            logger.warning("ll at EM iteration %i is %f <-- DECLINE", i, ll)
-
-        assert not numpy.isnan(ll)
-
-        # compute new components (M step)
-        for k in xrange(K):
-            ll = \
-                RightCensoredLogNormalPartial(
-                    times_R,
-                    ns_R,
-                    censored_N,
-                    terminus,
-                    log_responsibilities_KN[k, :],
-                    )
-            ((mus_K[k], sigmas_K[k], thetas_K[k]), _, _) = \
-                scipy.optimize.fmin_l_bfgs_b(
-                    ll.objective,
-                    [mus_K[k], sigmas_K[k], thetas_K[k]],
-                    approx_grad = True,
-                    bounds = [
-                        (None, None),
-                        (1e-4, None),
-                        (0.0, max(0.0, numpy.max(times_R) - 1e-4)),
-                        ]
-                    )
-
-    return (mus_K, sigmas_K, thetas_K, log_responsibilities_KN)
 
 @cython.cdivision(True)
 @cython.wraparound(False)
@@ -1527,4 +1350,111 @@ def discrete_log_normal_mixture_estimate_ml(counts, double terminus, int K):
         assert not numpy.isnan(ll)
 
     return (ps_KD, log_responsibilities_KN)
+
+def discrete_log_normal_matrix_mixture_estimate_ml(counts, double terminus, int K):
+    """Fit a discretized right-censored log-normal mixture using EM."""
+
+    # mise en place
+    cdef int N = counts.shape[0]
+    cdef int S = counts.shape[1]
+    cdef int D = counts.shape[2]
+
+    cdef int i
+    cdef int k
+    cdef int n
+    cdef int s
+
+    # initialization
+    cdef numpy.ndarray[int, ndim = 3] counts_NSD = numpy.asarray(counts, dtype = numpy.intc)
+    cdef numpy.ndarray[double, ndim = 2] mus_KS = numpy.random.rand(K, S)
+    cdef numpy.ndarray[double, ndim = 2] sigmas_KS = numpy.random.rand(K, S)
+    cdef numpy.ndarray[double, ndim = 2] thetas_KS = numpy.zeros((K, S))
+    cdef numpy.ndarray[double, ndim = 3] ps_KSD = numpy.empty((K, S, D))
+    cdef numpy.ndarray[double, ndim = 2] log_densities_KN = numpy.empty((K, N), numpy.double)
+
+    log_responsibilities_KN = numpy.zeros((K, N)) - INFINITY
+
+    for k in xrange(K):
+        log_responsibilities_KN[k, numpy.random.randint(N)] = 0.0
+
+    log_weights_K = numpy.zeros(K) - libc.math.log(K)
+    log_weights_K -= numpy.logaddexp.reduce(log_weights_K)
+
+    # expectation maximization
+    cdef double previous_ll = -INFINITY
+    cdef int ps_KSD_stride2 = ps_KSD.strides[2]
+    cdef int counts_NSD_stride2 = counts_NSD.strides[2]
+
+    for i in xrange(64):
+        # compute new components (M step)
+        for k in xrange(K):
+            for s in xrange(S):
+                ll = \
+                    DiscreteLogNormalObjective(
+                        counts_NSD[:, s, :],
+                        terminus,
+                        log_responsibilities_KN[k, :],
+                        )
+                ((mus_KS[k, s], sigmas_KS[k, s], thetas_KS[k, s]), _, _) = \
+                    scipy.optimize.fmin_l_bfgs_b(
+                        ll.objective,
+                        [mus_KS[k, s], sigmas_KS[k, s], thetas_KS[k, s]],
+                        approx_grad = True,
+                        bounds = [
+                            (None, None),
+                            (1e-4, None),
+                            (0.0, terminus),
+                            ],
+                        )
+
+                #print "@", k, "(mu = {0}; sigma = {1}; theta = {2})".format(mus_K[k], sigmas_K[k], thetas_K[k])
+
+        # compute new responsibilities (E step)
+        log_densities_KN[:] = log_weights_K[..., None]
+
+        for k in xrange(K):
+            for s in xrange(S):
+                ps_KSD[k, s, :] = discretize_log_normal(D, mus_KS[k, s], sigmas_KS[k, s], thetas_KS[k, s], terminus)
+
+                for n in xrange(N):
+                    log_densities_KN[k, n] += \
+                        multinomial_log_pmf_raw(
+                            D,
+                            &ps_KSD[k, s, 0], ps_KSD_stride2,
+                            &counts_NSD[n, s, 0], counts_NSD_stride2,
+                            )
+
+        log_responsibilities_KN = numpy.copy(log_densities_KN)
+        log_responsibilities_KN -= numpy.logaddexp.reduce(log_responsibilities_KN, axis = 0)
+
+        log_weights_K = numpy.logaddexp.reduce(log_responsibilities_KN, axis = 1)
+        log_weights_K -= numpy.log(N)
+
+        assert_log_weights(log_weights_K)
+        assert_log_weights(log_responsibilities_KN, axis = 0)
+
+        # compute ll and check for convergence
+        ll_each = numpy.logaddexp.reduce(log_densities_KN, axis = 0)
+        ll = numpy.sum(ll_each)
+
+        delta_ll = ll - previous_ll
+        previous_ll = ll
+
+        if delta_ll >= 0.0:
+            logger.debug("ll at EM iteration %i is %f", i, ll)
+
+            if delta_ll <= 1e-8:
+                break
+        else:
+            logger.warning("ll at EM iteration %i is %f <-- DECLINE", i, ll)
+
+        assert not numpy.isnan(ll)
+
+    with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 200, threshold = 1000000):
+        print "!@#!@#"
+        print mus_KS
+        print sigmas_KS
+        print thetas_KS
+
+    return (ps_KSD, log_responsibilities_KN)
 

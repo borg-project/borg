@@ -5,6 +5,7 @@ import numpy
 import borg
 
 cimport cython
+cimport libc.math
 cimport numpy
 cimport borg.statistics
 
@@ -78,11 +79,97 @@ def knapsack_plan(log_survival_WSB, log_weights_W, give_log_fail = False):
     else:
         return plan
 
+@cython.profile(False)
+cdef double log_plus(double x, double y):
+    """
+    Return log(x + y) given log(x) and log(y); see [1].
+
+    [1] Digital Filtering Using Logarithmic Arithmetic. Kingsbury and Rayner, 1970.
+    """
+
+    if x == -INFINITY and y == -INFINITY:
+        return -INFINITY
+    elif x >= y:
+        return x + libc.math.log(1.0 + libc.math.exp(y - x))
+    else:
+        return y + libc.math.log(1.0 + libc.math.exp(x - y))
+
+@cython.infer_types(True)
+@cython.wraparound(False)
+@cython.boundscheck(False)
+def knapsack_plan_fast(log_survival, log_weights):
+    """Compute a plan."""
+
+    # prepare
+    cdef int W
+    cdef int S
+    cdef int B
+
+    (W, S, B) = log_survival.shape
+
+    # generate the value table and associated policy
+    log_survival_swapped = numpy.asarray(log_survival.swapaxes(0, 1).swapaxes(1, 2), order = "C")
+
+    cdef numpy.ndarray[double, ndim = 3] log_survival_SBW = log_survival_swapped
+    cdef numpy.ndarray[double, ndim = 1] log_weights_W = numpy.asarray(log_weights, order = "C")
+    cdef numpy.ndarray[double, ndim = 2] values_B1W = numpy.zeros((B + 1, W))
+    cdef numpy.ndarray[int, ndim = 1] policy_s_B = numpy.empty(B, numpy.intc)
+    cdef numpy.ndarray[int, ndim = 1] policy_c_B = numpy.empty(B, numpy.intc)
+
+    cdef double post_log
+    cdef double best_post_log
+    cdef double v
+    cdef int best_s
+    cdef int best_c
+    cdef int b
+    cdef int s
+    cdef int c
+    cdef int w
+
+    for b in xrange(1, B + 1):
+        best_s = 0
+        best_c = 0
+        best_post_log = INFINITY
+
+        for s in xrange(S):
+            for c in xrange(b):
+                post_log = -INFINITY
+
+                for w in xrange(W):
+                    v = log_weights_W[w] + log_survival_SBW[s, c, w] + values_B1W[b - c - 1, w]
+
+                    post_log = log_plus(post_log, v)
+
+                if post_log < best_post_log:
+                    best_s = s
+                    best_c = c
+                    best_post_log = post_log
+
+        for w in xrange(W):
+            values_B1W[b, w] = log_survival_SBW[best_s, best_c, w] + values_B1W[b - best_c - 1, w]
+
+        policy_s_B[b - 1] = best_s
+        policy_c_B[b - 1] = best_c
+
+    # build a plan from the policy
+    plan = []
+    b = B
+
+    while b > 0:
+        s = policy_s_B[b - 1]
+        c = policy_c_B[b - 1]
+        b -= c + 1
+
+        plan.append((s, c))
+
+    return plan
+
 class KnapsackPlanner(Planner):
     """Discretizing dynamic-programming planner."""
 
     def __init__(self):
-        Planner.__init__(self, knapsack_plan)
+        #Planner.__init__(self, knapsack_plan)
+        Planner.__init__(self, knapsack_plan_fast)
 
 def max_length_knapsack_plan(max_length, log_survival_WSB, log_weights_W):
     """Compute a plan subject to a maximum-length constraint."""
@@ -408,4 +495,6 @@ class ResumptionPlanner(object):
         # repeat
         # XXX
         pass
+
+default = ReorderingPlanner(KnapsackPlanner())
 

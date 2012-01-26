@@ -26,15 +26,18 @@ class PortfolioMaker(object):
 
         # XXX
         full_data = train_data
-        ids = sorted(train_data.run_lists, key = lambda _: random.random())[:instances]
-        train_data = train_data.filter(*ids)
+
+        if instances is not None:
+            ids = sorted(train_data.run_lists, key = lambda _: random.random())[:instances]
+            train_data = train_data.filter(*ids)
 
         if "10.sys" in self.variants:
             train_data = train_data.collect_systematic([1, 0]).only_nonempty()
-        elif "20.sys" in self.variants:
-            train_data = train_data.collect_systematic([2, 0]).only_nonempty()
+        elif "2000.sys" in self.variants:
+            train_data = train_data.collect_systematic([2, 0, 0, 0]).only_nonempty()
         elif "10.ind" in self.variants:
             train_data = train_data.collect_independent([1, 0]).only_nonempty()
+
         #if "1" in self.variants:
             #train_data = train_data.collect_systematic([1])
         #elif "2" in self.variants:
@@ -57,17 +60,10 @@ class PortfolioMaker(object):
         elif self.subname == "oracle":
             portfolio = borg.portfolios.OraclePortfolio()
         else:
-            bins = 10
+            bins = 60
 
             if self.subname.endswith("-mul"):
-                sampler = borg.models.MulSampler()
-                model = \
-                    borg.models.mean_posterior(
-                        sampler,
-                        train_data.solver_names,
-                        train_data,
-                        bins = bins,
-                        )
+                model = borg.models.MulEstimator()(train_data, bins, full_data)
             elif self.subname.endswith("-dir"):
                 #sampler = borg.models.MulDirMixSampler()
                 #model = \
@@ -80,21 +76,17 @@ class PortfolioMaker(object):
                 model = borg.models.MulDirMatMixEstimator()(train_data, bins, full_data)
             elif self.subname.endswith("-log"):
                 #model = borg.models.LogNormalMixEstimator()(train_data, bins)
-                model = borg.models.DiscreteLogNormalMixEstimator()(train_data, bins)
-            elif self.subname.endswith("-mean"):
-                model = borg.models.DeterministicEstimator()(train_data, bins)
+                #model = borg.models.DiscreteLogNormalMixEstimator()(train_data, bins)
+                model = borg.models.DiscreteLogNormalMatMixEstimator()(train_data, bins)
             else:
                 raise ValueError("unrecognized portfolio subname: {0}".format(self.subname))
 
             if self.subname.startswith("preplanning-"):
                 portfolio = borg.portfolios.PreplanningPortfolio(suite, model)
+                #portfolio = borg.portfolios.PureModelPortfolio(suite, model)
             elif self.subname.startswith("probabilistic-"):
-                if "plan" in self.variants:
-                    cluster = borg.regression.cluster_plan
-                else:
-                    cluster = borg.regression.cluster_kl
-
-                regress = borg.regression.ClusteredLogisticRegression(model, cluster = cluster)
+                #regress = borg.regression.ClusteredLogisticRegression(model)
+                regress = borg.regression.NeighborsRegression(model)
                 portfolio = borg.portfolios.PureModelPortfolio(suite, model, regress)
             else:
                 raise ValueError("unrecognized portfolio subname: {0}".format(self.subname))
@@ -105,7 +97,7 @@ class SolverMaker(object):
     def __init__(self, solver_name):
         self.name = solver_name
 
-    def __call__(self, suite, train_data):
+    def __call__(self, suite, train_data, instances):
         return suite.solvers[self.name]
 
 def simulate_run(run, maker, train_data, test_data, instances):
@@ -121,8 +113,8 @@ def simulate_run(run, maker, train_data, test_data, instances):
     successes = 0
     rows = []
 
-    for instance_id in test_data.run_lists:
-        logger.info("simulating run on %s", instance_id)
+    for (i, instance_id) in enumerate(test_data.run_lists):
+        logger.info("simulating run %i/%i on %s", i, len(test_data), instance_id)
 
         with suite.domain.task_from_path(instance_id) as instance:
             with borg.accounting() as accountant:
@@ -141,21 +133,21 @@ def simulate_run(run, maker, train_data, test_data, instances):
 
             success_str = "TRUE" if succeeded else "FALSE"
 
-            #rows.append([run["category"], maker.name, budget, cpu_cost, success_str, split_id, instances])
+            rows.append([run["category"], maker.name, budget, cpu_cost, success_str, split_id, instances])
 
-            if succeeded:
-                successes += 1
+            #if succeeded:
+                #successes += 1
 
-    #return rows
+    return rows
 
-    logger.info(
-        "%s had %i successes over %i instances",
-        maker.name,
-        successes,
-        len(test_data),
-        )
+    #logger.info(
+        #"%s had %i successes over %i instances",
+        #maker.name,
+        #successes,
+        #len(test_data),
+        #)
 
-    return [(run["category"], maker.name, instances, successes)]
+    #return [(run["category"], maker.name, instances, successes)]
 
 @borg.annotations(
     out_path = ("results CSV output path"),
@@ -188,18 +180,20 @@ def main(out_path, runs, repeats = 4, workers = 0, local = False):
 
             for maker in makers:
                 for (train_data, test_data) in data_sets:
+                    yield (simulate_run, [run, maker, train_data, test_data, None])
+
                     #import numpy
                     #for instances in map(int, map(round, numpy.r_[10.0:150.0:32j])):
-                    for instances in [60]:
+                    #for instances in [60]:
                         #for _ in xrange(16):
-                        for _ in [0]:
-                            yield (simulate_run, [run, maker, train_data, test_data, instances])
+                        #for _ in [0]:
+                            #yield (simulate_run, [run, maker, train_data, test_data, instances])
 
     with borg.util.openz(out_path, "wb") as out_file:
         writer = csv.writer(out_file)
 
-        #writer.writerow(["category", "solver", "budget", "cost", "success", "split", "instances"])
-        writer.writerow(["category", "solver", "instances", "successes"])
+        writer.writerow(["category", "solver", "budget", "cost", "success", "split", "instances"])
+        #writer.writerow(["category", "solver", "instances", "successes"])
 
         for (_, rows) in condor.do(yield_jobs(), workers, local):
             writer.writerows(rows)

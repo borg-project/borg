@@ -109,9 +109,15 @@ class FakeDomain(object):
     def compute_features(self, instance):
         """Return static features of an instance."""
 
-        # XXX charge feature costs to CPU time accountant
+        # get features with cost
+        with_cost = self._suite.run_data.get_feature_vector(instance)
 
-        features = self._suite.run_data.get_feature_vector(instance)
+        borg.get_accountant().charge_cpu(with_cost["cpu_cost"])
+
+        # return the features
+        features = dict(with_cost.iteritems())
+
+        del features["cpu_cost"]
 
         return (features.keys(), features.values())
 

@@ -3,6 +3,7 @@
 import numpy
 import sklearn.cluster
 import sklearn.pipeline
+import sklearn.neighbors
 import sklearn.linear_model
 import borg
 
@@ -148,9 +149,9 @@ def cluster_plan(model, K):
     return spectral.labels_
 
 class ClusteredLogisticRegression(object):
-    """Logistic regression model with spectral clustering."""
+    """Logistic regression model with clustering."""
 
-    def __init__(self, model, cluster = cluster_plan, K = 4):
+    def __init__(self, model, cluster = cluster_kl, K = 32):
         """Initialize."""
 
         logger.info("clustering %i RTD samples", model.log_masses.shape[0])
@@ -174,7 +175,8 @@ class ClusteredLogisticRegression(object):
         self._regression = \
             sklearn.pipeline.Pipeline([
                 ("scaler", sklearn.preprocessing.Scaler()),
-                ("estimator", sklearn.linear_model.LogisticRegression(C = 1e-1)),
+                #("estimator", sklearn.linear_model.LogisticRegression(C = 1e-1)),
+                ("estimator", sklearn.neighbors.KNeighborsClassifier()),
                 ]) \
                 .fit(features_NF, self._labels)
 
@@ -183,23 +185,71 @@ class ClusteredLogisticRegression(object):
         self._indices = dict(zip(estimator.label_, xrange(estimator.label_.shape[0])))
         self._sizes = numpy.sum(self._indicators, axis = 0)
 
+        logger.info("cluster sizes: %s", self._sizes)
+
     def predict(self, features):
         """Predict RTD probabilities."""
+
+        #features = numpy.asarray(features)
+
+        #(M, F) = features.shape
+        #(N, K) = self._indicators.shape
+
+        #prediction = self._regression.predict_proba(features)
+        #weights = numpy.empty((M, N))
+
+        #for m in xrange(M):
+            #for n in xrange(N):
+                #k = self._labels[n]
+                #p_z = prediction[m, self._indices[k]]
+
+                #weights[m, n] = p_z / self._sizes[k]
+
+        #return weights
 
         features = numpy.asarray(features)
 
         (M, F) = features.shape
         (N, K) = self._indicators.shape
 
-        prediction = self._regression.predict_proba(features)
-        weights = numpy.empty((M, N))
+        neighbors = self._regression.kneighbors(features, return_distance = False)
+        weights = numpy.zeros((M, N))
 
         for m in xrange(M):
-            for n in xrange(N):
-                k = self._labels[n]
-                p_z = prediction[m, self._indices[k]]
+            weights[neighbors[m]] = 1.0 / neighbors.shape[1]
 
-                weights[m, n] = p_z / self._sizes[k]
+        return weights
+
+class NeighborsRegression(object):
+    """Nearest-neighbor model."""
+
+    def __init__(self, model, K = 16):
+        """Initialize."""
+
+        logger.info("fitting ball tree to instances")
+
+        features = model.features
+
+        self._model = model
+        self._K = K
+        self._scaler = sklearn.preprocessing.Scaler().fit(features)
+        self._ball_tree = sklearn.neighbors.BallTree(self._scaler.transform(features))
+
+    def predict(self, features):
+        """Predict RTD probabilities."""
+
+        features = self._scaler.transform(features)
+
+        (M, F) = features.shape
+        (N, _, _) = self._model.log_masses.shape
+
+        neighbors = self._ball_tree.query(features, k = self._K, return_distance = False)
+        weights = numpy.zeros((M, N)) + 1e-64
+
+        print "neighbors are", neighbors
+
+        for m in xrange(M):
+            weights[m, neighbors[m]] = 1.0 / neighbors.shape[1]
 
         return weights
 
