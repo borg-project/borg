@@ -9,9 +9,6 @@ cimport libc.math
 cimport cython
 cimport numpy
 
-cdef extern from "math.h":
-    double fabs(double)
-
 logger = borg.get_logger(__name__, default_level = "INFO")
 
 def entropy_of_int(array, states):
@@ -185,7 +182,7 @@ def compute_clause_balance_statistics(constraints_csr_CV):
 
                     horn_variables_V[v] += 1
 
-            pn_ratios_C[c] = 2.0 * fabs(0.5 - positives / (j - i))
+            pn_ratios_C[c] = 2.0 * libc.math.fabs(0.5 - positives / (j - i))
         else:
             pn_ratios_C[c] = -1.0
 
@@ -224,7 +221,7 @@ def compute_variable_balance_statistics(constraints_csr_VC):
                 if constraints_csr_VC_data[k] > 0:
                     positives += 1.0
 
-            pn_ratios_V[v] = 2.0 * fabs(0.5 - positives / (j - i))
+            pn_ratios_V[v] = 2.0 * libc.math.fabs(0.5 - positives / (j - i))
         else:
             pn_ratios_V[v] = -1.0
 
@@ -520,5 +517,9 @@ def get_features_for(cnf_path):
 
     logger.info("collected features for %s in %.2f s", cnf_path, cost)
 
-    return zip(*core_features)
+    (names, values) = zip(*core_features)
+
+    assert len(names) == len(values)
+
+    return (names, values)
 

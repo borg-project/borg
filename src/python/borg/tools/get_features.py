@@ -32,6 +32,8 @@ def main(domain_name, instances_root, workers = 0):
 
         paths = list(borg.util.files_under(instances_root, domain.extensions))
 
+        logger.info("collecting features for %i instances", len(paths))
+
         for path in paths:
             yield (features_for_path, [domain, path])
 
@@ -39,7 +41,7 @@ def main(domain_name, instances_root, workers = 0):
         (_, cnf_path) = task.args
         csv_path = cnf_path + ".features.csv"
 
-        with open(csv_path, "w") as csv_file:
+        with open(csv_path, "wb") as csv_file:
             csv.writer(csv_file).writerow(names)
             csv.writer(csv_file).writerow(values)
 

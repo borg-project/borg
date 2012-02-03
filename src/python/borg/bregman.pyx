@@ -15,7 +15,7 @@ cdef extern from "math.h":
 
 @cython.cdivision(True)
 @cython.infer_types(True)
-cdef double kl_divergence(int D, double* left, int left_stride, double* right, int right_stride):
+cdef double kl_divergence_raw(int D, double* left, int left_stride, double* right, int right_stride):
     """Compute the KL divergence between two discrete distributions."""
 
     cdef void* left_p = left
@@ -30,6 +30,90 @@ cdef double kl_divergence(int D, double* left, int left_stride, double* right, i
         kl += p_i * libc.math.log(p_i / q_i)
 
     return kl
+
+@cython.wraparound(False)
+@cython.boundscheck(False)
+def kl_divergences_all(rtds):
+    cdef int N
+    cdef int S
+    cdef int D
+
+    (N, S, D) = rtds.shape
+
+    cdef numpy.ndarray[double, ndim = 3] rtds_NSD = rtds
+    cdef numpy.ndarray[double, ndim = 2] distances_NN = numpy.zeros((N, N))
+
+    cdef int rtds_NSD_stride2 = rtds_NSD.strides[2]
+    cdef int n
+    cdef int m
+    cdef int s
+
+    for n in xrange(N):
+        print n
+        for m in xrange(N):
+            for s in xrange(S):
+                distances_NN[n, m] += \
+                    kl_divergence_raw(
+                        D,
+                        &rtds_NSD[n, s, 0], rtds_NSD_stride2,
+                        &rtds_NSD[m, s, 0], rtds_NSD_stride2,
+                        )
+
+    return distances_NN
+
+@cython.wraparound(False)
+@cython.boundscheck(False)
+def survival_distances(survival, others):
+    cdef int N
+    cdef int S
+    cdef int D
+
+    (N, S, D) = others.shape
+
+    assert survival.shape == (S, D)
+
+    cdef numpy.ndarray[double, ndim = 2] survival_SD = survival
+    cdef numpy.ndarray[double, ndim = 3] others_NSD = others
+    cdef numpy.ndarray[double, ndim = 1] distances_N = numpy.empty(N)
+
+    cdef double distance
+    cdef double max_distance
+    cdef double mean_max_distance
+    cdef int n
+    cdef int s
+    cdef int d
+
+    for n in xrange(N):
+        mean_max_distance = 0.0
+
+        for s in xrange(S):
+            max_distance = 0.0
+
+            for d in xrange(D):
+                distance = libc.math.fabs(survival_SD[s, d] - others_NSD[n, s, d])
+
+                if distance > max_distance:
+                    max_distance = distance
+
+            mean_max_distance += max_distance
+
+        mean_max_distance /= S
+
+        distances_N[n] = mean_max_distance
+
+    return distances_N
+
+@cython.wraparound(False)
+@cython.boundscheck(False)
+def survival_distances_all(survivals):
+    (N, S, D) = survivals.shape
+
+    distances_NN = numpy.empty((N, N))
+
+    for n in xrange(N):
+        distances_NN[n, :] = survival_distances(survivals[n, :, :], survivals)
+
+    return distances_NN
 
 class KLMeans(object):
     """Bregman clustering (k-means) with KL divergence."""
@@ -77,7 +161,7 @@ class KLMeans(object):
 
                     for c in xrange(C):
                         divergence += \
-                            kl_divergence(
+                            kl_divergence_raw(
                                 D,
                                 &centers_KCD[l, c, 0], centers_KCD.strides[2],
                                 &points_NCD[n, c, 0], points_NCD.strides[2],
@@ -125,7 +209,7 @@ class KLMeans(object):
 
                     for c in xrange(C):
                         divergence += \
-                            kl_divergence(
+                            kl_divergence_raw(
                                 D,
                                 &centers_KCD[k, c, 0], centers_KCD.strides[2],
                                 &points_NCD[n, c, 0], points_NCD.strides[2],

@@ -13,18 +13,19 @@ logger = borg.get_logger(__name__, default_level = "INFO")
 def evaluate_split(run_data, model_name, K, split, train_mask, test_mask):
     """Evaluate a model on a train/test split."""
 
-    training = run_data.masked(train_mask).collect_systematic([2])
+    training = run_data.masked(train_mask).collect_systematic([4])
     testing = run_data.masked(test_mask).collect_systematic([4])
 
     # build the model
     if model_name == "mul-dirmix":
-        sampler = borg.models.MulDirMixSampler(K = K)
+        estimator = borg.models.MulDirMixEstimator(K = K, samples_per = 128)
     elif model_name == "mul-dirmatmix":
-        sampler = borg.models.MulDirMatMixSampler(K = K)
+        estimator = borg.models.MulDirMatMixEstimator(K = K)
     else:
         raise ValueError("unrecognized model name {0}".format(model_name))
 
-    model = borg.models.mean_posterior(sampler, training.solver_names, training, bins = 10)
+    bins = 10
+    model = estimator(training, bins, training)
 
     # evaluate the model
     score = numpy.mean(borg.models.run_data_log_probabilities(model, testing))
@@ -51,11 +52,13 @@ def main(out_path, bundle, workers = 0, local = False):
 
     def yield_jobs():
         run_data = borg.storage.RunData.from_bundle(bundle)
-        validation = sklearn.cross_validation.KFold(len(run_data), 10)
+        #validation = sklearn.cross_validation.KFold(len(run_data), 10, indices = False)
+        validation = sklearn.cross_validation.ShuffleSplit(len(run_data), 64, test_fraction = 0.2, indices = False)
 
         for (train_mask, test_mask) in validation:
             split = uuid.uuid4()
-            Ks = range(1, 64, 2)
+            Ks = range(1, 64, 1)
+            #Ks = [1, 4, 8, 16, 32, 64]
 
             for K in Ks:
                 for model_name in ["mul-dirmix", "mul-dirmatmix"]:
@@ -68,6 +71,8 @@ def main(out_path, bundle, workers = 0, local = False):
 
         for (_, row) in condor.do(yield_jobs(), workers, local):
             writer.writerow(row)
+
+            out_file.flush()
 
 if __name__ == "__main__":
     borg.script(main)

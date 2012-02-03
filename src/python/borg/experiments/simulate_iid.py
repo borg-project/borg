@@ -6,19 +6,34 @@ import numpy
 import sklearn
 import condor
 import borg
-
-from borg.experiments.simulate_runs import PortfolioMaker
+import borg.experiments.simulate_runs
 
 logger = borg.get_logger(__name__, default_level = "INFO")
 
-def simulate_run(run, maker, all_data, train_mask, test_mask, instances):
+def simulate_run(run, maker, all_data, train_mask, test_mask, instances, independent, mixture):
     """Simulate portfolio execution on a train/test split."""
 
     train_data = all_data.masked(train_mask)
     test_data = all_data.masked(test_mask)
+
+    if instances is not None:
+        ids = sorted(train_data.run_lists, key = lambda _: numpy.random.rand())[:instances]
+        train_data = train_data.filter(*ids)
+
+    if independent:
+        train_data = train_data.collect_independent(mixture).only_nonempty()
+    else:
+        train_data = train_data.collect_systematic(mixture).only_nonempty()
+
     budget = test_data.common_budget
     suite = borg.fake.FakeSuite(test_data)
-    solver = maker(suite, train_data, instances)
+
+    if maker.name == "preplanning-dir":
+        model_kwargs = {"K": 64, "alpha": 1e-1}
+    else:
+        model_kwargs = {}
+
+    solver = maker(suite, train_data, model_kwargs = model_kwargs)
     successes = 0
 
     for (i, instance_id) in enumerate(test_data.run_lists):
@@ -48,7 +63,9 @@ def simulate_run(run, maker, all_data, train_mask, test_mask, instances):
         len(test_data),
         )
 
-    return [(run["category"], maker.name, instances, successes)]
+    description = "{0} ({1})".format(mixture, "Sep." if independent else "Sys.")
+
+    return (description, maker.name, instances, successes)
 
 @borg.annotations(
     out_path = ("results CSV output path"),
@@ -57,43 +74,42 @@ def simulate_run(run, maker, all_data, train_mask, test_mask, instances):
     workers = ("submit jobs?", "option", "w"),
     local = ("workers are local?", "flag"),
     )
-def main(out_path, runs, repeats = 4, workers = 0, local = False):
+def main(out_path, runs, repeats = 128, workers = 0, local = False):
     """Simulate portfolio and solver behavior."""
 
-    logger.info("simulating %i runs", len(runs) * repeats)
+    logger.info("simulating %i runs", len(runs))
 
     get_run_data = borg.util.memoize(borg.storage.RunData.from_bundle)
-
-    #numpy.random.seed(42)
-    random_state = numpy.random
 
     def yield_jobs():
         for run in runs:
             all_data = get_run_data(run["bundle"])
-            #validation = sklearn.cross_validation.KFold(len(train_data), repeats, indices = False)
-            validation = sklearn.cross_validation.ShuffleSplit(len(all_data), 32, test_fraction = 0.5, indices = False, random_state = random_state)
-            maker = PortfolioMaker(run["portfolio_name"])
+            validation = sklearn.cross_validation.ShuffleSplit(len(all_data), repeats, test_fraction = 0.2, indices = False)
+            maker = borg.experiments.simulate_runs.PortfolioMaker(run["portfolio_name"], bins = 10)
 
             for (train_mask, test_mask) in validation:
-                import numpy
-                for instances in map(int, map(round, numpy.r_[10.0:150.0:32j])):
-                #for instances in [60]:
-                    yield (simulate_run, [run, maker, all_data, train_mask, test_mask, instances])
-                #break # XXX
+                for instances in map(int, map(round, numpy.r_[10.0:200.0:32j])):
+                    yield (
+                        simulate_run,
+                        [
+                            run,
+                            maker,
+                            all_data,
+                            train_mask,
+                            test_mask,
+                            instances,
+                            run["independent"],
+                            run["mixture"],
+                            ],
+                        )
 
     with borg.util.openz(out_path, "wb") as out_file:
         writer = csv.writer(out_file)
 
-        writer.writerow(["category", "solver", "instances", "successes"])
+        writer.writerow(["description", "solver", "instances", "successes"])
 
-        jobs = list(yield_jobs())
-        if workers == "auto":
-            workers = min(256, len(jobs))
-        else:
-            workers = int(workers)
-
-        for (_, rows) in condor.do(jobs, workers, local):
-            writer.writerows(rows)
+        for (_, row) in condor.do(yield_jobs(), workers, local):
+            writer.writerow(row)
 
             out_file.flush()
 

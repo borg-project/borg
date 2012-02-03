@@ -17,34 +17,19 @@ def evaluate_split(run_data, model_name, mixture, independent, instance_count, t
     training_filtered = training_all.filter(*training_ids[:instance_count])
 
     if independent:
-        training = training_filtered.collect_independent(mixture)
+        training = training_filtered.collect_independent(mixture).only_nonempty()
     else:
-        training = training_filtered.collect_systematic(mixture)
+        training = training_filtered.collect_systematic(mixture).only_nonempty()
 
     # build the model
-    bins = 30
-    samplers = {
-        "mul_alpha=0.1": borg.models.MulSampler(alpha = 0.1),
-        "mul-dir": borg.models.MulDirSampler(),
-        "mul-dirmix": borg.models.MulDirMixSampler(),
-        "mul-dirmatmix": borg.models.MulDirMatMixSampler(),
+    bins = 10
+    estimators = {
+        "mul_alpha=0.1": borg.models.MulEstimator(alpha = 0.1),
+        "mul-dir": borg.models.MulDirEstimator(),
+        "mul-dirmix": borg.models.MulDirMixEstimator(K = 4),
+        "mul-dirmatmix": borg.models.MulDirMatMixEstimator(K = 16),
         }
-
-    if model_name in samplers:
-        model = \
-            borg.models.mean_posterior(
-                samplers[model_name],
-                training.solver_names,
-                training,
-                bins = bins,
-                chains = 1,
-                samples_per_chain = 1,
-                )
-    elif model_name == "log-normal":
-        estimator = borg.models.LogNormalMixEstimator()
-        model = estimator(training, bins)
-    else:
-        raise Exception("unrecognized model name \"{0}\"".format(model_name))
+    model = estimators[model_name](training, bins, training_all)
 
     # evaluate the model
     logger.info("scoring model on %i instances", len(testing))
@@ -59,13 +44,9 @@ def evaluate_split(run_data, model_name, mixture, independent, instance_count, t
         score,
         )
 
-    mixture_description = \
-        "{0} ({1})".format(
-            "/".join(map(str, mixture)),
-            "Ind." if independent else "Sys.",
-            )
+    description = "{0} ({1})".format(mixture, "Sep." if independent else "Sys.")
 
-    return [model_name, mixture_description, instance_count, score]
+    return [model_name, description, instance_count, score]
 
 @borg.annotations(
     out_path = ("results output path"),
@@ -87,8 +68,8 @@ def main(out_path, experiments, workers = 0, local = False):
             run_data = get_run_data(experiment["run_data"])
             validation = sklearn.cross_validation.KFold(len(run_data), 10, indices = False)
             max_instance_count = numpy.floor(0.9 * len(run_data)) - 10
-            #instance_counts = map(int, map(round, numpy.r_[10:max_instance_count:16j]))
-            instance_counts = [int(max_instance_count / 2)]
+            instance_counts = map(int, map(round, numpy.r_[10:max_instance_count:16j]))
+            #instance_counts = [400]
 
             for (train_mask, test_mask) in validation:
                 for instance_count in instance_counts:

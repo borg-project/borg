@@ -9,21 +9,19 @@ import borg
 
 logger = borg.get_logger(__name__, default_level = "INFO")
 
-def evaluate_features(model, training, testing, feature_names):
-    training = training.filter_features(feature_names)
-    testing = testing.filter_features(feature_names)
-
+def evaluate_features(model, testing, feature_names):
     # use features
-    features = []
+    if len(feature_names) > 0:
+        # train the prediction method
+        feature_mask = numpy.array([f in feature_names for f in testing.common_features])
+        masked_model = model.with_new(features = model.features[:, feature_mask])
+        regression = borg.regression.ClusteredLogisticRegression(masked_model, K = 16)# XXX K = 32
 
-    for instance_id in sorted(testing.feature_vectors):
-        dict_ = testing.feature_vectors[instance_id]
-        values = map(dict_.__getitem__, testing.common_features)
-
-        features.append(values)
-
-    regression = borg.regression.LinearRegression(training, model)
-    weights = regression.predict(features)
+        # then test it
+        test_features = testing.filter_features(feature_names).to_features_array()
+        weights = regression.predict(test_features)
+    else:
+        weights = numpy.tile(numpy.exp(model.log_weights), (len(testing), 1))
 
     # evaluate the model
     logger.info("scoring %s on %i instances", model.name, len(testing))
@@ -58,6 +56,7 @@ def main(out_path, experiments, workers = 0, local = False):
             training = run_data.masked(train_mask).collect_systematic([2])
             testing = run_data.masked(test_mask).collect_systematic([4])
             feature_counts = range(0, len(run_data.common_features) + 1)
+            #feature_counts = [0, len(run_data.common_features)]
             replications = xrange(32)
             parameters = list(itertools.product(feature_counts, replications))
 
@@ -67,14 +66,14 @@ def main(out_path, experiments, workers = 0, local = False):
 
                 for (feature_count, _) in parameters:
                     shuffled_names = sorted(run_data.common_features, key = lambda _: numpy.random.random())
+                    selected_names = sorted(shuffled_names[:feature_count])
 
                     yield (
                         evaluate_features,
                         [
                             model,
-                            training,
                             testing,
-                            shuffled_names[:feature_count],
+                            selected_names,
                             ],
                         )
 
@@ -85,6 +84,8 @@ def main(out_path, experiments, workers = 0, local = False):
 
         for (_, rows) in condor.do(yield_jobs(), workers, local):
             writer.writerows(rows)
+
+            out_file.flush()
 
 if __name__ == "__main__":
     borg.script(main)

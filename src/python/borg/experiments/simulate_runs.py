@@ -1,111 +1,25 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
-# XXX feature computation time
-
 import os.path
 import csv
 import uuid
-import numpy
 import sklearn
 import condor
 import borg
 
 logger = borg.get_logger(__name__, default_level = "INFO")
 
-class CustomEstimator(object):
-    def __call__(self, run_data, bins, full_data):
-        """Fit parameters of the log-normal linked mixture model."""
-
-        # ...
-        counts_NSD = run_data.to_bins_array(run_data.solver_names, bins)
-        budget = run_data.get_common_budget()
-        interval = budget / bins
-
-        (N, S, D) = counts_NSD.shape
-
-        # estimate training RTDs
-        T = 10
-        samples_TSD = numpy.zeros((T, S, D))
-        h = 10
-
-        samples_TSD[0, :, -1] = 1.0
-        samples_TSD[1, 0, -1] = 1.0
-        samples_TSD[1, 1:, 0] = 1.0
-        samples_TSD[2, 0, -1] = 1.0
-        samples_TSD[2, 1, -1] = 1.0
-        samples_TSD[2, 2, 0] = 1.0
-        samples_TSD[3, 0, 0] = 1.0
-        samples_TSD[3, 1, -1] = 1.0
-        samples_TSD[3, 2, -1] = 1.0
-        samples_TSD[4, :, 0] = 1.0
-        samples_TSD[5, 0, -1] = 1.0
-        samples_TSD[5, 1, -1] = 1.0
-        samples_TSD[5, 2, h] = 1.0
-        samples_TSD[6, 0, -1] = 1.0
-        samples_TSD[6, 1, h] = 1.0
-        samples_TSD[6, 2, -1] = 1.0
-        samples_TSD[7, 0, h] = 1.0
-        samples_TSD[7, 1, -1] = 1.0
-        samples_TSD[7, 2, -1] = 1.0
-        samples_TSD[8, 0, -1] = 1.0
-        samples_TSD[8, 1:, h] = 1.0
-        samples_TSD[9, :2, h] = 1.0
-        samples_TSD[9, 2, -1] = 1.0
-
-        samples_TSD += 1e-4
-        samples_TSD /= numpy.sum(samples_TSD, axis = -1)[..., None]
-
-        weights_T = numpy.empty(T)
-
-        weights_T[0] = 8
-        weights_T[1] = 3
-        weights_T[2] = 1
-        weights_T[3] = 6
-        weights_T[4] = 2
-        weights_T[5] = 3
-        weights_T[6] = 2
-        weights_T[7] = 2
-        weights_T[8] = 2
-        weights_T[9] = 1
-
-        weights_T /= numpy.sum(weights_T)
-
-        #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 200, threshold = 1000000):
-            #print samples_TSD
-            #raise SystemExit()
-
-        return \
-            borg.models.MultinomialModel(
-                interval,
-                borg.statistics.to_log_survival(samples_TSD, axis = -1),
-                log_masses = borg.statistics.floored_log(samples_TSD),
-                log_weights = numpy.log(weights_T),
-                )
-
 class PortfolioMaker(object):
-    def __init__(self, portfolio_name):
+    def __init__(self, portfolio_name, bins = 60):
         name_parts = portfolio_name.split(":")
 
         self.name = portfolio_name
         self.subname = name_parts[0]
         self.variants = name_parts[1:]
+        self._bins = bins
 
-    def __call__(self, suite, train_data, instances):
+    def __call__(self, suite, train_data, test_data = None, model_kwargs = {}):
         full_data = train_data
-
-        if instances is not None:
-            ids = sorted(train_data.run_lists, key = lambda _: numpy.random.rand())[:instances]
-            train_data = train_data.filter(*ids)
-
-        if "10.sys" in self.variants:
-            train_data = train_data.collect_systematic([1, 0]).only_nonempty()
-        elif "10.ind" in self.variants:
-            train_data = train_data.collect_independent([1, 0]).only_nonempty()
-
-        #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 200, threshold = 1000000):
-            #print train_data.to_bins_array(train_data.solver_names, 30)
-
-        #raise SystemExit()
 
         if self.subname == "random":
             portfolio = borg.portfolios.RandomPortfolio()
@@ -116,25 +30,26 @@ class PortfolioMaker(object):
         elif self.subname == "oracle":
             portfolio = borg.portfolios.OraclePortfolio()
         else:
-            bins = 30
+            bins = self._bins
 
             if self.subname.endswith("-mul"):
-                model = borg.models.MulEstimator()(train_data, bins, full_data)
+                estimator = borg.models.MulEstimator(**model_kwargs)
             elif self.subname.endswith("-dir"):
-                model = borg.models.MulDirMatMixEstimator()(train_data, bins, full_data)
+                estimator = borg.models.MulDirMatMixEstimator(**model_kwargs)
             elif self.subname.endswith("-log"):
-                #model = borg.models.LogNormalMixEstimator()(train_data, bins)
-                #model = borg.models.DiscreteLogNormalMixEstimator()(train_data, bins)
-                model = borg.models.DiscreteLogNormalMatMixEstimator()(train_data, bins, full_data)
-            elif self.subname.endswith("-custom"):
-                model = CustomEstimator()(train_data, bins, full_data)
+                #estimator = borg.models.LogNormalMixEstimator(**model_kwargs)
+                #estimator = borg.models.DiscreteLogNormalMixEstimator(**model_kwargs)
+                estimator = borg.models.DiscreteLogNormalMatMixEstimator(**model_kwargs)
             else:
                 raise ValueError("unrecognized portfolio subname: {0}".format(self.subname))
+
+            model = estimator(train_data, bins, full_data)
 
             if self.subname.startswith("preplanning-"):
                 portfolio = borg.portfolios.PreplanningPortfolio(suite, model)
             elif self.subname.startswith("probabilistic-"):
-                regress = borg.regression.ClusteredLogisticRegression(model)
+                regress = borg.regression.NearestRTDRegression(model, test_data)
+                #regress = borg.regression.ClusteredLogisticRegression(model, K = 32)
                 #regress = borg.regression.NeighborsRegression(model)
                 portfolio = borg.portfolios.PureModelPortfolio(suite, model, regress)
             else:
@@ -146,16 +61,16 @@ class SolverMaker(object):
     def __init__(self, solver_name):
         self.name = solver_name
 
-    def __call__(self, suite, train_data, instances):
+    def __call__(self, suite, train_data, test_data = None):
         return suite.solvers[self.name]
 
-def simulate_run(run, maker, train_data, test_data, instances):
+def simulate_run(run, maker, train_data, test_data):
     """Simulate portfolio execution on a train/test split."""
 
     split_id = uuid.uuid4()
     budget = test_data.common_budget
     suite = borg.fake.FakeSuite(test_data)
-    solver = maker(suite, train_data, instances)
+    solver = maker(suite, train_data, test_data)
     rows = []
 
     for (i, instance_id) in enumerate(test_data.run_lists):
@@ -178,7 +93,7 @@ def simulate_run(run, maker, train_data, test_data, instances):
 
             success_str = "TRUE" if succeeded else "FALSE"
 
-            rows.append([run["category"], maker.name, budget, cpu_cost, success_str, split_id, instances])
+            rows.append([run["category"], maker.name, budget, cpu_cost, success_str, split_id])
 
     return rows
 
@@ -213,12 +128,12 @@ def main(out_path, runs, repeats = 4, workers = 0, local = False):
 
             for maker in makers:
                 for (train_data, test_data) in data_sets:
-                    yield (simulate_run, [run, maker, train_data, test_data, None])
+                    yield (simulate_run, [run, maker, train_data, test_data])
 
     with borg.util.openz(out_path, "wb") as out_file:
         writer = csv.writer(out_file)
 
-        writer.writerow(["category", "solver", "budget", "cost", "success", "split", "instances"])
+        writer.writerow(["category", "solver", "budget", "cost", "success", "split"])
 
         for (_, rows) in condor.do(yield_jobs(), workers, local):
             writer.writerows(rows)

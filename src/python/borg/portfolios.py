@@ -167,7 +167,8 @@ class PureModelPortfolio(object):
                 (feature_names, feature_values) = suite.domain.compute_features(task)
                 feature_dict = dict(zip(feature_names, feature_values))
                 feature_values_sorted = [feature_dict[f] for f in sorted(feature_names)]
-                (predicted_weights,) = numpy.log(self._regress.predict([feature_values_sorted]))
+                #(predicted_weights,) = numpy.log(self._regress.predict([feature_values_sorted]))
+                (predicted_weights,) = numpy.log(self._regress.predict([task], [feature_values_sorted]))
                 initial_model = self._model.with_weights(predicted_weights)
 
             # compute and execute a solver schedule

@@ -164,12 +164,85 @@ def knapsack_plan_fast(log_survival, log_weights):
 
     return plan
 
+@cython.infer_types(True)
+@cython.wraparound(False)
+@cython.boundscheck(False)
+def knapsack_plan_faster(log_survival, log_weights):
+    """Compute a plan."""
+
+    # prepare
+    cdef int W
+    cdef int S
+    cdef int B
+
+    (W, S, B) = log_survival.shape
+
+    # generate the value table and associated policy
+    log_survival_swapped = numpy.asarray(log_survival.swapaxes(0, 1).swapaxes(1, 2), order = "C")
+
+    cdef numpy.ndarray[double, ndim = 3] log_survival_SBW = log_survival_swapped
+    cdef numpy.ndarray[double, ndim = 3] survival_SBW = numpy.exp(log_survival_swapped)
+    cdef numpy.ndarray[double, ndim = 1] log_weights_W = numpy.asarray(log_weights, order = "C")
+    cdef numpy.ndarray[double, ndim = 1] weights_W = numpy.exp(log_weights_W + libc.math.log(W))
+    cdef numpy.ndarray[double, ndim = 2] values_B1W = numpy.ones((B + 1, W))
+    cdef numpy.ndarray[int, ndim = 1] policy_s_B = numpy.empty(B, numpy.intc)
+    cdef numpy.ndarray[int, ndim = 1] policy_c_B = numpy.empty(B, numpy.intc)
+
+    cdef double post
+    cdef double best_post
+    cdef double v
+    cdef int best_s
+    cdef int best_c
+    cdef int b
+    cdef int s
+    cdef int c
+    cdef int w
+
+    for b in xrange(1, B + 1):
+        best_s = 0
+        best_c = 0
+        best_post = INFINITY
+
+        for s in xrange(S):
+            for c in xrange(b):
+                post = 0.0
+
+                for w in xrange(W):
+                    v = weights_W[w] * survival_SBW[s, c, w] * values_B1W[b - c - 1, w]
+
+                    post += v
+
+                if post < best_post:
+                    best_s = s
+                    best_c = c
+                    best_post = post
+
+        for w in xrange(W):
+            values_B1W[b, w] = survival_SBW[best_s, best_c, w] * values_B1W[b - best_c - 1, w]
+
+        policy_s_B[b - 1] = best_s
+        policy_c_B[b - 1] = best_c
+
+    # build a plan from the policy
+    plan = []
+    b = B
+
+    while b > 0:
+        s = policy_s_B[b - 1]
+        c = policy_c_B[b - 1]
+        b -= c + 1
+
+        plan.append((s, c))
+
+    return plan
+
 class KnapsackPlanner(Planner):
     """Discretizing dynamic-programming planner."""
 
     def __init__(self):
         #Planner.__init__(self, knapsack_plan)
-        Planner.__init__(self, knapsack_plan_fast)
+        #Planner.__init__(self, knapsack_plan_fast)
+        Planner.__init__(self, knapsack_plan_faster)
 
 def max_length_knapsack_plan(max_length, log_survival_WSB, log_weights_W):
     """Compute a plan subject to a maximum-length constraint."""

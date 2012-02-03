@@ -17,7 +17,7 @@ cdef extern from "math.h":
     double NAN
     double INFINITY
 
-logger = borg.get_logger(__name__, default_level = "DEBUG")
+logger = borg.get_logger(__name__, default_level = "DETAIL")
 
 #
 # ASSERTIONS
@@ -988,7 +988,7 @@ def dcm_estimate_ml_wallach(counts, weights = None):
 @cython.infer_types(True)
 @cython.boundscheck(False)
 @cython.cdivision(True)
-def dcm_mixture_estimate_ml(counts, int K):
+def dcm_mixture_estimate_ml(counts, int K, alpha = None):
     """Fit a DCM mixture using EM."""
 
     # mise en place
@@ -1002,7 +1002,7 @@ def dcm_mixture_estimate_ml(counts, int K):
     for k_ in xrange(K):
         components[k_] = uniques[k_ % len(uniques)]
 
-    components /= numpy.sum(components, axis = -1)[..., None]
+    components /= numpy.sum(components, axis = -1)[..., None] + 1e-32
     components += 1e-1
 
     cdef numpy.ndarray[int, ndim = 2] counts_ND = counts
@@ -1058,9 +1058,14 @@ def dcm_mixture_estimate_ml(counts, int K):
         responsibilities_KN = numpy.exp(log_responsibilities_KN)
 
         for k in xrange(K):
-            dcm_estimate_ml_wallach_raw(components_KD[k], counts_ND, responsibilities_KN[k])
+            if alpha is None:
+                dcm_estimate_ml_wallach_raw(components_KD[k], counts_ND, responsibilities_KN[k])
 
-            components_KD[k] += 1e-16
+                components_KD[k] += 1e-16
+            else:
+                # fast approximation to fixed-alpha Dirichlet estimation
+                components_KD[k, :] = numpy.sum((counts_ND + 1e-4) * responsibilities_KN[k, :, None], axis = 0)
+                components_KD[k, :] *= alpha / numpy.sum(components_KD[k, :])
 
     assert_log_weights(log_responsibilities_KN, axis = 0)
 
@@ -1070,7 +1075,7 @@ def dcm_mixture_estimate_ml(counts, int K):
 @cython.infer_types(True)
 @cython.boundscheck(False)
 @cython.cdivision(True)
-def dcm_matrix_mixture_estimate_ml(counts, int K):
+def dcm_matrix_mixture_estimate_ml(counts, int K, alpha = None):
     """Fit a DCM mixture using EM."""
 
     # mise en place
@@ -1148,12 +1153,14 @@ def dcm_matrix_mixture_estimate_ml(counts, int K):
 
         for k in xrange(K):
             for s in xrange(S):
-                #dcm_estimate_ml_wallach_raw(components_KSD[k, s, :], counts_NSD[:, s, :], responsibilities_KN[k])
-                #components_KSD[k, s, :] += 1e-16
+                if alpha is None:
+                    dcm_estimate_ml_wallach_raw(components_KSD[k, s, :], counts_NSD[:, s, :], responsibilities_KN[k])
 
-                components_KSD[k, s, :] = numpy.sum((counts_NSD[:, s, :] + 1e-4) * responsibilities_KN[k, :, None], axis = 0)
-                #components_KSD[k, s, :] *= 1e-2 / numpy.sum(components_KSD[k, s, :])
-                components_KSD[k, s, :] *= 1e6 / numpy.sum(components_KSD[k, s, :])
+                    components_KSD[k, s, :] += 1e-16
+                else:
+                    # fast approximation to fixed-alpha Dirichlet estimation
+                    components_KSD[k, s, :] = numpy.sum((counts_NSD[:, s, :] + 1e-4) * responsibilities_KN[k, :, None], axis = 0)
+                    components_KSD[k, s, :] *= alpha / numpy.sum(components_KSD[k, s, :])
 
     assert numpy.all(numpy.isfinite(components_KSD))
     assert_log_weights(log_responsibilities_KN, axis = 0)
@@ -1370,7 +1377,8 @@ def discrete_log_normal_matrix_mixture_estimate_ml(counts, double terminus, int 
     cdef numpy.ndarray[int, ndim = 3] counts_NSD = numpy.asarray(counts, dtype = numpy.intc)
     cdef numpy.ndarray[double, ndim = 2] mus_KS = numpy.random.rand(K, S) * 10.0
     cdef numpy.ndarray[double, ndim = 2] sigmas_KS = numpy.random.rand(K, S)
-    cdef numpy.ndarray[double, ndim = 2] thetas_KS = numpy.zeros((K, S))
+    #cdef numpy.ndarray[double, ndim = 2] thetas_KS = numpy.zeros((K, S))
+    cdef numpy.ndarray[double, ndim = 2] thetas_KS = numpy.random.rand(K, S) * terminus / 2.0
     cdef numpy.ndarray[double, ndim = 3] ps_KSD = numpy.empty((K, S, D))
     cdef numpy.ndarray[double, ndim = 2] log_densities_KN = numpy.empty((K, N), numpy.double)
 
