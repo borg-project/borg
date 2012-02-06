@@ -111,14 +111,7 @@ class MultinomialModel(object):
     def with_weights(self, new_log_weights):
         """Return an equivalent model with new weights."""
 
-        return \
-            MultinomialModel(
-                self._interval,
-                self._log_survival_NSC,
-                log_weights = new_log_weights,
-                log_masses = self._log_masses_NSC,
-                features = self._features,
-                )
+        return self.with_new(log_weights = new_log_weights)
 
     def with_new(self, log_weights = None, features = None):
         """Return an equivalent model with new weights."""
@@ -132,6 +125,7 @@ class MultinomialModel(object):
                 self._log_survival_NSC,
                 log_weights = log_weights,
                 log_masses = self._log_masses_NSC,
+                names = self._names,
                 features = features,
                 )
 
@@ -227,7 +221,7 @@ class MulDirEstimator(object):
                 )
 
 class MulDirMixEstimator(object):
-    def __init__(self, K = 16, alpha = None, samples_per = 64):
+    def __init__(self, K = 4, alpha = None, samples_per = 64):
         self._K = K
         self._alpha = alpha
         self._samples_per = samples_per

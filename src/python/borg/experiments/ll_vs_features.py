@@ -15,11 +15,11 @@ def evaluate_features(model, testing, feature_names):
         # train the prediction method
         feature_mask = numpy.array([f in feature_names for f in testing.common_features])
         masked_model = model.with_new(features = model.features[:, feature_mask])
-        regression = borg.regression.ClusteredLogisticRegression(masked_model, K = 16)# XXX K = 32
+        regression = borg.regression.NearestRTDRegression(masked_model)
 
         # then test it
         test_features = testing.filter_features(feature_names).to_features_array()
-        weights = regression.predict(test_features)
+        weights = regression.predict(None, test_features)
     else:
         weights = numpy.tile(numpy.exp(model.log_weights), (len(testing), 1))
 
@@ -55,8 +55,7 @@ def main(out_path, experiments, workers = 0, local = False):
             (train_mask, test_mask) = iter(validation).next()
             training = run_data.masked(train_mask).collect_systematic([2])
             testing = run_data.masked(test_mask).collect_systematic([4])
-            feature_counts = range(0, len(run_data.common_features) + 1)
-            #feature_counts = [0, len(run_data.common_features)]
+            feature_counts = range(0, len(run_data.common_features) + 1, 2)
             replications = xrange(32)
             parameters = list(itertools.product(feature_counts, replications))
 

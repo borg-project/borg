@@ -2,13 +2,13 @@
 
 import borg
 
-def train_model(model_name, training, bins = 10, samples_per_chain = 1, chains = 1):
+def train_model(model_name, training, bins = 10):
     if model_name == "mul_alpha=0.1":
         estimator = borg.models.MulEstimator(alpha = 0.1)
     elif model_name == "mul-dir":
         estimator = borg.models.MulDirEstimator()
     elif model_name == "mul-dirmix":
-        estimator = borg.models.MulDirMixEstimator()
+        estimator = borg.models.MulDirMixEstimator(samples_per = 8)
     elif model_name == "mul-dirmatmix":
         estimator = borg.models.MulDirMatMixEstimator()
     else:

@@ -52,13 +52,11 @@ def main(out_path, bundle, workers = 0, local = False):
 
     def yield_jobs():
         run_data = borg.storage.RunData.from_bundle(bundle)
-        #validation = sklearn.cross_validation.KFold(len(run_data), 10, indices = False)
         validation = sklearn.cross_validation.ShuffleSplit(len(run_data), 64, test_fraction = 0.2, indices = False)
 
         for (train_mask, test_mask) in validation:
             split = uuid.uuid4()
             Ks = range(1, 64, 1)
-            #Ks = [1, 4, 8, 16, 32, 64]
 
             for K in Ks:
                 for model_name in ["mul-dirmix", "mul-dirmatmix"]:

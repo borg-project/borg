@@ -957,7 +957,7 @@ def dcm_estimate_ml_wallach_raw(alpha, counts, weights):
             inner_sum = 0.0
 
             for m in xrange(M):
-                inner_sum += 1.0 / (m + alpha_D[d])
+                inner_sum += 1.0 / (m + alpha_D[d] + 1e-16)
                 numerator += appearances_MD[m, d] * inner_sum
 
             next_alpha_d = alpha_D[d] * numerator / denominator

@@ -24,10 +24,10 @@ def evaluate_split(run_data, model_name, mixture, independent, instance_count, t
     # build the model
     bins = 10
     estimators = {
-        "mul_alpha=0.1": borg.models.MulEstimator(alpha = 0.1),
+        "mul_alpha=0.1": borg.models.MulEstimator(alpha = 2e-2),
         "mul-dir": borg.models.MulDirEstimator(),
         "mul-dirmix": borg.models.MulDirMixEstimator(K = 4),
-        "mul-dirmatmix": borg.models.MulDirMatMixEstimator(K = 16),
+        "mul-dirmatmix": borg.models.MulDirMatMixEstimator(K = 32),
         }
     model = estimators[model_name](training, bins, training_all)
 
@@ -66,10 +66,9 @@ def main(out_path, experiments, workers = 0, local = False):
             logger.info("preparing experiment: %s", experiment)
 
             run_data = get_run_data(experiment["run_data"])
-            validation = sklearn.cross_validation.KFold(len(run_data), 10, indices = False)
+            validation = sklearn.cross_validation.ShuffleSplit(len(run_data), 32, test_fraction = 0.1, indices = False)
             max_instance_count = numpy.floor(0.9 * len(run_data)) - 10
-            instance_counts = map(int, map(round, numpy.r_[10:max_instance_count:16j]))
-            #instance_counts = [400]
+            instance_counts = map(int, map(round, numpy.r_[10:max_instance_count:24j]))
 
             for (train_mask, test_mask) in validation:
                 for instance_count in instance_counts:

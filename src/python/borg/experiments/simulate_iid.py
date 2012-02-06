@@ -28,8 +28,11 @@ def simulate_run(run, maker, all_data, train_mask, test_mask, instances, indepen
     budget = test_data.common_budget
     suite = borg.fake.FakeSuite(test_data)
 
-    if maker.name == "preplanning-dir":
-        model_kwargs = {"K": 64, "alpha": 1e-1}
+    if maker.subname == "preplanning-dir":
+        model_kwargs = {"K": 64}
+
+        if "set_alpha" in maker.variants:
+            model_kwargs["alpha"] = 1e-2
     else:
         model_kwargs = {}
 

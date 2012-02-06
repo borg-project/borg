@@ -21,6 +21,8 @@ class PortfolioMaker(object):
     def __call__(self, suite, train_data, test_data = None, model_kwargs = {}):
         full_data = train_data
 
+        logger.info("making portfolio %s; model_kwargs: %s", self.name, model_kwargs)
+
         if self.subname == "random":
             portfolio = borg.portfolios.RandomPortfolio()
         elif self.subname == "uniform":
@@ -37,8 +39,6 @@ class PortfolioMaker(object):
             elif self.subname.endswith("-dir"):
                 estimator = borg.models.MulDirMatMixEstimator(**model_kwargs)
             elif self.subname.endswith("-log"):
-                #estimator = borg.models.LogNormalMixEstimator(**model_kwargs)
-                #estimator = borg.models.DiscreteLogNormalMixEstimator(**model_kwargs)
                 estimator = borg.models.DiscreteLogNormalMatMixEstimator(**model_kwargs)
             else:
                 raise ValueError("unrecognized portfolio subname: {0}".format(self.subname))
@@ -48,9 +48,7 @@ class PortfolioMaker(object):
             if self.subname.startswith("preplanning-"):
                 portfolio = borg.portfolios.PreplanningPortfolio(suite, model)
             elif self.subname.startswith("probabilistic-"):
-                regress = borg.regression.NearestRTDRegression(model, test_data)
-                #regress = borg.regression.ClusteredLogisticRegression(model, K = 32)
-                #regress = borg.regression.NeighborsRegression(model)
+                regress = borg.regression.NearestRTDRegression(model)
                 portfolio = borg.portfolios.PureModelPortfolio(suite, model, regress)
             else:
                 raise ValueError("unrecognized portfolio subname: {0}".format(self.subname))
