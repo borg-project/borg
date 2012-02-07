@@ -66,8 +66,8 @@ class PseudoBooleanSatisfiability(object):
 
         task.clean()
 
-    def compute_features(self, task, cpu_seconds = None):
-        return features.compute_all(task.opb, cpu_seconds)
+    def compute_features(self, task):
+        return features.compute_all(task.opb)
 
     def is_final(self, task, answer):
         """Is the answer definitive for the task?"""

@@ -149,15 +149,13 @@ def run_cpu_limited(
 
     # sanity
     if not arguments:
-        raise ArgumentError()
+        raise ValueError()
 
     # start the run
-    from cargo.temporal import utc_now
-
     popened   = None
     fd_chunks = {}
     exit_pid  = None
-    started   = utc_now()
+    started   = datetime.datetime.utcnow()
 
     try:
         # start running the child process

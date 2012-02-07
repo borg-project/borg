@@ -1,10 +1,9 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import json
-import cargo
 import borg
 
-logger = cargo.get_logger(__name__)
+logger = borg.get_logger(__name__)
 
 def parse_asp_output(stdout):
     """Parse the output from clasp."""

@@ -44,7 +44,7 @@ class PseudoBooleanSolverFactory(object):
             borg.solver_io.RunningSolver(
                 parse_competition,
                 self._command,
-                self._root(),
+                self._root,
                 task.path,
                 stm_queue = stm_queue,
                 solver_id = solver_id,
@@ -56,7 +56,7 @@ class LinearPseudoBooleanSolverFactory(PseudoBooleanSolverFactory):
             borg.solver_io.RunningSolver(
                 parse_competition,
                 self._command,
-                self._root(),
+                self._root,
                 task.get_linearized_path(),
                 stm_queue = stm_queue,
                 solver_id = solver_id,
@@ -96,13 +96,13 @@ class SCIP_SolverFactory(object):
 
     def __call__(self, task, stm_queue = None, solver_id = None):
         def parse(stdout):
-            return parse_scip(task.opb.N, task.opb.objective is not None)
+            return parse_scip(task.opb.N, task.opb.objective is not None, stdout)
 
         return \
             borg.solver_io.RunningSolver(
                 parse,
                 self._command,
-                self._root(),
+                self._root,
                 task.path,
                 stm_queue = stm_queue,
                 solver_id = solver_id,

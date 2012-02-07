@@ -1,6 +1,5 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
-import signal
 import numpy
 import scipy.sparse
 import borg
@@ -142,33 +141,15 @@ def compute_coefficient_means_mean(opb):
 def compute_coefficient_means_std(opb):
     return numpy.std(opb.coefficient_means_C)
 
-class FeaturesTimedOut(Exception):
-    pass
-
-def handle_timeout_signal(number, frame):
-    raise FeaturesTimedOut()
-
-def compute_all(instance, cpu_seconds = None):
+def compute_all(instance):
     """Compute all features of a PB instance."""
 
     with borg.accounting() as accountant:
-        try:
-            if cpu_seconds is not None:
-                signal.setitimer(signal.ITIMER_VIRTUAL, cpu_seconds)
-                signal.signal(signal.SIGVTALRM, handle_timeout_signal)
+        computed = dict((k, v(instance)) for (k, v) in named.items())
 
-            computed = dict((k, v(instance)) for (k, v) in named.items())
+    logger.info("computed %i features in %.2f CPU seconds", len(computed), accountant.total.cpu_seconds)
 
-            signal.setitimer(signal.ITIMER_VIRTUAL, 0.0)
-        except FeaturesTimedOut:
-            computed = {}
+    computed["cpu_cost"] = accountant.total.cpu_seconds
 
-    cpu_cost = accountant.total.cpu_seconds
-
-    if len(computed) > 0:
-        logger.info("features took %.2f CPU seconds", cpu_cost)
-    else:
-        logger.info("features timed out after %.2f CPU seconds", cpu_cost)
-
-    return (["cpu_cost"] + computed.keys(), [cpu_cost] + computed.values())
+    return (computed.keys(), computed.values())
 

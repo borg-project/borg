@@ -14,11 +14,8 @@ class MAX_SAT_Task(object):
     def __init__(self, path):
         self.path = path
 
-        with borg.accounting() as accountant:
-            with open(path) as task_file:
-                self.instance = instance.parse_max_sat_file(task_file)
-
-        logger.info("parsing took %.2f s", accountant.total.cpu_seconds)
+    def clean(self):
+        pass
 
 @borg.named_domain
 class MAX_SAT_Domain(object):
@@ -31,10 +28,14 @@ class MAX_SAT_Domain(object):
 
     @contextlib.contextmanager
     def task_from_path(self, task_path):
-        yield MAX_SAT_Task(task_path)
+        task = MAX_SAT_Task(task_path)
 
-    def compute_features(self, task, cpu_seconds = None):
-        return features.compute_all(task.instance, cpu_seconds)
+        yield task
+
+        task.clean()
+
+    def compute_features(self, task):
+        return features.get_features_for(task.path)
 
     def is_final(self, task, answer):
         """Is the answer definitive for the task?"""

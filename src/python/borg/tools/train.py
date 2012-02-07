@@ -1,17 +1,10 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import plac
-
-if __name__ == "__main__":
-    from borg.tools.train import main
-
-    plac.call(main)
-
 import cPickle as pickle
-import cargo
 import borg
 
-logger = cargo.get_logger(__name__, default_level = "INFO")
+logger = borg.get_logger(__name__, default_level = "INFO")
 
 @plac.annotations(
     out_path = ("path to store solver"),
@@ -23,7 +16,7 @@ logger = cargo.get_logger(__name__, default_level = "INFO")
 def main(out_path, portfolio_name, solvers_path, suffix = ".runs.csv", *tasks_roots):
     """Train a solver."""
 
-    cargo.enable_default_logging()
+    borg.enable_default_logging()
 
     # load the solvers bundle
     bundle = borg.load_solvers(solvers_path)
@@ -39,4 +32,7 @@ def main(out_path, portfolio_name, solvers_path, suffix = ".runs.csv", *tasks_ro
         pickle.dump(portfolio, out_file, protocol = -1)
 
     logger.info("portfolio written to %s", out_path)
+
+if __name__ == "__main__":
+    plac.call(main)
 

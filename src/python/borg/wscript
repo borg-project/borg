@@ -50,6 +50,7 @@ def build(context):
             "regression.py",
             "fake.py",
             "util.py",
+            "log.py",
             ],
         install_path = install_path,
         )

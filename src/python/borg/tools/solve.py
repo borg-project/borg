@@ -1,21 +1,12 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import plac
-
-if __name__ == "__main__":
-    from borg.tools.solve import main
-
-    plac.call(main)
-
 import sys
-import random
 import logging
 import cPickle as pickle
-import numpy
-import cargo
 import borg
 
-logger = cargo.get_logger(__name__, default_level = "INFO")
+logger = borg.get_logger(__name__, default_level = "INFO")
 
 class CompetitionFormatter(logging.Formatter):
     """A concise log formatter for output during competition."""
@@ -43,7 +34,7 @@ def enable_output():
     """Set up competition-compliant output."""
 
     # configure the default global level
-    cargo.get_logger(level = cargo.defaults.root_log_level)
+    borg.get_logger(level = borg.defaults.root_log_level)
 
     # set up output
     handler = logging.StreamHandler(sys.stdout)
@@ -83,7 +74,7 @@ def main(
         enable_output()
 
         if not quiet:
-            cargo.get_logger("borg.solvers", level = "DETAIL")
+            borg.get_logger("borg.solvers", level = "DETAIL")
 
         borg.statistics.set_prng_seeds(seed)
 
@@ -104,4 +95,7 @@ def main(
             return bundle.domain.show_answer(task, answer)
     except KeyboardInterrupt:
         print "\nc terminating on SIGINT"
+
+if __name__ == "__main__":
+    plac.call(main)
 

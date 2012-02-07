@@ -6,13 +6,11 @@ import plac
 import os.path
 import imp
 import uuid
-import cargo
 import condor
+import borg.log
 
-logger = cargo.get_logger(__name__, default_level = "INFO")
+logger = borg.log.get_logger(__name__, default_level = "INFO")
 named_domains = {}
-
-get_logger = cargo.get_logger
 
 def do(*args, **kwargs):
     return condor.do(*args, **kwargs)
@@ -84,31 +82,13 @@ def script(main):
 
     plac.call(main)
 
-#def annotations(*annotation_args, **annotation_kwargs):
-    #"""Annotate and wrap a script main method."""
-
-    #def decorator(main):
-        #def wrapper(*args, **kwargs):
-            #cargo.enable_default_logging()
-
-            #return main(*args, **kwargs)
-
-        #return wrapper
-
-    #return decorator
-
 annotations = plac.annotations
-
-def enable_default_logging():
-    if not enable_default_logging.enabled:
-        cargo.enable_default_logging()
-
-        enable_default_logging.enabled = True
-
-enable_default_logging.enabled = False
 
 from . import defaults
 from . import util
+
+from borg.log import *
+
 from . import models
 from . import planners
 from . import expenses
@@ -121,6 +101,7 @@ from . import regression
 from . import portfolios
 from . import domains
 from . import experiments
+from . import log
 
 from borg.expenses import *
 from borg.storage import (

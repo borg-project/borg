@@ -1,10 +1,9 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import resource
-import cargo
 import borg
 
-logger = cargo.get_logger(__name__, default_level = "INFO")
+logger = borg.get_logger(__name__, default_level = "INFO")
 
 def normalized_claspre_names(raw_names):
     """Convert names from claspre to "absolute" names."""
@@ -46,14 +45,14 @@ def get_features_for(asp_path, claspre_path):
     previous_utime = resource.getrusage(resource.RUSAGE_CHILDREN).ru_utime
 
     # get feature names
-    (names_out, _) = cargo.check_call_capturing([claspre_path, "--listFeatures", "-f", asp_path])
+    (names_out, _) = borg.util.check_call_capturing([claspre_path, "--listFeatures", "-f", asp_path])
     (dynamic_names_out, static_names_out) = names_out.splitlines()
 
     dynamic_names = normalized_claspre_names(dynamic_names_out.split(","))
     static_names = normalized_claspre_names(static_names_out.split(","))
 
     # get features
-    (values_out, _, _) = cargo.call_capturing([claspre_path, "--claspfolio", "1", "-f", asp_path])
+    (values_out, _, _) = borg.util.call_capturing([claspre_path, "--claspfolio", "1", "-f", asp_path])
     values = [map(parse_claspre_value, line.split(",")) for line in values_out.splitlines()]
 
     # ...
