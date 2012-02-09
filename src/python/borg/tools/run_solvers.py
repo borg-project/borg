@@ -1,6 +1,7 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import os.path
+import sys
 import csv
 import zlib
 import base64
@@ -11,11 +12,11 @@ import borg
 
 logger = borg.get_logger(__name__, default_level = "INFO")
 
-def run_solver_on(suite_path, solver_name, task_path, budget, store_answers):
+def run_solver_on(suite_path, solver_name, task_path, budget, store_answers, seed = None):
     """Run a solver."""
 
-    if condor.get_task() is not None:
-        borg.statistics.set_prng_seeds(hash(condor.get_task().key))
+    if seed is not None:
+        borg.statistics.set_prng_seeds(seed)
 
     suite = borg.load_solvers(suite_path)
 
@@ -102,7 +103,9 @@ def main(
                 logger.info("scheduling %i run(s) of %s on %s", count, solver_name, os.path.basename(path))
 
                 for _ in xrange(count):
-                    yield (run_solver_on, [suite_path, solver_name, path, budget, store_answers])
+                    seed = numpy.random.randint(sys.maxint)
+
+                    yield (run_solver_on, [suite_path, solver_name, path, budget, store_answers, seed])
 
     for (task, row) in condor.do(yield_runs(), workers):
         # unpack run outcome

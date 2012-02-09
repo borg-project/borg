@@ -17,7 +17,6 @@ def main(bundle_path, root_path, runs_extension = ".runs.csv", features_extensio
     """Bundle together run and feature data."""
 
     # list relevant files
-    
     runs_paths = map(os.path.abspath, borg.util.files_under(root_path, [runs_extension]))
     features_paths = map(os.path.abspath, borg.util.files_under(root_path, [features_extension]))
 

@@ -66,31 +66,34 @@ class BaselinePortfolio(object):
 class OraclePortfolio(object):
     """Optimal prescient discrete-budget portfolio."""
 
-    def __init__(self, subsample = None):
-        self._subsample = subsample
+    def __init__(self, planner = borg.planners.default):
+        """Initialize."""
+
+        self._planner = planner
 
     def __call__(self, task, suite, budget):
         """Run the portfolio."""
-
-        # XXX fix the solver_names situation
 
         # grab known run data
         budget_count = 100
         solver_names = sorted(suite.solvers)
         data = suite.run_data.filter(task)
-
-        if self._subsample is not None:
-            data = data.collect_systematic([self._subsample])
-
-        bins = data.to_bins_array(solver_names, budget_count)[0].astype(numpy.double) + 1e-16
+        bins = data.to_bins_array(solver_names, budget_count)[0].astype(numpy.double)
         bins[:, -2] += 1e-2 # if all else fails...
+        bins[:, -1] += numpy.mean(bins[:, :-1] * numpy.arange(budget_count), axis = -1) * 1e-8 # sooner is better
         rates = bins / numpy.sum(bins, axis = -1)[..., None]
-        log_survival = numpy.log(1.0 - numpy.cumsum(rates[:, :-1], axis = -1))
+        log_survival = numpy.log(1.0 + 1e-64 - numpy.cumsum(rates[:, :-1], axis = -1))
 
         # make a plan
         interval = data.get_common_budget() / budget_count
-        planner = borg.planners.KnapsackPlanner()
-        plan = planner.plan(log_survival[None, ...])
+        plan = self._planner.plan(log_survival[None, ...])
+
+        #if len(plan) > 1:
+            #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 200, threshold = 1000000):
+                #print solver_names
+                #print plan
+                #print bins
+                #print numpy.exp(log_survival)
 
         # and follow through
         remaining = budget.cpu_seconds
@@ -112,12 +115,8 @@ class OraclePortfolio(object):
 class PreplanningPortfolio(object):
     """Preplanning discrete-budget portfolio."""
 
-    def __init__(self, suite, model, planner = None):
+    def __init__(self, suite, model, planner = borg.planners.default):
         """Initialize."""
-
-        if planner is None:
-            planner = borg.planners.KnapsackPlanner()
-            #planner = borg.planners.ReorderingPlanner(borg.planners.MaxLengthKnapsackPlanner(12))
 
         self._solver_names = sorted(suite.solvers)
         self._model = model

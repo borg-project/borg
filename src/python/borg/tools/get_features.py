@@ -19,9 +19,10 @@ def features_for_path(domain, task_path):
 @borg.annotations(
     domain_name = ("suite path, or name of the problem domain",),
     instances_root = ("path to instances files", "positional", None, os.path.abspath),
+    skip_existing = ("skip existing features?", "flag"),
     workers = ("submit jobs?", "option", "w", int),
     )
-def main(domain_name, instances_root, workers = 0):
+def main(domain_name, instances_root, skip_existing = False, workers = 0):
     """Collect task features."""
 
     def yield_runs():
@@ -31,11 +32,17 @@ def main(domain_name, instances_root, workers = 0):
             domain = borg.get_domain(domain_name)
 
         paths = list(borg.util.files_under(instances_root, domain.extensions))
-
-        logger.info("collecting features for %i instances", len(paths))
+        count = 0
 
         for path in paths:
+            if skip_existing and os.path.exists(path + ".features.csv"):
+                continue
+
+            count += 1
+
             yield (features_for_path, [domain, path])
+
+        logger.info("collecting features for %i instances", count)
 
     for (task, (names, values)) in condor.do(yield_runs(), workers):
         (_, cnf_path) = task.args

@@ -1,6 +1,33 @@
 import sys
 import logging
 
+class DefaultLogger(logging.getLoggerClass()):
+    """Simple standard logging."""
+
+    def __init__(self, name, level = logging.NOTSET):
+        logging.Logger.__init__(self, name, level)
+
+        self.is_squeaky_clean = True
+
+    def detail(self, message, *args, **kwargs):
+        """Write a log message at the DETAIL level."""
+
+        return self.log(logging.DETAIL, message, *args, **kwargs)
+
+    def note(self, message, *args, **kwargs):
+        """Write a log message at the NOTE level."""
+
+        return self.log(logging.NOTE, message, *args, **kwargs)
+
+# global customization (unfortunate, but whatever)
+logging.setLoggerClass(DefaultLogger)
+
+logging.DETAIL = 15
+logging.NOTE = 25
+
+logging.addLevelName(logging.DETAIL, "DETAIL")
+logging.addLevelName(logging.NOTE, "NOTE")
+
 class TTY_Formatter(logging.Formatter):
     """A log formatter for console output."""
 

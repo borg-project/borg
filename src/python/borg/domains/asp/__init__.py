@@ -7,7 +7,6 @@ import tempfile
 import contextlib
 import borg
 
-#solvers = borg.domains.asp.solvers
 from . import solvers
 from . import features
 

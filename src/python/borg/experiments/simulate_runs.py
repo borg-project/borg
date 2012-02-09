@@ -113,7 +113,7 @@ def main(out_path, runs, repeats = 4, workers = 0, local = False):
         for run in runs:
             train_data = get_run_data(run["train_bundle"])
 
-            if run["test_bundle"] is "-":
+            if run["test_bundle"] == "-":
                 validation = sklearn.cross_validation.KFold(len(train_data), repeats, indices = False)
                 data_sets = [(train_data.masked(v), train_data.masked(e)) for (v, e) in validation]
             else:
