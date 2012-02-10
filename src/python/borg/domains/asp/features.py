@@ -16,7 +16,7 @@ def normalized_claspre_names(raw_names):
             assert parent is not None
 
             names.append(parent + raw_name)
-        else:
+        elif len(raw_name) > 0:
             names.append(raw_name)
 
             parent = raw_name
@@ -45,15 +45,39 @@ def get_features_for(asp_path, claspre_path):
     previous_utime = resource.getrusage(resource.RUSAGE_CHILDREN).ru_utime
 
     # get feature names
-    (names_out, _) = borg.util.check_call_capturing([claspre_path, "--listFeatures", "-f", asp_path])
+    (names_out, _) = \
+        borg.util.check_call_capturing([
+            claspre_path,
+            "--list-features",
+            "--file",
+            asp_path,
+            ])
     (dynamic_names_out, static_names_out) = names_out.splitlines()
-
     dynamic_names = normalized_claspre_names(dynamic_names_out.split(","))
     static_names = normalized_claspre_names(static_names_out.split(","))
 
-    # get features
-    (values_out, _, _) = borg.util.call_capturing([claspre_path, "--claspfolio", "1", "-f", asp_path])
-    values = [map(parse_claspre_value, line.split(",")) for line in values_out.splitlines()]
+    # compute feature values
+    (values_out, _, _) = \
+        borg.util.call_capturing([
+            claspre_path,
+            "--rand-prob=10,30",
+            "--search-limit=300,10",
+            "--features=C1",
+            "--file",
+            asp_path,
+            ])
+    values_per = [map(parse_claspre_value, l.split(",")) for l in values_out.strip().splitlines()]
+
+    # pull them together
+    names = []
+    values = []
+
+    for (i, dynamic_values) in enumerate(values_per[:-1]):
+        names += map("restart{0}-{{0}}".format(i).format, dynamic_names)
+        values += dynamic_values
+
+    names += static_names
+    values += values_per[-1]
 
     # ...
     cost = resource.getrusage(resource.RUSAGE_CHILDREN).ru_utime - previous_utime
@@ -62,7 +86,7 @@ def get_features_for(asp_path, claspre_path):
 
     logger.info("collected features of %s in %.2fs", asp_path, cost)
 
-    assert len(static_names) == len(values[-1])
+    assert len(names) == len(values)
 
-    return (static_names, values[-1])
+    return (names, values)
 
