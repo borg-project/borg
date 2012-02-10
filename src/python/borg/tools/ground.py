@@ -25,7 +25,7 @@ def ground_instance(asp_path, gringo_path, domain_path, ignore_errors):
     logger.debug("running %s", command)
 
     # then ground the instance
-    lparse_part_path = "{0}.lparse.part.{1}".format(asp_path, condor.get_process_name())
+    lparse_part_path = "{0}.gringo.part.{1}".format(asp_path, condor.get_process_name())
     lparse_gz_path = "{0}.gz".format(lparse_part_path)
 
     # XXX cleanup is not robust
@@ -57,7 +57,7 @@ def ground_instance(asp_path, gringo_path, domain_path, ignore_errors):
             gz_file.write(part_file.read())
 
     # and move it into place
-    lparse_final_path = "{0}.lparse.gz".format(asp_path)
+    lparse_final_path = "{0}.gringo.gz".format(asp_path)
 
     os.unlink(lparse_part_path)
     os.rename(lparse_gz_path, lparse_final_path)
@@ -77,7 +77,7 @@ def main(gringo_path, domain_path, root_path, ignore_errors = False, skip_existi
 
     def yield_jobs():
         for asp_path in asp_paths:
-            if skip_existing and os.path.exists(asp_path + ".lparse.gz"):
+            if skip_existing and os.path.exists(asp_path + ".gringo.gz"):
                 continue
 
             yield (ground_instance, [asp_path, gringo_path, domain_path, ignore_errors])
