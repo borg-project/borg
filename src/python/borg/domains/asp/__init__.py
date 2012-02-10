@@ -43,9 +43,9 @@ class AnswerSetProgramming(object):
 
     def __init__(self, claspre_path = None):
         if claspre_path is None:
-            self._claspre_path = os.path.abspath(claspre_path)
-        else:
             self._claspre_path = None
+        else:
+            self._claspre_path = os.path.abspath(claspre_path)
 
     @contextlib.contextmanager
     def task_from_path(self, asp_path):
