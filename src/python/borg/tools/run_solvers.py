@@ -38,9 +38,9 @@ def run_solver_on(suite_path, solver_name, task_path, budget, store_answers, see
         )
 
     if store_answers:
-        return (solver_name, budget, cost, succeeded, answer)
+        return (task_path, solver_name, budget, cost, succeeded, answer)
     else:
-        return (solver_name, budget, cost, succeeded, None)
+        return (task_path, solver_name, budget, cost, succeeded, None)
 
 @borg.annotations(
     suite_path = ("path to the solvers suite", "positional", None, os.path.abspath),
@@ -109,7 +109,7 @@ def main(
 
     for (task, row) in condor.do(yield_runs(), workers):
         # unpack run outcome
-        (solver_name, budget, cost, succeeded, answer) = row
+        (cnf_path, solver_name, budget, cost, succeeded, answer) = row
 
         if answer is None:
             answer_text = None
@@ -117,7 +117,6 @@ def main(
             answer_text = base64.b64encode(zlib.compress(pickle.dumps(answer)))
 
         # write it to disk
-        (_, _, cnf_path, _, _) = task.args
         csv_path = cnf_path + suffix
         existed = os.path.exists(csv_path)
 
