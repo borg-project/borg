@@ -41,8 +41,11 @@ class AnswerSetProgramming(object):
     name = "asp"
     extensions = [".asp.ground", ".asp.ground.gz"]
 
-    def __init__(self, claspre_path):
-        self._claspre_path = os.path.abspath(claspre_path)
+    def __init__(self, claspre_path = None):
+        if claspre_path is None:
+            self._claspre_path = os.path.abspath(claspre_path)
+        else:
+            self._claspre_path = None
 
     @contextlib.contextmanager
     def task_from_path(self, asp_path):
@@ -55,7 +58,10 @@ class AnswerSetProgramming(object):
         task.clean()
 
     def compute_features(self, task):
-        return features.get_features_for(task.path, self._claspre_path)
+        if self._claspre_path is None:
+            return Exception("domain not configured for static features")
+        else:
+            return features.get_features_for(task.path, self._claspre_path)
 
     def is_final(self, task, answer):
         """Is the answer definitive for the task?"""

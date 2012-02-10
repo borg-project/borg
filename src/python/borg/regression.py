@@ -95,7 +95,8 @@ class NearestRTDRegression(object):
 
         self._regression = \
             sklearn.pipeline.Pipeline([
-                ("scaler", sklearn.preprocessing.Scaler()),
+                #("scaler", sklearn.preprocessing.Scaler()),
+                ("pca", sklearn.decomposition.PCA(whiten = True)),
                 ("classifier", classifier),
                 ]) \
                 .fit(features, nearest)
