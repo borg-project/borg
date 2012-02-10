@@ -13,6 +13,8 @@ import numpy
 def files_under(path, extensions = None):
     """Iterate over paths in the specified directory tree."""
 
+    assert not isinstance(extensions, str)
+
     if os.path.isfile(path):
         walked = [path]
     else:

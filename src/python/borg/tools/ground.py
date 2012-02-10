@@ -1,6 +1,7 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import os.path
+import uuid
 import subprocess
 import condor
 import borg
@@ -25,7 +26,7 @@ def ground_instance(asp_path, gringo_path, domain_path, ignore_errors):
     logger.debug("running %s", command)
 
     # then ground the instance
-    lparse_part_path = "{0}.gringo.part.{1}".format(asp_path, condor.get_process_name())
+    lparse_part_path = "{0}.ground.part.{1}".format(asp_path, uuid.uuid4())
     lparse_gz_path = "{0}.gz".format(lparse_part_path)
 
     # XXX cleanup is not robust
@@ -57,27 +58,27 @@ def ground_instance(asp_path, gringo_path, domain_path, ignore_errors):
             gz_file.write(part_file.read())
 
     # and move it into place
-    lparse_final_path = "{0}.gringo.gz".format(asp_path)
+    lparse_final_path = "{0}.ground.gz".format(asp_path)
 
     os.unlink(lparse_part_path)
     os.rename(lparse_gz_path, lparse_final_path)
 
 @borg.annotations(
     gringo_path = ("path to Gringo", "positional", None, os.path.abspath),
-    domain_path = ("path the domain file", "positional", None, os.path.abspath),
+    domain_path = ("path to the ASP domain file", "positional", None, os.path.abspath),
     root_path = ("instances root directory",),
     ignore_errors = ("ignore Gringo errors", "flag"),
     skip_existing = ("skip already-grounded instances", "flag"),
-    workers = ("number of Condor workers", "option", None, int),
+    workers = ("number of Condor workers", "option", "w", int),
     )
 def main(gringo_path, domain_path, root_path, ignore_errors = False, skip_existing = False, workers = 0):
     """Ground a set of ASP instances using Gringo."""
 
-    asp_paths = map(os.path.abspath, borg.util.files_under(root_path, "*.asp"))
+    asp_paths = map(os.path.abspath, borg.util.files_under(root_path, [".asp"]))
 
     def yield_jobs():
         for asp_path in asp_paths:
-            if skip_existing and os.path.exists(asp_path + ".gringo.gz"):
+            if skip_existing and os.path.exists(asp_path + ".ground.gz"):
                 continue
 
             yield (ground_instance, [asp_path, gringo_path, domain_path, ignore_errors])

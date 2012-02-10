@@ -39,7 +39,7 @@ class GroundedAnswerSetInstance(object):
 
 class AnswerSetProgramming(object):
     name = "asp"
-    extensions = [".gringo", ".gringo.gz"]
+    extensions = [".asp.ground", ".asp.ground.gz"]
 
     def __init__(self, claspre_path):
         self._claspre_path = os.path.abspath(claspre_path)
