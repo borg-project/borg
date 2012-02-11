@@ -47,7 +47,7 @@ def timed_read(fds, timeout = -1):
 class SolverProcess(multiprocessing.Process):
     """Attempt to solve the task in a subprocess."""
 
-    def __init__(self, parse_output, arguments, stm_queue, mts_queue, solver_id, tmpdir):
+    def __init__(self, parse_output, arguments, stm_queue, mts_queue, solver_id, tmpdir, cwd):
         self._parse_output = parse_output
         self._arguments = arguments
         self._stm_queue = stm_queue
@@ -56,8 +56,12 @@ class SolverProcess(multiprocessing.Process):
         self._tmpdir = tmpdir
         self._seed = random_seed()
         self._popened = None
+        self._cwd = cwd
 
-        logger.info("running %s", arguments)
+        if self._cwd is None:
+            logger.info("running %s", arguments)
+        else:
+            logger.info("running %s under %s", arguments, cwd)
 
         multiprocessing.Process.__init__(self)
 
@@ -116,7 +120,7 @@ class SolverProcess(multiprocessing.Process):
                 last_expenditure = expenditure
 
                 if self._popened is None:
-                    popened = borg.unix.sessions.spawn_pipe_session(self._arguments, {})
+                    popened = borg.unix.sessions.spawn_pipe_session(self._arguments, cwd = self._cwd)
                     self._popened = popened
 
                     descriptors = [popened.stdout.fileno(), popened.stderr.fileno()]
@@ -160,7 +164,16 @@ def prepare(command, root, cnf_path, tmpdir):
 class RunningSolver(object):
     """In-progress solver process."""
 
-    def __init__(self, parse, command, root, task_path, stm_queue = None, solver_id = None):
+    def __init__(
+        self,
+        parse,
+        command,
+        root,
+        task_path,
+        stm_queue = None,
+        solver_id = None,
+        cwd = None,
+        ):
         """Initialize."""
 
         if stm_queue is None:
@@ -184,6 +197,7 @@ class RunningSolver(object):
                 self._mts_queue,
                 self._solver_id,
                 self._tmpdir,
+                cwd,
                 )
 
     def __call__(self, budget):

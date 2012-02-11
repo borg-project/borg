@@ -17,24 +17,25 @@ def _child_preexec(environment):
     # start our own session
     os.setsid()
 
-def spawn_pipe_session(arguments, environment = {}):
+def spawn_pipe_session(arguments, environment = {}, cwd = None):
     """Spawn a subprocess in its own session."""
 
     popened = \
         subprocess.Popen(
             arguments,
-            close_fds  = True,
-            stdin      = subprocess.PIPE,
-            stdout     = subprocess.PIPE,
-            stderr     = subprocess.PIPE,
+            close_fds = True,
+            stdin = subprocess.PIPE,
+            stdout = subprocess.PIPE,
+            stderr = subprocess.PIPE,
             preexec_fn = lambda: _child_preexec(environment),
+            cwd = cwd,
             )
 
     popened.stdin.close()
 
     return popened
 
-def spawn_pty_session(arguments, environment = {}):
+def spawn_pty_session(arguments, environment = {}, cwd = None):
     """Spawn a subprocess in its own session, with stdout routed through a pty."""
 
     # build a pty
@@ -47,11 +48,12 @@ def spawn_pty_session(arguments, environment = {}):
         popened        = \
             subprocess.Popen(
                 arguments,
-                close_fds  = True,
-                stdin      = slave_fd,
-                stdout     = slave_fd,
-                stderr     = subprocess.PIPE,
+                close_fds = True,
+                stdin = slave_fd,
+                stdout = slave_fd,
+                stderr = subprocess.PIPE,
                 preexec_fn = lambda: _child_preexec(environment),
+                cwd = cwd,
                 )
         popened.stdout = os.fdopen(master_fd)
 

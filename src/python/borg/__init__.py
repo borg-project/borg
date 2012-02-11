@@ -32,6 +32,11 @@ def make_solvers(class_, suite_path, commands):
 
     return dict((k, class_(root, v)) for (k, v) in commands.items())
 
+def make_solvers_full(class_, suite_path, arg_lists):
+    root = os.path.dirname(os.path.abspath(suite_path))
+
+    return dict((k, class_(root, *v)) for (k, v) in arg_lists.items())
+
 def load_solvers(path):
     """Load a suite of solvers."""
 

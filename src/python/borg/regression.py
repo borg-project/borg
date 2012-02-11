@@ -1,8 +1,11 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import numpy
+import sklearn.svm
 import sklearn.pipeline
 import sklearn.linear_model
+import sklearn.decomposition
+import sklearn.kernel_approximation
 import borg
 
 logger = borg.get_logger(__name__, default_level = "INFO")
@@ -92,11 +95,13 @@ class NearestRTDRegression(object):
         logger.info("fitting classifier to nearest RTDs")
 
         classifier = MultiClassifier(sklearn.linear_model.LogisticRegression, C = 8e-1)
+        #classifier = MultiClassifier(sklearn.svm.SVC, scale_C = True, probability = True)
 
         self._regression = \
             sklearn.pipeline.Pipeline([
-                #("scaler", sklearn.preprocessing.Scaler()),
-                ("pca", sklearn.decomposition.PCA(whiten = True)),
+                #("pca", sklearn.decomposition.PCA(whiten = True)),
+                ("kernel", sklearn.kernel_approximation.RBFSampler(n_components = 1000)),
+                ("scaler", sklearn.preprocessing.Scaler()),
                 ("classifier", classifier),
                 ]) \
                 .fit(features, nearest)
