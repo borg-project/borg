@@ -106,10 +106,13 @@ def accounting():
 
     accountant_stack.append(accountant)
 
-    yield accountant
-
-    accountant.stop()
-    accountant_stack.pop()
+    try:
+        yield accountant
+    except:
+        raise
+    finally:
+        accountant.stop()
+        accountant_stack.pop()
 
 def normal_to_machine(machine_cpu_seconds):
     return machine_cpu_seconds * borg.defaults.machine_speed

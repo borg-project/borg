@@ -30,9 +30,12 @@ class MAX_SAT_Domain(object):
     def task_from_path(self, task_path):
         task = MAX_SAT_Task(task_path)
 
-        yield task
-
-        task.clean()
+        try:
+            yield task
+        except:
+            raise
+        finally:
+            task.clean()
 
     def compute_features(self, task):
         return features.get_features_for(task.path)

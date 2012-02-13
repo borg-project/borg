@@ -188,7 +188,7 @@ class MulEstimator(object):
         samples_NSD = counts_NSD + self._alpha
 
         # XXX hack
-        samples_NSD[..., -1] += numpy.mean(counts_NSD[..., :-1] * numpy.arange(bins), axis = -1) * 1e-2
+        #samples_NSD[..., -1] += numpy.mean(counts_NSD[..., :-1] * numpy.arange(bins), axis = -1) * 1.0
 
         samples_NSD /= numpy.sum(samples_NSD, axis = -1)[..., None]
 

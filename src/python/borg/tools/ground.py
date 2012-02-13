@@ -29,39 +29,42 @@ def ground_instance(asp_path, gringo_path, domain_path, ignore_errors):
     lparse_part_path = "{0}.ground.part.{1}".format(asp_path, uuid.uuid4())
     lparse_gz_path = "{0}.gz".format(lparse_part_path)
 
-    # XXX cleanup is not robust
+    try:
+        with open(lparse_part_path, "wb") as part_file:
+            with open("/dev/null", "wb") as null_file:
+                gringo_status = \
+                    subprocess.call(
+                        command,
+                        stdout = part_file,
+                        stderr = null_file,
+                        )
 
-    with open(lparse_part_path, "wb") as part_file:
-        with open("/dev/null", "wb") as null_file:
-            gringo_status = \
-                subprocess.call(
-                    command,
-                    stdout = part_file,
-                    stderr = null_file,
-                    )
+            if gringo_status != 0:
+                message = "gringo failed to ground {0}".format(asp_path)
 
-        if gringo_status != 0:
-            message = "gringo failed to ground {0}".format(asp_path)
+                if ignore_errors:
+                    logger.warning("%s", message)
 
-            if ignore_errors:
-                logger.warning("%s", message)
-
-                return None
+                    return None
+                else:
+                    raise Exception(message)
             else:
-                raise Exception(message)
-        else:
-            logger.info("grounded %s%s", asp_path, verified)
+                logger.info("grounded %s%s", asp_path, verified)
 
-    # compress it
-    with open(lparse_part_path) as part_file:
-        with borg.util.openz(lparse_gz_path, "wb") as gz_file:
-            gz_file.write(part_file.read())
+        # compress it
+        with open(lparse_part_path) as part_file:
+            with borg.util.openz(lparse_gz_path, "wb") as gz_file:
+                gz_file.write(part_file.read())
 
-    # and move it into place
-    lparse_final_path = "{0}.ground.gz".format(asp_path)
+        # and move it into place
+        lparse_final_path = "{0}.ground.gz".format(asp_path)
 
-    os.unlink(lparse_part_path)
-    os.rename(lparse_gz_path, lparse_final_path)
+        os.rename(lparse_gz_path, lparse_final_path)
+    finally:
+        if os.path.exists(lparse_part_path):
+            os.unlink(lparse_part_path)
+        if os.path.exists(lparse_gz_path):
+            os.unlink(lparse_gz_path)
 
 @borg.annotations(
     gringo_path = ("path to Gringo", "positional", None, os.path.abspath),

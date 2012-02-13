@@ -62,9 +62,12 @@ class PseudoBooleanSatisfiability(object):
 
         task = PseudoBooleanTask(task_path)
 
-        yield task
-
-        task.clean()
+        try:
+            yield task
+        except:
+            raise
+        finally:
+            task.clean()
 
     def compute_features(self, task):
         return features.compute_all(task.opb)

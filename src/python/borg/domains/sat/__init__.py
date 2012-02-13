@@ -25,9 +25,12 @@ class Satisfiability(object):
 
         task = SatisfiabilityTask(task_path)
 
-        yield task
-
-        task.clean()
+        try:
+            yield task
+        except:
+            raise
+        finally:
+            task.clean()
 
     def compute_features(self, task):
         return features.get_features_for(task.path)

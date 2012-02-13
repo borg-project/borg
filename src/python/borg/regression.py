@@ -94,13 +94,15 @@ class NearestRTDRegression(object):
 
         logger.info("fitting classifier to nearest RTDs")
 
-        classifier = MultiClassifier(sklearn.linear_model.LogisticRegression, C = 8e-1)
+        classifier = MultiClassifier(sklearn.linear_model.LogisticRegression)
         #classifier = MultiClassifier(sklearn.svm.SVC, scale_C = True, probability = True)
+        #classifier = MultiClassifier(sklearn.linear_model.LogisticRegression, penalty = "l1", C = 1e-1)
+        #classifier = MultiClassifier(sklearn.linear_model.LogisticRegression, penalty = "l2", C = 1e-2)
 
         self._regression = \
             sklearn.pipeline.Pipeline([
                 #("pca", sklearn.decomposition.PCA(whiten = True)),
-                ("kernel", sklearn.kernel_approximation.RBFSampler(n_components = 1000)),
+                #("kernel", sklearn.kernel_approximation.RBFSampler(n_components = 1000)),
                 ("scaler", sklearn.preprocessing.Scaler()),
                 ("classifier", classifier),
                 ]) \

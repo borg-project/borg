@@ -18,7 +18,7 @@ class GroundedAnswerSetInstance(object):
 
         if asp_path.endswith(".gz"):
             with borg.util.openz(asp_path) as asp_file:
-                (fd, self.path) = tempfile.mkstemp(suffix = ".lparse")
+                (fd, self.path) = tempfile.mkstemp(suffix = ".asp.ground")
 
                 final_file = os.fdopen(fd, "wb")
 
@@ -53,9 +53,12 @@ class AnswerSetProgramming(object):
 
         task = GroundedAnswerSetInstance(asp_path)
 
-        yield task
-
-        task.clean()
+        try:
+            yield task
+        except:
+            raise
+        finally:
+            task.clean()
 
     def compute_features(self, task):
         if self._claspre_path is None:

@@ -84,9 +84,12 @@ def numpy_printing(**kwargs):
 
     numpy.set_printoptions(**kwargs)
 
-    yield
-
-    numpy.set_printoptions(**old)
+    try:
+        yield
+    except:
+        raise
+    finally:
+        numpy.set_printoptions(**old)
 
 @contextlib.contextmanager
 def numpy_errors(**kwargs):
@@ -94,9 +97,12 @@ def numpy_errors(**kwargs):
 
     old = numpy.seterr(**kwargs)
 
-    yield
-
-    numpy.seterr(**old)
+    try:
+        yield
+    except:
+        raise
+    finally:
+        numpy.seterr(**old)
 
 def seconds(value):
     """Return the equivalent number of seconds, floating-point."""
