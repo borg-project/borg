@@ -15,7 +15,10 @@ def parse_clasp_json_output(stdout):
     except ValueError:
         return None
 
-    return output["Result"]
+    if output["Result"] == "UNKNOWN":
+        return None
+    else:
+        return output["Result"]
 
 def parse_clasp_human_output(stdout):
     for line in stdout.splitlines():
