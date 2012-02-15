@@ -120,12 +120,20 @@ class PreplanningPortfolio(object):
 
         self._solver_names = sorted(suite.solvers)
         self._model = model
-        self._plan = planner.plan(self._model.log_survival[..., :-1])
+        self._planner = planner
+        #self._plan = None
+        self._plan = self._planner.plan(self._model.log_survival[..., :-1])
 
         logger.info("preplanned plan: %s", self._plan)
 
     def __call__(self, task, suite, budget):
         """Run the portfolio."""
+
+        #if self._plan is None:
+            # XXX
+            #self._plan = self._planner.plan(self._model.log_survival[..., :int((budget.cpu_seconds - 1.0) / self._model.interval) + 1])
+
+            #logger.info("preplanned plan: %s", self._plan)
 
         remaining = budget.cpu_seconds
 

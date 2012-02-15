@@ -45,36 +45,44 @@ def get_features_for(asp_path, claspre_path):
     previous_utime = resource.getrusage(resource.RUSAGE_CHILDREN).ru_utime
 
     # get feature names
-    (names_out, _) = \
-        borg.util.check_call_capturing([
-            claspre_path,
-            "--list-features",
-            "--file",
-            asp_path,
-            ])
+    (names_out, _) = borg.util.check_call_capturing([claspre_path, "--list-features"])
     (dynamic_names_out, static_names_out) = names_out.splitlines()
     dynamic_names = normalized_claspre_names(dynamic_names_out.split(","))
     static_names = normalized_claspre_names(static_names_out.split(","))
 
     # compute feature values
-    (values_out, _, _) = \
-        borg.util.call_capturing([
-            claspre_path,
-            "--rand-prob=10,30",
-            "--search-limit=300,10",
-            "--features=C1",
-            "--file",
-            asp_path,
-            ])
+    values_command = [
+        claspre_path,
+        "--rand-prob=10,30",
+        "--search-limit=300,10",
+        "--features=C1",
+        "--file",
+        asp_path,
+        ]
+    num_restarts = 10
+
+    logger.info("running %s", values_command)
+
+    (values_out, _, _) = borg.util.call_capturing(values_command)
     values_per = [map(parse_claspre_value, l.split(",")) for l in values_out.strip().splitlines()]
+
+    if len(values_per) < num_restarts + 1:
+        assert values_per[-1][0] == 1.0
+
+        # the instance was solved in preprocessing
+        missing = (num_restarts - len(values_per) + 1)
+        values_per = values_per[:-1] + ([[0.0] * len(dynamic_names)] * missing) + [values_per[-1]]
+    else:
+        assert len(values_per) == num_restarts + 1
 
     # pull them together
     names = []
     values = []
 
-    for (i, dynamic_values) in enumerate(values_per[:-1]):
-        names += map("restart{0}-{{0}}".format(i).format, dynamic_names)
-        values += dynamic_values
+    #for (i, dynamic_values) in enumerate(values_per[:-1]):
+    for i in xrange(num_restarts):
+        names += ["restart{0}-{1}".format(i, n) for n in dynamic_names]
+        values += values_per[i]
 
     names += static_names
     values += values_per[-1]

@@ -58,8 +58,9 @@ class PortfolioMaker(object):
 class SolverMaker(object):
     def __init__(self, solver_name):
         self.name = solver_name
+        self.subname = solver_name
 
-    def __call__(self, suite, train_data, test_data = None):
+    def __call__(self, suite, train_data, test_data = None, model_kwargs = {}):
         return suite.solvers[self.name]
 
 def simulate_run(run, maker, train_data, test_data):
@@ -102,7 +103,7 @@ def simulate_run(run, maker, train_data, test_data):
     workers = ("submit jobs?", "option", "w", int),
     local = ("workers are local?", "flag"),
     )
-def main(out_path, runs, repeats = 4, workers = 0, local = False):
+def main(out_path, runs, repeats = 5, workers = 0, local = False):
     """Simulate portfolio and solver behavior."""
 
     logger.info("simulating %i runs", len(runs) * repeats)

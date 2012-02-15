@@ -88,9 +88,10 @@ class NearestRTDRegression(object):
 
         distances = borg.bregman.survival_distances_all(survivals)
         nearest = numpy.zeros((N, N), dtype = numpy.intc)
+        nearest_count = min(32, N / 4)
 
         for n in xrange(N):
-            nearest[n, numpy.argsort(distances[n])[:32]] = 1
+            nearest[n, numpy.argsort(distances[n])[:nearest_count]] = 1
 
         logger.info("fitting classifier to nearest RTDs")
 

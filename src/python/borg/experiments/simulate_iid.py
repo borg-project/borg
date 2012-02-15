@@ -26,6 +26,7 @@ def simulate_run(run, maker, all_data, train_mask, test_mask, instances, indepen
         train_data = train_data.collect_systematic(mixture).only_nonempty()
 
     budget = test_data.common_budget
+    #budget = test_data.common_budget  / 2 # XXX
     suite = borg.fake.FakeSuite(test_data)
 
     if maker.subname == "preplanning-dir":
@@ -37,7 +38,7 @@ def simulate_run(run, maker, all_data, train_mask, test_mask, instances, indepen
         model_kwargs = {}
 
     solver = maker(suite, train_data, model_kwargs = model_kwargs)
-    successes = 0
+    successes = []
 
     for (i, instance_id) in enumerate(test_data.run_lists):
         logger.info("simulating run %i/%i on %s", i, len(test_data), instance_id)
@@ -57,18 +58,25 @@ def simulate_run(run, maker, all_data, train_mask, test_mask, instances, indepen
                 )
 
             if succeeded:
-                successes += 1
+                successes.append(accountant.total.cpu_seconds)
 
     logger.info(
         "%s had %i successes over %i instances",
         maker.name,
-        successes,
+        len(successes),
         len(test_data),
         )
 
     description = "{0} ({1})".format(mixture, "Sep." if independent else "Sys.")
 
-    return (description, maker.name, instances, successes)
+    return (
+        description,
+        maker.name,
+        instances,
+        len(successes),
+        numpy.mean(successes),
+        numpy.median(successes),
+        )
 
 @borg.annotations(
     out_path = ("results CSV output path"),
@@ -88,28 +96,35 @@ def main(out_path, runs, repeats = 128, workers = 0, local = False):
         for run in runs:
             all_data = get_run_data(run["bundle"])
             validation = sklearn.cross_validation.ShuffleSplit(len(all_data), repeats, test_fraction = 0.2, indices = False)
-            maker = borg.experiments.simulate_runs.PortfolioMaker(run["portfolio_name"], bins = 10)
+
+            if run["portfolio_name"] == "-":
+                makers = map(borg.experiments.simulate_runs.SolverMaker, all_data.solver_names)
+            else:
+                makers = [borg.experiments.simulate_runs.PortfolioMaker(run["portfolio_name"])]
+
+            max_instances = len(all_data) * 0.8
 
             for (train_mask, test_mask) in validation:
-                for instances in map(int, map(round, numpy.r_[10.0:200.0:32j])):
-                    yield (
-                        simulate_run,
-                        [
-                            run,
-                            maker,
-                            all_data,
-                            train_mask,
-                            test_mask,
-                            instances,
-                            run["independent"],
-                            run["mixture"],
-                            ],
-                        )
+                for instances in map(int, map(round, numpy.r_[10.0:max_instances:32j])):
+                    for maker in makers:
+                        yield (
+                            simulate_run,
+                            [
+                                run,
+                                maker,
+                                all_data,
+                                train_mask,
+                                test_mask,
+                                instances,
+                                run["independent"],
+                                run["mixture"],
+                                ],
+                            )
 
     with borg.util.openz(out_path, "wb") as out_file:
         writer = csv.writer(out_file)
 
-        writer.writerow(["description", "solver", "instances", "successes"])
+        writer.writerow(["description", "solver", "instances", "successes", "mean_time", "median_time"])
 
         for (_, row) in condor.do(yield_jobs(), workers, local):
             writer.writerow(row)

@@ -17,13 +17,20 @@ def features_for_path(domain, task_path):
         return (["cpu_cost"] + list(names), [accountant.total.cpu_seconds] + list(values))
 
 @borg.annotations(
-    domain_name = ("suite path, or name of the problem domain",),
+    domain_name = ("suite path, or name of the problem domain", "positional"),
     instances_root = ("path to instances files", "positional", None, os.path.abspath),
     skip_existing = ("skip existing features?", "flag"),
     workers = ("submit jobs?", "option", "w", int),
     )
 def main(domain_name, instances_root, skip_existing = False, workers = 0):
     """Collect task features."""
+
+    condor.defaults.condor_matching = \
+        "InMastodon" \
+        " && regexp(\"rhavan-.*\", ParallelSchedulingGroup)" \
+        " && (Arch == \"X86_64\")" \
+        " && (OpSys == \"LINUX\")" \
+        " && (Memory > 1024)"
 
     def yield_runs():
         if os.path.exists(domain_name):

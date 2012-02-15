@@ -12,8 +12,15 @@ logger = borg.get_logger(__name__, default_level = "INFO")
     root_path = ("instances root directory",),
     runs_extension = ("runs files extension",),
     features_extension = ("features files extension",),
+    only_solver = ("only include one solver's runs", "option"),
     )
-def main(bundle_path, root_path, runs_extension = ".runs.csv", features_extension = ".features.csv"):
+def main(
+    bundle_path,
+    root_path,
+    runs_extension = ".runs.csv",
+    features_extension = ".features.csv",
+    only_solver = None,
+    ):
     """Bundle together run and feature data."""
 
     # list relevant files
@@ -43,7 +50,8 @@ def main(bundle_path, root_path, runs_extension = ".runs.csv", features_extensio
                 assert column_names[:4] == ["solver", "budget", "cost", "succeeded"]
 
                 for row in in_reader:
-                    out_writer.writerow([instance_path] + row[:4])
+                    if only_solver is None or row[0] == only_solver:
+                        out_writer.writerow([instance_path] + row[:4])
 
     logger.info("bundling feature data from %i files", len(features_paths))
 
