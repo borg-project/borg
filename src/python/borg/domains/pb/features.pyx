@@ -7,7 +7,6 @@ import borg
 logger = borg.get_logger(__name__, default_level = "INFO")
 
 named = {
-    "nonlinear" : lambda opb: 1.0 if opb.nonlinear is None else -1.0,
     "optimization" : lambda opb: -1.0 if opb.objective is None else 1.0,
     "variables": lambda opb: opb.N,
     "constraints": lambda opb: opb.M,

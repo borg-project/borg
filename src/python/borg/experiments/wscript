@@ -11,6 +11,7 @@ def build(context):
             "simulate_iid.py",
             "simulate_runs.py",
             "solved_vs_b.py",
+            "grade_features.py",
             ],
         install_path = "${PYTHONDIR}/borg/experiments",
         )

@@ -14,7 +14,9 @@ from . import test
 logger = borg.get_logger(__name__, default_level = "INFO")
 
 class PseudoBooleanTask(object):
-    def __init__(self, path):
+    """A pseudo-Boolean satisfiability (PB) instance."""
+
+    def __init__(self, path, linearizer_path = None):
         self.path = path
         self.support_paths = {}
 
@@ -24,9 +26,12 @@ class PseudoBooleanTask(object):
         (self.raw_M, self.raw_N, self.nonlinear) = self.header
 
         if self.nonlinear:
-            linearizer = os.path.join(borg.defaults.solvers_root, "PBSimple/PBlinearize")
-            (linearized, _) = borg.util.check_call_capturing([linearizer, self.path])
+            assert linearizer_path is not None
+
+            (linearized, _) = borg.util.check_call_capturing([linearizer_path, self.path])
             (fd, self.linearized_path) = tempfile.mkstemp(suffix = ".opb")
+            self._was_linearized = True
+
             self.support_paths["linearized"] = self.linearized_path
 
             with os.fdopen(fd, "w") as linearized_file:
@@ -35,6 +40,7 @@ class PseudoBooleanTask(object):
             logger.info("wrote linearized instance to %s", self.linearized_path)
         else:
             self.linearized_path = path
+            self._was_linearized = False
 
         with borg.accounting() as accountant:
             with open(self.linearized_path) as opb_file:
@@ -56,11 +62,17 @@ class PseudoBooleanSatisfiability(object):
     name = "pb"
     extensions = [".opb", ".pbo"]
 
+    def __init__(self, linearizer_path = None):
+        if linearizer_path is None:
+            self._linearizer_path = None
+        else:
+            self._linearizer_path = os.path.abspath(linearizer_path)
+
     @contextlib.contextmanager
     def task_from_path(self, task_path):
         """Clean up cached task resources on context exit."""
 
-        task = PseudoBooleanTask(task_path)
+        task = PseudoBooleanTask(task_path, linearizer_path = self._linearizer_path)
 
         try:
             yield task
@@ -70,7 +82,14 @@ class PseudoBooleanSatisfiability(object):
             task.clean()
 
     def compute_features(self, task):
-        return features.compute_all(task.opb)
+        """Compute static features of the given task."""
+
+        (names, values) = features.compute_all(task.opb)
+
+        names.append("nonlinear")
+        values.append(1.0 if task._was_linearized else -1.0)
+
+        return (names, values)
 
     def is_final(self, task, answer):
         """Is the answer definitive for the task?"""

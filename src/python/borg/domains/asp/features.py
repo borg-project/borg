@@ -67,11 +67,13 @@ def get_features_for(asp_path, claspre_path):
     values_per = [map(parse_claspre_value, l.split(",")) for l in values_out.strip().splitlines()]
 
     if len(values_per) < num_restarts + 1:
-        assert values_per[-1][0] == 1.0
+        # claspre failed, or the instance was solved in preprocessing
+        if len(values_per) == 0:
+            # (claspre died)
+            values_per = [[0.0] * len(static_names)]
 
-        # the instance was solved in preprocessing
         missing = (num_restarts - len(values_per) + 1)
-        values_per = values_per[:-1] + ([[0.0] * len(dynamic_names)] * missing) + [values_per[-1]]
+        values_per = values_per[:-1] + ([[0.0] * len(dynamic_names)] * missing) + values_per[-1:]
     else:
         assert len(values_per) == num_restarts + 1
 
