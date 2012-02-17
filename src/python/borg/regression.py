@@ -17,6 +17,7 @@ class MultiClassifier(object):
 
     def fit(self, X, Y):
         (N, D) = Y.shape
+        (_, self._F) = X.shape
 
         logger.info("fitting %i models to %i examples", D, N)
 
@@ -50,6 +51,22 @@ class MultiClassifier(object):
                 z[:, d] = numpy.log(model.predict_proba(X)[:, 1] + 1e-64)
 
         return z
+
+    def get_feature_weights(self):
+        coefs_list = [] 
+
+        for model in self._models:
+            if model is None:
+                coefs_list.append([0.0] * self._F)
+            else:
+                assert model.coef_.shape == (1, self._F)
+
+                coefs_list.append(model.coef_[0])
+
+        coefs = numpy.array(coefs_list)
+        weights = numpy.mean(numpy.abs(coefs), axis = 0)
+
+        return weights
 
 def mapify_model_survivals(model):
     """Compute per-instance MAP survival functions."""
@@ -131,4 +148,10 @@ class NearestRTDRegression(object):
         weights /= numpy.sum(weights, axis = -1)[..., None]
 
         return weights
+
+    @property
+    def classifier(self):
+        (_, classifier) = self._regression.steps[-1]
+
+        return classifier
 
