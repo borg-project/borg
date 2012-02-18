@@ -66,6 +66,10 @@ class SolverMaker(object):
 def simulate_run(run, maker, train_data, test_data):
     """Simulate portfolio execution on a train/test split."""
 
+    if run.get("only_nontrivial", False):
+        train_data = train_data.only_nontrivial()
+        test_data = test_data.only_nontrivial()
+
     split_id = uuid.uuid4()
     budget = test_data.common_budget
     suite = borg.fake.FakeSuite(test_data)
@@ -114,11 +118,19 @@ def main(out_path, runs, repeats = 5, workers = 0, local = False):
         for run in runs:
             train_data = get_run_data(run["train_bundle"])
 
+            if run.get("only_nontrivial", False):
+                train_data = train_data.only_nontrivial()
+
             if run["test_bundle"] == "-":
                 validation = sklearn.cross_validation.KFold(len(train_data), repeats, indices = False)
                 data_sets = [(train_data.masked(v), train_data.masked(e)) for (v, e) in validation]
             else:
-                data_sets = [(train_data, get_run_data(run["test_bundle"]))] * repeats
+                test_data = get_run_data(run["test_bundle"])
+
+                if run.get("only_nontrivial", False):
+                    test_data = test_data.only_nontrivial()
+
+                data_sets = [(train_data, test_data)] * repeats
 
             if run["portfolio_name"] == "-":
                 makers = map(SolverMaker, train_data.solver_names)
@@ -126,8 +138,8 @@ def main(out_path, runs, repeats = 5, workers = 0, local = False):
                 makers = [PortfolioMaker(run["portfolio_name"])]
 
             for maker in makers:
-                for (train_data, test_data) in data_sets:
-                    yield (simulate_run, [run, maker, train_data, test_data])
+                for (train_fold_data, test_fold_data) in data_sets:
+                    yield (simulate_run, [run, maker, train_fold_data, test_fold_data])
 
     with borg.util.openz(out_path, "wb") as out_file:
         writer = csv.writer(out_file)

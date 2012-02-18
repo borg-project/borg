@@ -129,6 +129,22 @@ class RunData(object):
 
         return data
 
+    def only_nontrivial(self, threshold = 1.0):
+        """Return only instances on which some solver succeeded."""
+
+        data = RunData(self.solver_names)
+
+        for (id_, run_list) in self.run_lists.iteritems():
+            if any(not run.success or run.cost > threshold for run in run_list):
+                for run in run_list:
+                    data.add_run(id_, run)
+
+                data.add_feature_vector(id_, self.feature_vectors[id_])
+
+        data.common_budget = self.common_budget
+
+        return data
+
     def only_nonempty(self):
         """Return only instances on which some solver succeeded."""
 
