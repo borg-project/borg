@@ -10,6 +10,7 @@ def build(context):
             "plan.py",
             "simulate.py",
             "bundle_run_data.py",
+            "run_for_paramils.py",
             "ground.py",
             "reextend.py",
             ],
