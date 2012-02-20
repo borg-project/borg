@@ -38,6 +38,11 @@ class ClaspSolverFactory(object):
                 solver_id = solver_id,
                 )
 
+    def with_args(self, args):
+        """Return a new solver, with extra arguments appended."""
+
+        return ClaspSolverFactory(self._root, self._command + list(args))
+
 def parse_clasp_human_output(stdout):
     for line in stdout.splitlines():
         if line in ["SATISFIABLE", "UNSATISFIABLE", "OPTIMUM FOUND"]:
@@ -65,18 +70,16 @@ class ClaspfolioSolverFactory(object):
                 cwd = self._cwd.format(root = self._root),
                 )
 
-def parse_cmodels_output(stdout):
+def parse_yuliya_output(stdout):
     for line in stdout.splitlines():
         stripped = line.strip()
 
-        if stripped == "Answer: 1":
-            return True
-        elif stripped == "No Answer Set":
-            return False
+        if stripped in ["Answer: 1", "No Answer Set"]:
+            return stripped
 
     return None
 
-class CmodelsSolverFactory(object):
+class YuliyaSolverFactory(object):
     """Construct a cmodels solver invocation."""
 
     def __init__(self, root, command):
@@ -86,7 +89,7 @@ class CmodelsSolverFactory(object):
     def __call__(self, task, stm_queue = None, solver_id = None):
         return \
             borg.solver_io.RunningSolver(
-                parse_cmodels_output,
+                parse_yuliya_output,
                 self._command,
                 self._root,
                 task.path,
