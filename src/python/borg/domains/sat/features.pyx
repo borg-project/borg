@@ -85,7 +85,7 @@ def array_features(prefix, array, cv = "cv"):
     if cv == "cv":
         epsilon = numpy.finfo(float).eps
 
-        if abs(mu) < epsilon and sigma < epsilon:
+        if abs(mu) < epsilon:
             cv = 0.0
         else:
             cv = sigma / abs(mu)

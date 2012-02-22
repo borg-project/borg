@@ -28,12 +28,12 @@ def get_domain(name):
     return named_domains[name]
 
 def make_solvers(class_, suite_path, commands):
-    root = os.path.dirname(os.path.abspath(suite_path))
+    root = os.path.abspath(os.path.dirname(suite_path))
 
     return dict((k, class_(root, v)) for (k, v) in commands.items())
 
 def make_solvers_full(class_, suite_path, arg_lists):
-    root = os.path.dirname(os.path.abspath(suite_path))
+    root = os.path.abspath(os.path.dirname(suite_path))
 
     return dict((k, class_(root, *v)) for (k, v) in arg_lists.items())
 

@@ -20,11 +20,11 @@ def run_lp2sat(binaries_path, asp_file, cnf_file):
     # prepare the pipeline
     commands = [
         ["lp2sat-bin/smodels-2.34", "-internal", "-nolookahead"],
-        ["lp2sat-bin/lpcat-1.18"],
+        ["lp2sat-bin/lpcat-1.18"], # XXX is lpcat truly necessary?
         ["lp2sat-bin/lp2normal-1.11"],
         ["lp2sat-bin/igen-1.7"],
         ["lp2sat-bin/smodels-2.34", "-internal", "-nolookahead"],
-        ["lp2sat-bin/lpcat-1.18", "-s=/dev/null"],
+        ["lp2sat-bin/lpcat-1.18", "-s=/dev/null"], # XXX is lpcat truly necessary?
         ["lp2sat-bin/lp2lp2-1.17", "-g"],
         ["lp2sat-bin/lp2sat-1.15", "-n"],
         ]
@@ -32,61 +32,60 @@ def run_lp2sat(binaries_path, asp_file, cnf_file):
         [[os.path.join(binaries_path, c[0])] + c[1:] for c in commands] \
         + [["grep", "-v", "^c"]]
 
-    print full_commands
-
     # run the pipeline
     processes = []
-    dev_null_file = open("/dev/null", "wb")
 
     previous_utime = resource.getrusage(resource.RUSAGE_CHILDREN).ru_utime
 
-    try:
-        # start the pipeline processes
-        input_pipe = asp_file
+    with open("/dev/null", "wb") as dev_null_file:
+        try:
+            # start the pipeline processes
+            input_pipe = asp_file
 
-        for (i, command) in enumerate(full_commands):
-            if i == len(full_commands) - 1:
-                output_pipe = cnf_file
-            else:
-                output_pipe = subprocess.PIPE
+            for (i, command) in enumerate(full_commands):
+                if i == len(full_commands) - 1:
+                    output_pipe = cnf_file
+                else:
+                    output_pipe = subprocess.PIPE
 
-            process = \
-                subprocess.Popen(
-                    command,
-                    stdin = input_pipe,
-                    stderr = dev_null_file,
-                    stdout = output_pipe,
-                    )
+                process = \
+                    subprocess.Popen(
+                        command,
+                        stdin = input_pipe,
+                        stderr = dev_null_file,
+                        stdout = output_pipe,
+                        )
 
-            input_pipe.close()
+                input_pipe.close()
 
-            input_pipe = process.stdout
+                input_pipe = process.stdout
 
-        # wait for them to terminate
-        process.wait()
-
-        for process in processes:
+            # wait for them to terminate
             process.wait()
 
-        # XXX check for nonzero return codes?
+            for process in processes:
+                process.wait()
 
-        # accumulate their cost
-        cost = resource.getrusage(resource.RUSAGE_CHILDREN).ru_utime - previous_utime
+                if process.returncode != 0:
+                    raise Exception("process in lp2sat pipeline failed: {0}".format(process))
 
-        logger.info("converted ASP to CNF in %.2f s", cost)
+            # accumulate their cost
+            cost = resource.getrusage(resource.RUSAGE_CHILDREN).ru_utime - previous_utime
 
-        borg.get_accountant().charge_cpu(cost)
-    finally:
-        dev_null_file.close()
+            logger.info("converted ASP to CNF in %.2f s", cost)
 
-        for process in processes:
-            process.kill()
+            borg.get_accountant().charge_cpu(cost)
+        finally:
+            for process in processes:
+                process.kill()
 
 class GroundedAnswerSetInstance(object):
     """A grounded answer-set programming (ASP) instance."""
 
     def __init__(self, asp_path):
         """Initialize."""
+
+        self.support_paths = {}
 
         if asp_path.endswith(".gz"):
             with borg.util.openz(asp_path) as asp_file:
@@ -98,16 +97,17 @@ class GroundedAnswerSetInstance(object):
 
                 final_file.close()
 
-            self.unlink = True
+            self.support_paths["uncompressed"] = self.path
         else:
             self.path = asp_path
-            self.unlink = False
 
     def clean(self):
         """Clean up the grounded instance."""
 
-        if self.unlink:
-            os.unlink(self.path)
+        for path in self.support_paths.values():
+            os.unlink(path)
+
+        self.support_paths = {}
 
 class AnswerSetProgramming(object):
     name = "asp"
@@ -158,4 +158,8 @@ class AnswerSetProgramming(object):
             print "s UNSATISFIABLE"
 
             return 20
+
+    @property
+    def binaries_path(self):
+        return self._binaries_path
 
