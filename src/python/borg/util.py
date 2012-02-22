@@ -3,7 +3,10 @@
 import os.path
 import bz2
 import sys
+import pwd
 import gzip
+import shutil
+import tempfile
 import json
 import traceback
 import contextlib
@@ -32,6 +35,25 @@ def files_under(path, extensions = None):
         for name in walked:
             if any(name.endswith(e) for e in extensions):
                 yield name
+
+@contextlib.contextmanager
+def mkdtemp_scoped(prefix = None):
+    """Create, and then delete, a temporary directory."""
+
+    # provide a reasonable default prefix
+    if prefix is None:
+        prefix = "%s." % pwd.getpwuid(os.getuid())[0]
+
+    # create the context
+    path = None
+
+    try:
+        path = tempfile.mkdtemp(prefix = prefix)
+
+        yield path
+    finally:
+        if path is not None:
+            shutil.rmtree(path, ignore_errors = True)
 
 def openz(path, mode = "rb", closing = True):
     """Open a file, transparently [de]compressing it if a known extension is present."""

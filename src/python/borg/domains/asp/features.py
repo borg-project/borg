@@ -1,6 +1,9 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
+import os.path
+import tempfile
 import resource
+import subprocess
 import borg
 
 logger = borg.get_logger(__name__, default_level = "INFO")
@@ -39,12 +42,13 @@ def parse_claspre_value(raw_value):
     else:
         return value
 
-def get_features_for(asp_path, claspre_path):
+def get_claspfolio_features_for(asp_path, binaries_path):
     """Invoke claspre to compute features of an ASP instance."""
 
     previous_utime = resource.getrusage(resource.RUSAGE_CHILDREN).ru_utime
 
     # get feature names
+    claspre_path = os.path.join(binaries_path, "claspfolio-0.8.0-x86-linux/clasp+pre-1.3.4")
     (names_out, _) = borg.util.check_call_capturing([claspre_path, "--list-features"])
     (dynamic_names_out, static_names_out) = names_out.splitlines()
     dynamic_names = normalized_claspre_names(dynamic_names_out.split(","))
@@ -81,7 +85,6 @@ def get_features_for(asp_path, claspre_path):
     names = []
     values = []
 
-    #for (i, dynamic_values) in enumerate(values_per[:-1]):
     for i in xrange(num_restarts):
         names += ["restart{0}-{1}".format(i, n) for n in dynamic_names]
         values += values_per[i]
@@ -99,4 +102,24 @@ def get_features_for(asp_path, claspre_path):
     assert len(names) == len(values)
 
     return (names, values)
+
+def get_lp2sat_features_for(asp_path, binaries_path):
+    """Convert to CNF and compute SAT features of an ASP instance."""
+
+    with tempfile.NamedTemporaryFile(prefix = "borg.", suffix = ".cnf") as cnf_file:
+        with open(asp_path, "rb") as asp_file:
+            borg.domains.asp.run_lp2sat(binaries_path, asp_file, cnf_file)
+
+            return borg.domains.sat.features.get_features_for(cnf_file.name)
+
+def get_features_for(asp_path, binaries_path):
+    """Compute features of an ASP instance."""
+
+    (cnf_names, cnf_values) = get_lp2sat_features_for(asp_path, binaries_path)
+    (clasp_names, clasp_values) = get_claspfolio_features_for(asp_path, binaries_path)
+
+    cnf_qnames = map("cnf-{0}".format, cnf_names)
+    clasp_qnames = map("clasp-{0}".format, clasp_names)
+
+    return (cnf_qnames + clasp_qnames, cnf_values + clasp_values)
 

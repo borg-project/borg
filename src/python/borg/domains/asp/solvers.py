@@ -5,8 +5,6 @@ import borg
 
 logger = borg.get_logger(__name__)
 
-# XXX are we correctly handling optimization instances?
-
 def parse_clasp_json_output(stdout):
     """Parse the output from clasp."""
 
@@ -96,4 +94,10 @@ class YuliyaSolverFactory(object):
                 stm_queue = stm_queue,
                 solver_id = solver_id,
                 )
+
+class LP2SAT_SolverFactory(object):
+    """Construct an ASP-to-SAT solver invocation."""
+
+    def __init__(self, root, cwd, sat_factory):
+        pass
 

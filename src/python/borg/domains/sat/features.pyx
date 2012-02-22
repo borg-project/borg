@@ -521,5 +521,5 @@ def get_features_for(cnf_path):
 
     assert len(names) == len(values)
 
-    return (names, values)
+    return (list(names), list(values))
 

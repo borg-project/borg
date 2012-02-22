@@ -43,6 +43,7 @@ class PortfolioMaker(object):
             else:
                 raise ValueError("unrecognized portfolio subname: {0}".format(self.subname))
 
+            train_data = train_data.only_nontrivial() # XXX ?
             model = estimator(train_data, bins, full_data)
 
             if self.subname.startswith("preplanning-"):
@@ -65,10 +66,6 @@ class SolverMaker(object):
 
 def simulate_run(run, maker, train_data, test_data):
     """Simulate portfolio execution on a train/test split."""
-
-    if run.get("only_nontrivial", False):
-        train_data = train_data.only_nontrivial()
-        test_data = test_data.only_nontrivial()
 
     split_id = uuid.uuid4()
     budget = test_data.common_budget
