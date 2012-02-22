@@ -107,17 +107,20 @@ class LP2SAT_SolverFactory(object):
         self._domain = domain
 
     def __call__(self, task, stm_queue = None, solver_id = None):
-        cnf_path = task.support_paths.get("cnf-g")
+        try:
+            cnf_path = task.support_paths.get("cnf-g")
 
-        if cnf_path is None:
-            (fd, cnf_path) = tempfile.mkstemp(suffix = ".cnf")
+            if cnf_path is None:
+                (fd, cnf_path) = tempfile.mkstemp(suffix = ".cnf")
 
-            task.support_paths["cnf-g"] = cnf_path
+                task.support_paths["cnf-g"] = cnf_path
 
-            with contextlib.closing(os.fdopen(fd)) as cnf_file:
-                with open(task.path, "rb") as asp_file:
-                    borg.domains.asp.run_lp2sat(self._domain.binaries_path, asp_file, cnf_file)
-
-        with borg.get_domain("sat").task_from_path(cnf_path) as sat_task:
-            return self._sat_factory(sat_task)
+                with contextlib.closing(os.fdopen(fd)) as cnf_file:
+                    with open(task.path, "rb") as asp_file:
+                        borg.domains.asp.run_lp2sat(self._domain.binaries_path, asp_file, cnf_file)
+        except borg.domains.asp.LP2SAT_FailedException:
+            return borg.solver_io.EmptySolver(None)
+        else:
+            with borg.get_domain("sat").task_from_path(cnf_path) as sat_task:
+                return self._sat_factory(sat_task)
 

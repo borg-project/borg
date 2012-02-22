@@ -14,6 +14,9 @@ from . import features
 
 logger = borg.get_logger(__name__, default_level = "INFO")
 
+class LP2SAT_FailedException(Exception):
+    pass
+
 def run_lp2sat(binaries_path, asp_file, cnf_file):
     """Convert a grounded ASP instance to CNF."""
 
@@ -37,8 +40,8 @@ def run_lp2sat(binaries_path, asp_file, cnf_file):
 
     previous_utime = resource.getrusage(resource.RUSAGE_CHILDREN).ru_utime
 
-    with open("/dev/null", "wb") as dev_null_file:
-        try:
+    try:
+        with open("/dev/null", "wb") as dev_null_file:
             # start the pipeline processes
             input_pipe = asp_file
 
@@ -56,28 +59,39 @@ def run_lp2sat(binaries_path, asp_file, cnf_file):
                         stdout = output_pipe,
                         )
 
+                processes.append(process)
                 input_pipe.close()
 
                 input_pipe = process.stdout
 
-            # wait for them to terminate
+        # wait for them to terminate
+        for (process, command) in zip(processes, full_commands):
             process.wait()
 
-            for process in processes:
+            if process.returncode != 0:
+                message = \
+                    "process {0} in lp2sat pipeline failed: {1}".format(
+                        process.pid,
+                        command,
+                        )
+
+                raise LP2SAT_FailedException(message)
+    except:
+        logger.warning("failed to convert ASP to CNF")
+
+        raise
+    finally:
+        for process in processes:
+            if process.returncode is None:
+                process.kill()
                 process.wait()
 
-                if process.returncode != 0:
-                    raise Exception("process in lp2sat pipeline failed: {0}".format(process))
+        # accumulate the cost of children
+        cost = resource.getrusage(resource.RUSAGE_CHILDREN).ru_utime - previous_utime
 
-            # accumulate their cost
-            cost = resource.getrusage(resource.RUSAGE_CHILDREN).ru_utime - previous_utime
+        borg.get_accountant().charge_cpu(cost)
 
-            logger.info("converted ASP to CNF in %.2f s", cost)
-
-            borg.get_accountant().charge_cpu(cost)
-        finally:
-            for process in processes:
-                process.kill()
+        logger.info("lp2sat pipeline cost was %.2f s", cost)
 
 class GroundedAnswerSetInstance(object):
     """A grounded answer-set programming (ASP) instance."""

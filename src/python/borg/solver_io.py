@@ -267,3 +267,18 @@ class RunningPortfolioFactory(object):
 
         return RunningPortfolio(self.portfolio, self.suite, task)
 
+class EmptySolver(object):
+    """Immediately return the specified answer."""
+
+    def __init__(self, answer):
+        self._answer = answer
+
+    def __call__(self, budget):
+        return self._answer
+
+    def unpause_for(self, budget):
+        pass
+
+    def stop(self):
+        pass
+

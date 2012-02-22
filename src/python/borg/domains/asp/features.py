@@ -108,7 +108,14 @@ def get_lp2sat_features_for(asp_path, binaries_path):
 
     with tempfile.NamedTemporaryFile(prefix = "borg.", suffix = ".cnf") as cnf_file:
         with open(asp_path, "rb") as asp_file:
-            borg.domains.asp.run_lp2sat(binaries_path, asp_file, cnf_file)
+            try:
+                borg.domains.asp.run_lp2sat(binaries_path, asp_file, cnf_file)
+            except borg.domains.asp.LP2SAT_FailedException:
+                # XXX this workaround is silly; just improve sat.features
+                cnf_file.seek(0)
+                cnf_file.truncate(0)
+                cnf_file.write("p cnf 1 1\n1 0\n")
+                cnf_file.flush()
 
             return borg.domains.sat.features.get_features_for(cnf_file.name)
 
