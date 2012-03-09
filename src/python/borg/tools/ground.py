@@ -8,13 +8,16 @@ import borg
 
 logger = borg.get_logger(__name__, default_level = "DEBUG")
 
-def ground_instance(asp_path, gringo_path, domain_path, ignore_errors):
+def ground_instance(asp_path, gringo_path, domain_path, ignore_errors, compat):
     """Ground an ASP instance using Gringo."""
 
     # prepare the gringo invocation
     (asp_path_base, _) = os.path.splitext(asp_path)
     verify_path = "{0}.verify".format(asp_path_base)
     command = [gringo_path, domain_path, asp_path]
+
+    if compat:
+        command.append("--compat")
 
     if os.path.exists(verify_path):
         command.append(verify_path)
@@ -72,9 +75,18 @@ def ground_instance(asp_path, gringo_path, domain_path, ignore_errors):
     root_path = ("instances root directory",),
     ignore_errors = ("ignore Gringo errors", "flag"),
     skip_existing = ("skip already-grounded instances", "flag"),
+    compat = ("enable lparse compatibility", "flag"),
     workers = ("number of Condor workers", "option", "w", int),
     )
-def main(gringo_path, domain_path, root_path, ignore_errors = False, skip_existing = False, workers = 0):
+def main(
+    gringo_path,
+    domain_path,
+    root_path,
+    ignore_errors = False,
+    skip_existing = False,
+    compat = False,
+    workers = 0,
+    ):
     """Ground a set of ASP instances using Gringo."""
 
     asp_paths = map(os.path.abspath, borg.util.files_under(root_path, [".asp"]))
@@ -84,7 +96,7 @@ def main(gringo_path, domain_path, root_path, ignore_errors = False, skip_existi
             if skip_existing and os.path.exists(asp_path + ".ground.gz"):
                 continue
 
-            yield (ground_instance, [asp_path, gringo_path, domain_path, ignore_errors])
+            yield (ground_instance, [asp_path, gringo_path, domain_path, ignore_errors, compat])
 
     jobs = list(yield_jobs())
 

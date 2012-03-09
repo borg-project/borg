@@ -327,8 +327,11 @@ class RunData(object):
 
         return (times_arrays, ns_arrays, failures_NS)
 
-    def to_bins_array(self, solver_names, B):
+    def to_bins_array(self, solver_names, B, cutoff = None):
         """Return discretized run duration counts."""
+
+        if cutoff is None:
+            cutoff = self.get_common_budget()
 
         S = len(solver_names)
         N = len(self.run_lists)
@@ -336,7 +339,6 @@ class RunData(object):
 
         solver_name_index = list(solver_names)
         outcomes_NSC = numpy.zeros((N, S, C), numpy.intc)
-        cutoff = self.get_common_budget()
         interval = cutoff / B
 
         for (n, instance_id) in enumerate(sorted(self.run_lists)):

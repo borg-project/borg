@@ -19,10 +19,11 @@ def features_for_path(domain, task_path):
 @borg.annotations(
     domain_name = ("suite path, or name of the problem domain", "positional"),
     instances_root = ("path to instances files", "positional", None, os.path.abspath),
+    suffix = ("file suffix to apply", "positional"),
     skip_existing = ("skip existing features?", "flag"),
     workers = ("submit jobs?", "option", "w", int),
     )
-def main(domain_name, instances_root, skip_existing = False, workers = 0):
+def main(domain_name, instances_root, suffix = ".features.csv", skip_existing = False, workers = 0):
     """Collect task features."""
 
     condor.defaults.condor_matching = \
@@ -42,7 +43,7 @@ def main(domain_name, instances_root, skip_existing = False, workers = 0):
         count = 0
 
         for path in paths:
-            if skip_existing and os.path.exists(path + ".features.csv"):
+            if skip_existing and os.path.exists(path + suffix):
                 continue
 
             count += 1
@@ -53,7 +54,7 @@ def main(domain_name, instances_root, skip_existing = False, workers = 0):
 
     for (task, (names, values)) in condor.do(yield_runs(), workers):
         (_, cnf_path) = task.args
-        csv_path = cnf_path + ".features.csv"
+        csv_path = cnf_path + suffix
 
         with open(csv_path, "wb") as csv_file:
             csv.writer(csv_file).writerow(names)

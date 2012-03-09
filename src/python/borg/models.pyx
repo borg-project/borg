@@ -405,7 +405,7 @@ class MulDirMatMixEstimator(object):
 
         assert numpy.all(samples_TSD >= 0.0)
 
-        return \
+        model = \
             MultinomialModel(
                 interval,
                 borg.statistics.to_log_survival(samples_TSD, axis = -1),
@@ -414,6 +414,11 @@ class MulDirMatMixEstimator(object):
                 names = names_T,
                 features = features_TF,
                 )
+
+        model.latent_classes = alphas_KSD
+        model.responsibilities = log_responsibilities_KN
+
+        return model
 
 class DiscreteLogNormalMixEstimator(object):
     def __init__(self, int K = 32):

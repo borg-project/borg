@@ -130,12 +130,6 @@ def streeter_plan(log_survival_WSB, log_weights_W):
         f_post = numpy.sum(1.0 - numpy.exp(log_post_survival_WSR), axis = 0)
         flat_sb = numpy.argmax((f_post - f_plan) / numpy.arange(1, R + 1))
         (min_s, min_b) = action = numpy.unravel_index(flat_sb, f_post.shape)
-        #print
-        #print "...", R
-        #print 1.0 - numpy.exp(log_post_survival_WSR)
-        #print f_plan
-        #print f_post
-        #print min_s, min_b
 
         plan.append(action)
 

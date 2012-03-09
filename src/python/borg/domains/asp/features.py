@@ -122,11 +122,12 @@ def get_lp2sat_features_for(asp_path, binaries_path):
 def get_features_for(asp_path, binaries_path):
     """Compute features of an ASP instance."""
 
-    (cnf_names, cnf_values) = get_lp2sat_features_for(asp_path, binaries_path)
+    #(cnf_names, cnf_values) = get_lp2sat_features_for(asp_path, binaries_path)
     (clasp_names, clasp_values) = get_claspfolio_features_for(asp_path, binaries_path)
 
-    cnf_qnames = map("cnf-{0}".format, cnf_names)
+    #cnf_qnames = map("cnf-{0}".format, cnf_names)
     clasp_qnames = map("clasp-{0}".format, clasp_names)
 
-    return (cnf_qnames + clasp_qnames, cnf_values + clasp_values)
+    #return (cnf_qnames + clasp_qnames, cnf_values + clasp_values)
+    return (clasp_qnames, clasp_values)
 

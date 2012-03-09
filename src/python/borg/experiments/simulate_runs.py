@@ -23,6 +23,13 @@ class PortfolioMaker(object):
 
         logger.info("making portfolio %s; model_kwargs: %s", self.name, model_kwargs)
 
+        if "knapsack" in self.variants:
+            planner = borg.planners.ReorderingPlanner(borg.planners.KnapsackPlanner())
+        elif "streeter" in self.variants:
+            planner = borg.planners.StreeterPlanner()
+        else:
+            planner = borg.planners.default
+
         if self.subname == "random":
             portfolio = borg.portfolios.RandomPortfolio()
         elif self.subname == "uniform":
@@ -43,11 +50,11 @@ class PortfolioMaker(object):
             else:
                 raise ValueError("unrecognized portfolio subname: {0}".format(self.subname))
 
-            train_data = train_data.only_nontrivial() # XXX ?
+            train_data = train_data.only_nontrivial(train_data.common_budget / bins) # XXX ?
             model = estimator(train_data, bins, full_data)
 
             if self.subname.startswith("preplanning-"):
-                portfolio = borg.portfolios.PreplanningPortfolio(suite, model)
+                portfolio = borg.portfolios.PreplanningPortfolio(suite, model, planner = planner)
             elif self.subname.startswith("probabilistic-"):
                 regress = borg.regression.NearestRTDRegression(model)
                 portfolio = borg.portfolios.PureModelPortfolio(suite, model, regress)
@@ -69,6 +76,7 @@ def simulate_run(run, maker, train_data, test_data):
 
     split_id = uuid.uuid4()
     budget = test_data.common_budget
+    #budget = test_data.common_budget / 4
     suite = borg.fake.FakeSuite(test_data)
     solver = maker(suite, train_data, test_data)
     rows = []

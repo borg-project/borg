@@ -54,6 +54,12 @@ class BaselinePortfolio(object):
         success_rates = outcome_counts[..., 0] / numpy.sum(outcome_counts, axis = -1)
         mean_rates = numpy.mean(success_rates, axis = 0)
 
+        # XXX hackishly break ties according to run time
+        count = 30
+        bins = training.to_bins_array(solver_names, count).astype(numpy.double)
+        wbins = numpy.mean(bins[..., :-1] * numpy.arange(count), axis = -1)
+        mean_rates -= numpy.mean(wbins, axis = 0) * 1e-8
+
         self._solver_name = solver_names[numpy.argmax(mean_rates)]
 
     def __call__(self, task, suite, budget):
@@ -78,14 +84,14 @@ class OraclePortfolio(object):
         budget_count = 100
         solver_names = sorted(suite.solvers)
         data = suite.run_data.filter(task)
-        bins = data.to_bins_array(solver_names, budget_count)[0].astype(numpy.double)
+        bins = data.to_bins_array(solver_names, budget_count, budget.cpu_seconds)[0].astype(numpy.double)
         bins[:, -2] += 1e-2 # if all else fails...
         bins[:, -1] += numpy.mean(bins[:, :-1] * numpy.arange(budget_count), axis = -1) * 1e-8 # sooner is better
         rates = bins / numpy.sum(bins, axis = -1)[..., None]
         log_survival = numpy.log(1.0 + 1e-64 - numpy.cumsum(rates[:, :-1], axis = -1))
 
         # make a plan
-        interval = data.get_common_budget() / budget_count
+        interval = budget.cpu_seconds / budget_count
         plan = self._planner.plan(log_survival[None, ...])
 
         #if len(plan) > 1:

@@ -12,6 +12,7 @@ def build(context):
             "simulate_runs.py",
             "solved_vs_b.py",
             "grade_features.py",
+            "latent_classes.py",
             ],
         install_path = "${PYTHONDIR}/borg/experiments",
         )
