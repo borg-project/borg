@@ -3,5 +3,6 @@
 .waf-*
 .lock-wafbuild
 .pypirc
+/dist/
 /build/
 /src/python/borg.egg-info/
