@@ -35,5 +35,13 @@ setuptools.setup(
     license = "MIT",
     keywords = "borg algorithm portfolio solver SAT PB satisfiability",
     url = "http://nn.cs.utexas.edu/pages/research/borg/",
+    classifiers = [
+        "Development Status :: 4 - Beta",
+        "Programming Language :: Python :: 2.6",
+        "Operating System :: Unix",
+        "Topic :: Utilities",
+        "Topic :: Software Development :: Libraries",
+        "Topic :: Scientific/Engineering :: Artificial Intelligence",
+        ],
     )
 
