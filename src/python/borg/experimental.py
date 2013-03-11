@@ -167,7 +167,7 @@ class MixturePortfolio(object):
         self._classifiers = []
 
         for k in xrange(K):
-            classifier = scikits.learn.linear_model.LogisticRegression()
+            classifier = sklearn.linear_model.LogisticRegression()
 
             classifier.fit(train_x, train_ys[k])
 
