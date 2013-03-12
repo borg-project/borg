@@ -124,7 +124,7 @@ Finally, install any missing Python packages:
     $ pip install cython
     $ pip install numpy
     $ pip install scipy
-    $ pip install scikits.learn
+    $ pip install scikit-learn
 
 Installing borg and cargo
 -------------------------
