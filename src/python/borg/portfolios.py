@@ -10,7 +10,7 @@ import contextlib
 import multiprocessing
 import numpy
 import scipy.stats
-import scikits.learn.linear_model
+import sklearn.linear_model
 import cargo
 import borg
 
@@ -256,7 +256,7 @@ class ClassifierPortfolio(object):
         self._models = {}
 
         for solver in solver_index:
-            self._models[solver] = model = scikits.learn.linear_model.LogisticRegression()
+            self._models[solver] = model = sklearn.linear_model.LogisticRegression()
 
             model.fit(train_xs[solver], train_ys[solver])
 

@@ -1,7 +1,7 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import scipy.stats
-import scikits.learn.linear_model
+import sklearn.linear_model
 import numpy
 import borg
 import cargo
@@ -534,7 +534,7 @@ class BilevelMultinomialModel(object):
                 for l in xrange(L):
                     train_y.extend([l] * counts_L[l])
 
-            self._classifier = scikits.learn.linear_model.LogisticRegression()
+            self._classifier = sklearn.linear_model.LogisticRegression()
 
             self._classifier.fit(train_x, train_y)
 
