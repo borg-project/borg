@@ -1,585 +1,565 @@
+#cython: profile=False
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
-import scipy.stats
-import sklearn.linear_model
 import numpy
 import borg
-import cargo
 
-logger = cargo.get_logger(__name__, default_level = "DETAIL")
+cimport cython
+cimport libc.math
+cimport numpy
+cimport borg.statistics
 
-def assert_probabilities(array):
-    """Assert that an array contains only valid probabilities."""
+logger = borg.get_logger(__name__, default_level = "DEBUG")
 
-    assert numpy.all(array >= 0.0)
-    assert numpy.all(array <= 1.0)
+cdef extern from "math.h":
+    double INFINITY
 
-def assert_log_probabilities(array):
-    """Assert that an array contains only valid probabilities."""
+@cython.infer_types(True)
+def sampled_pmfs_log_pmf(pmfs, counts):
+    """Compute the log probabilities of instance runs given discrete log PMFs."""
 
-    assert numpy.all(array <= 0.0)
+    borg.statistics.assert_log_weights(pmfs, axis = -1)
 
-def assert_weights(array, axis = None):
-    """Assert than an array sums to one over a particular axis."""
+    cdef int N = pmfs.shape[0]
+    cdef int S = pmfs.shape[1]
+    cdef int C = pmfs.shape[2]
+    cdef int M = counts.shape[0]
 
-    assert numpy.all(numpy.abs(numpy.sum(array, axis = axis) - 1.0 ) < 1e-6)
+    cdef numpy.ndarray[double, ndim = 3] pmfs_NSC = pmfs
+    cdef numpy.ndarray[int, ndim = 3] counts_MSC = counts
+    cdef numpy.ndarray[double, ndim = 2] logs_NM = numpy.empty((N, M), numpy.double)
 
-def fit_binomial_mixture(observed, counts, K):
-    """Use EM to fit a discrete mixture."""
+    cdef int counts_msc
 
-    concentration = 1e-8
-    N = observed.shape[0]
-    rates = (observed + concentration / 2.0) / (counts + concentration)
-    components = rates[numpy.random.randint(N, size = K)]
-    responsibilities = numpy.empty((K, N))
-    old_ll = -numpy.inf
+    for n in xrange(N):
+        for m in xrange(M):
+            logs_NM[n, m] = 0.0
 
-    for i in xrange(512):
-        # compute new responsibilities
-        raw_mass = scipy.stats.binom.logpmf(observed[None, ...], counts[None, ...], components[:, None, ...])
-        log_mass = numpy.sum(raw_mass, axis = 2)
-        responsibilities = log_mass - numpy.logaddexp.reduce(log_mass, axis = 0)
-        responsibilities = numpy.exp(responsibilities)
-        weights = numpy.sum(responsibilities, axis = 1)
-        weights /= numpy.sum(weights)
-        ll = numpy.sum(numpy.logaddexp.reduce(numpy.log(weights)[:, None] + log_mass, axis = 0))
+            for s in xrange(S):
+                sum_counts_ms = 0
 
-        # check for termination
-        logger.debug("l-l at iteration %i is %f", i, ll)
+                for c in xrange(C):
+                    counts_msc = counts_MSC[m, s, c]
 
-        if numpy.abs(ll - old_ll) <= 1e-3:
-            break
+                    if counts_msc > 0:
+                        sum_counts_ms += counts_msc
 
-        old_ll = ll
+                        logs_NM[n, m] += counts_msc * pmfs_NSC[n, s, c]
+                        logs_NM[n, m] -= libc.math.lgamma(1.0 + counts_msc)
 
-        # compute new components
-        map_observed = observed[None, ...] * responsibilities[..., None]
-        map_counts = counts[None, ...] * responsibilities[..., None]
-        components = numpy.sum(map_observed, axis = 1) + concentration / 2.0
-        components /= numpy.sum(map_counts, axis = 1) + concentration
+                logs_NM[n, m] += libc.math.lgamma(1.0 + sum_counts_ms)
 
-        # split duplicates
-        for j in xrange(K):
-            for k in xrange(K):
-                if j != k and numpy.sum(numpy.abs(components[j] - components[k])) < 1e-6:
-                    components[j] = rates[numpy.random.randint(N)]
-                    old_ll = -numpy.inf
+    borg.statistics.assert_log_probabilities(logs_NM)
 
-    assert numpy.all(components >= 0.0)
-    assert numpy.all(components <= 1.0)
+    return logs_NM
 
-    return (components, weights, responsibilities, ll)
+def run_data_log_probabilities(model, testing, weights = None):
+    """Compute per-instance log probabilities of run data under a model."""
 
-def inverse_digamma(x):
-    """Return the (approximate) inverse of the digamma function."""
+    logger.info("scoring model on %i instances", len(testing))
 
-    if x >= -2.22:
-        y0 = numpy.exp(x) + 0.5
-    else:
-        y0 = -1.0 / (x - scipy.special.digamma(1.0))
+    (N, S, C) = model.log_masses.shape
+    B = C - 1
 
-    f = lambda y: scipy.special.digamma(y) - x
-    f_ = lambda y: scipy.special.polygamma(1, y)
+    counts = testing.to_bins_array(testing.solver_names, B)
+    log_probabilities = borg.models.sampled_pmfs_log_pmf(model.log_masses, counts)
 
-    return scipy.optimize.newton(f, y0, fprime = f_)
+    if weights is None:
+        weights = numpy.ones_like(log_probabilities.T) / log_probabilities.shape[0]
 
-def fit_dirichlet(vectors, weights):
-    """Compute the maximum-likelihood Dirichlet distribution."""
+    borg.statistics.assert_weights(weights, axis = -1)
 
-    log_pbar_k = numpy.sum(weights[:, None, None] * numpy.log(vectors), axis = 0) / numpy.sum(weights)
-    alpha = numpy.random.random(vectors.shape[1:])
-    alpha /= numpy.sum(alpha, axis = 1)[:, None]
-    last_alpha = alpha
+    assert weights.T.shape == log_probabilities.shape
 
-    for i in xrange(64):
-        psi_total = scipy.special.digamma(numpy.sum(alpha, axis = 1))
-        psi_alpha = psi_total[:, None] + log_pbar_k
+    weighted_lps = log_probabilities + numpy.log(weights.T)
+    lps_per = numpy.logaddexp.reduce(weighted_lps, axis = 0)
 
-        alpha = numpy.array([[inverse_digamma(x) for x in row.flatten()] for row in psi_alpha])
-        alpha = alpha.reshape(psi_alpha.shape)
+    return lps_per
 
-        if numpy.sum(numpy.abs(alpha - last_alpha)) <= 1e-10:
-            break
+class MultinomialModel(object):
+    """Multinomial mixture model."""
 
-        last_alpha = alpha
+    def __init__(
+        self,
+        interval,
+        log_survival,
+        log_weights = None,
+        log_masses = None,
+        names = None,
+        features = None,
+        ):
+        """Initialize."""
 
-    return alpha
+        (N, _, _) = log_survival.shape
 
-def fit_dirichlet_vfixed(vectors, weights, variance):
-    """Compute the maximum-likelihood Dirichlet distribution with fixed concentration."""
+        self._interval = interval
+        self._log_survival_NSC = log_survival
 
-    log_pbar_k = numpy.sum(weights[:, None, None] * numpy.log(vectors), axis = 0) / numpy.sum(weights)
-    alpha = numpy.random.random(vectors.shape[1:])
-    alpha /= numpy.sum(alpha, axis = 1)[:, None]
-    last_alpha = alpha
+        if log_weights is None:
+            self._log_weights_N = numpy.zeros(N) - numpy.log(N)
+        else:
+            self._log_weights_N = log_weights
 
-    for i in xrange(64):
-        psi_full = scipy.special.digamma(variance * alpha)
-        psi_sigma = numpy.sum(alpha * (log_pbar_k - psi_full), axis = -1)
-        psi_alpha = log_pbar_k - psi_sigma[..., None]
+        self._log_masses_NSC = log_masses
+        self._names = names
+        self._features = features
 
-        alpha = numpy.array([[inverse_digamma(x) for x in row.flatten()] for row in psi_alpha])
-        alpha = alpha.reshape(psi_alpha.shape)
-        alpha /= numpy.sum(alpha, axis = -1)[..., None]
+        borg.statistics.assert_log_weights(self._log_weights_N)
+        borg.statistics.assert_log_survival(self._log_survival_NSC, 2)
+        borg.statistics.assert_log_probabilities(self._log_masses_NSC)
 
-        if numpy.sum(numpy.abs(alpha - last_alpha)) <= 1e-10:
-            break
+    def with_weights(self, new_log_weights):
+        """Return an equivalent model with new weights."""
 
-        last_alpha = alpha
+        return self.with_new(log_weights = new_log_weights)
 
-    return alpha * variance
+    def with_new(self, log_weights = None, features = None):
+        """Return an equivalent model with new weights."""
 
-def dirichlet_log_pdf(vectors, alphas):
-    """Compute the Dirichlet log PDF."""
+        log_weights = self._log_weights_N if log_weights is None else log_weights
+        features = self._features if features is None else features
 
-    vectors = numpy.asarray(vectors)
-    alphas = numpy.asarray(alphas)
+        return \
+            MultinomialModel(
+                self._interval,
+                self._log_survival_NSC,
+                log_weights = log_weights,
+                log_masses = self._log_masses_NSC,
+                names = self._names,
+                features = features,
+                )
 
-    term_a = scipy.special.gammaln(numpy.sum(alphas, axis = -1))
-    term_b = numpy.sum(scipy.special.gammaln(alphas), axis = -1)
-    term_c = numpy.sum((alphas - 1.0) * numpy.log(vectors), axis = -1)
+    def condition(self, failures):
+        """Return a model conditioned on past runs."""
 
-    return term_a - term_b + term_c
+        log_post_weights_N = numpy.copy(self._log_weights_N)
 
-def dcm_pdf(vector, alpha):
-    """Compute the DCM PDF."""
+        for (s, b) in failures:
+            log_post_weights_N += self._log_survival_NSC[:, s, b]
 
-    sum_alpha = numpy.sum(alpha, axis = -1)
-    sum_vector = numpy.sum(vector, axis = -1)
+        log_post_weights_N -= numpy.logaddexp.reduce(log_post_weights_N)
 
-    term_l = scipy.special.gamma(sum_alpha) / scipy.special.gamma(sum_alpha + sum_vector)
-    term_r = numpy.prod(scipy.special.gamma(vector + alpha) / scipy.special.gamma(alpha), axis = -1)
+        return MultinomialModel(self._interval, self._log_survival_NSC, log_post_weights_N)
 
-    return term_l * term_r
+    @property
+    def interval(self):
+        """The associated discretization interval."""
 
-def dcm_draw_pdf(k, alpha):
-    """Compute the DCM PDF of a single draw."""
+        return self._interval
 
-    sum_alpha = numpy.sum(alpha, axis = -1)
-    alpha_plus = numpy.copy(alpha)
+    @property
+    def log_weights(self):
+        """Log weights of the model components."""
 
-    alpha_plus[k] += 1.0
+        return self._log_weights_N
 
-    term_l = scipy.special.gamma(sum_alpha) / scipy.special.gamma(sum_alpha + 1.0)
-    term_r = numpy.prod(scipy.special.gamma(alpha_plus) / scipy.special.gamma(alpha), axis = -1)
+    @property
+    def log_survival(self):
+        """Possible log discrete survival functions."""
 
-    return term_l * term_r
+        return self._log_survival_NSC
 
-def fit_dirichlet_mixture(vectors, K):
-    """Use EM to fit a Dirichlet mixture."""
+    @property
+    def log_masses(self):
+        """Possible log discrete mass functions."""
 
-    # hackishly regularize our input vectors
-    vectors = vectors + 1e-6
-    vectors /= numpy.sum(vectors, axis = -1)[..., None]
+        return self._log_masses_NSC
 
-    # then do EM
-    N = vectors.shape[0]
-    components = vectors[numpy.random.randint(N, size = K)]
-    responsibilities = numpy.empty((K, N))
-    old_ll = -numpy.inf
+    @property
+    def names(self):
+        """Names of associated instances."""
 
-    for i in xrange(512):
-        # compute new responsibilities
-        raw_mass = dirichlet_log_pdf(vectors[None, ...], components[:, None, ...])
-        log_mass = numpy.sum(raw_mass, axis = 2)
-        responsibilities = log_mass - numpy.logaddexp.reduce(log_mass, axis = 0)
-        responsibilities = numpy.exp(responsibilities)
-        weights = numpy.sum(responsibilities, axis = 1)
-        weights /= numpy.sum(weights)
-        ll = numpy.sum(numpy.logaddexp.reduce(numpy.log(weights)[:, None] + log_mass, axis = 0))
+        return self._names
 
-        logger.detail("l-l at EM iteration %i is %f", i, ll)
+    @property
+    def features(self):
+        """Features of associated instances."""
 
-        # check for termination
-        if numpy.abs(ll - old_ll) <= 1e-3:
-            break
-        if ll < old_ll:
-            logger.warning("l-l decreased from %f to %f", old_ll, ll)
+        return self._features
 
-        old_ll = ll
+class MulEstimator(object):
+    def __init__(self, alpha = 1e-2):
+        self._alpha = alpha
 
-        # compute new components
-        for k in xrange(K):
-            components[k] = fit_dirichlet(vectors, responsibilities[k])
+    def __call__(self, run_data, bins, full_data):
+        """Estimator parameters of the simple multinomial model."""
 
-        for j in xrange(K):
-            for k in xrange(K):
-                if j != k and numpy.sum(numpy.abs(components[j] - components[k])) < 1e-6:
-                    components[j] = vectors[numpy.random.randint(N)]
-                    old_ll = -numpy.inf
+        counts_NSD = run_data.to_bins_array(run_data.solver_names, bins)
+        samples_NSD = counts_NSD + self._alpha
 
-    return (components, weights)
+        # XXX hack
+        #samples_NSD[..., -1] += numpy.mean(counts_NSD[..., :-1] * numpy.arange(bins), axis = -1) * 1.0
 
-class BilevelModel(object):
-    """Two-level mixture model."""
+        samples_NSD /= numpy.sum(samples_NSD, axis = -1)[..., None]
 
-    def __init__(self, successes, attempts):
-        """Fit the model to data."""
+        return \
+            MultinomialModel(
+                run_data.get_common_budget() / bins,
+                borg.statistics.to_log_survival(samples_NSD, axis = -1),
+                log_masses = borg.statistics.floored_log(samples_NSD),
+                names = numpy.array(sorted(run_data.ids)),
+                features = run_data.to_features_array(),
+                )
 
-        # mise en place
-        (N, S, B) = successes.shape
+class MulDirEstimator(object):
+    def __call__(self, run_data, bins, full_data):
+        counts_NSD = run_data.to_bins_array(run_data.solver_names, bins)
 
-        successes_NSB = successes
-        attempts_NSB = attempts
+        (N, S, D) = counts_NSD.shape
 
-        # fit the per-solver mixture models
-        logger.detail("fitting solver behavior classes")
-
-        K = 8
-        task_mixes_NSK = numpy.empty((N, S, K))
-        self._inner_SKB = numpy.empty((S, K, B))
+        alphas_SD = numpy.empty((S, D), numpy.double)
 
         for s in xrange(S):
-            fit = lambda: fit_binomial_mixture(successes_NSB[:, s], attempts_NSB[:, s], K)
-            (self._inner_SKB[s], _, responsibilities_KN, _) = \
-                max(
-                    [fit() for _ in xrange(4)],
-                    key = lambda x: x[-1],
-                    )
-            task_mixes_NSK[:, s] = responsibilities_KN.T
+            alphas_SD[s, :] = borg.statistics.dcm_estimate_ml_wallach(counts_NSD[:, s, :])
 
-            logger.detail(
-                "behavior classes for solver %i:\n%s",
-                s,
-                cargo.pretty_probability_matrix(self._inner_SKB[s]),
+        samples_NSD = counts_NSD + alphas_SD
+        samples_NSD /= numpy.sum(samples_NSD, axis = -1)[..., None]
+
+        return \
+            MultinomialModel(
+                run_data.get_common_budget() / bins,
+                borg.statistics.to_log_survival(samples_NSD, axis = -1),
+                log_masses = borg.statistics.floored_log(samples_NSD),
+                names = numpy.array(sorted(run_data.ids)),
+                features = run_data.to_features_array(),
                 )
 
-        # fit the outer dirichlet mixture
-        logger.detail("fitting instance classes (Dirichlet mixture layer)")
-
-        L = 16
-        (self._outer_LSK, self._outer_weights_L) = fit_dirichlet_mixture(task_mixes_NSK, L)
-
-        with cargo.numpy_printing(precision = 2, suppress = True, linewidth = 160):
-            logger.detail("task classes:\n%s", str(self._outer_LSK))
-            logger.detail("task weights:\n%s", str(self._outer_weights_L))
-
-    def predict(self, failures):
-        """Return probabilistic predictions of success."""
-
-        # mise en place
-        F = len(failures)
-        (L, S, K) = self._outer_LSK.shape
-
-        # compute task class likelihoods
-        tclass_weights_L = numpy.log(self._outer_weights_L)
-
-        for l in xrange(L):
-            tclass_weights_L[l] += self._lnp_failures_tclass(failures, l)
-
-        tclass_weights_L = numpy.exp(tclass_weights_L - numpy.logaddexp.reduce(tclass_weights_L))
-
-        assert_probabilities(tclass_weights_L)
-        assert_weights(tclass_weights_L)
-
-        # condition the task classes
-        conditioned_LSK = numpy.copy(self._outer_LSK)
-
-        for l in xrange(L):
-            for f in xrange(F):
-                (s, b) = failures[f]
-                conditioning_K = numpy.zeros(K)
-
-                for k in xrange(K):
-                    p_f = 1.0 - self._inner_SKB[s, k, b]
-                    p_z = dcm_draw_pdf(k, self._outer_LSK[l, s])
-
-                    conditioning_K[k] += p_f * p_z
-
-                conditioning_K /= numpy.sum(conditioning_K)
-                conditioned_LSK[l, s] += conditioning_K
-
-        # compute posterior probabilities
-        tclass_means_LSK = conditioned_LSK / numpy.sum(conditioned_LSK, axis = -1)[..., None]
-        tclass_rates_LSB = numpy.sum(tclass_means_LSK[..., None] * self._inner_SKB[None, ...], axis = -2)
-        posterior_mean_SK = numpy.sum(tclass_weights_L[:, None, None] * tclass_means_LSK, axis = 0)
-        posterior_rates_SB = numpy.sum(posterior_mean_SK[..., None] * self._inner_SKB, axis = 1)
-
-        return (posterior_rates_SB, tclass_weights_L, tclass_rates_LSB)
-
-    def _lnp_failures_tclass(self, failures, l):
-        """Return p(failures | task class l)."""
-
-        return sum(self._lnp_failure_tclass(failure, l) for failure in failures)
-
-    def _lnp_failure_tclass(self, failure, l):
-        """Return p(s@c failed | task class l)."""
-
-        (s, b) = failure
-        (_, _, K) = self._outer_LSK.shape
-        sigma = -numpy.inf
-
-        for k in xrange(K):
-            lnp_l = numpy.log(1.0 - self._inner_SKB[s, k, b])
-            lnp_r = numpy.log(dcm_draw_pdf(k, self._outer_LSK[l, s]))
-            sigma = numpy.logaddexp(sigma, lnp_l + lnp_r)
-
-        return sigma
-
-def multinomial_log_mass(counts, total_counts, beta):
-    """Compute multinomial log probability."""
-
-    assert_probabilities(beta)
-    assert_weights(beta, axis = -1)
-
-    log_mass = numpy.sum(counts * numpy.log(beta), axis = -1)
-    log_mass += scipy.special.gammaln(total_counts + 1.0)
-    log_mass -= numpy.sum(scipy.special.gammaln(counts + 1.0), axis = -1)
-
-    assert_log_probabilities(log_mass)
-
-    return log_mass
-
-def multinomial_log_mass_implied(counts, total_counts, beta):
-    """Compute multinomial log probability; final parameter is implied."""
-
-    assert_probabilities(beta)
-
-    implied_p = 1.0 - numpy.sum(beta, axis = -1)
-    implied_counts = total_counts - numpy.sum(counts, axis = -1)
-
-    log_mass = numpy.sum(counts * numpy.log(beta), axis = -1)
-    log_mass += implied_counts * numpy.log(implied_p)
-    log_mass += scipy.special.gammaln(total_counts + 1.0)
-    log_mass -= numpy.sum(scipy.special.gammaln(counts + 1.0), axis = -1)
-    log_mass -= scipy.special.gammaln(implied_counts + 1.0)
-
-    assert_log_probabilities(log_mass)
-
-    return log_mass
-
-def fit_multinomial_mixture(successes, attempts, K):
-    """Fit a discrete mixture using EM."""
-
-    # mise en place
-    (N, B) = successes.shape
-
-    successes_NB = successes
-    attempts_N = attempts
-
-    # expectation maximization
-    previous_ll = -numpy.inf
-    prior_alpha = 1.0 + 1e-2 
-    prior_beta = 1.0 + 1e-1 
-    prior_upper = prior_alpha - 1.0
-    prior_lower = B * prior_alpha + prior_beta - B - 1.0
-    initial_n_K = numpy.random.randint(N, size = K)
-    components_KB = successes_NB[initial_n_K] + prior_upper
-    components_KB /= (attempts_N[initial_n_K] + prior_lower)[:, None]
-
-    for i in xrange(512):
-        # compute new responsibilities
-        log_mass_KN = multinomial_log_mass_implied(successes_NB[None, ...], attempts_N[None, ...], components_KB[:, None, ...])
-
-        log_responsibilities_KN = numpy.copy(log_mass_KN)
-        log_responsibilities_KN -= numpy.logaddexp.reduce(log_responsibilities_KN, axis = 0)
-
-        responsibilities_KN = numpy.exp(log_responsibilities_KN)
-
-        log_weights_K = numpy.logaddexp.reduce(log_responsibilities_KN, axis = 1)
-        log_weights_K -= numpy.log(N)
-
-        # compute ll and check for convergence
-        ll = numpy.logaddexp.reduce(log_weights_K[:, None] + log_mass_KN, axis = 0)
-        ll = numpy.sum(ll)
-
-        logger.debug("ll at EM iteration %i is %f", i, ll)
-
-        if numpy.abs(ll - previous_ll) <= 1e-4:
-            break
-
-        previous_ll = ll
-
-        # compute new components
-        weighted_successes_KNB = successes_NB[None, ...] * responsibilities_KN[..., None]
-        weighted_attempts_KN = attempts_N[None, ...] * responsibilities_KN
-
-        components_KB = numpy.sum(weighted_successes_KNB, axis = 1) + prior_upper
-        components_KB /= (numpy.sum(weighted_attempts_KN, axis = 1) + prior_lower)[:, None]
-
-        # split duplicates
-        for j in xrange(K):
-            for k in xrange(K):
-                if j != k and numpy.sum(numpy.abs(components_KB[j] - components_KB[k])) < 1e-6:
-                    previous_ll = -numpy.inf
-                    n = numpy.random.randint(N)
-                    components_KB[k] = successes_NB[n] + prior_upper
-                    components_KB[k] /= attempts_N[n] + prior_lower
-
-    assert_probabilities(components_KB)
-
-    return (components_KB, responsibilities_KN, log_mass_KN, ll)
-
-def fit_multinomial_outer_mixture(rclass_res, rclass_mass, L):
-    """Fit a discrete mixture using EM."""
-
-    # mise en place
-    (S, K, N) = rclass_res.shape
-
-    rclass_res_SKN = rclass_res
-    rclass_res_NSK = rclass_res_SKN.swapaxes(0, 2).swapaxes(1, 2)
-    rclass_log_mass_SKN = rclass_mass
-    rclass_log_mass_NSK = rclass_log_mass_SKN.swapaxes(0, 2).swapaxes(1, 2)
-
-    # expectation maximization
-    previous_ll = -numpy.inf
-    prior_alpha = 1.0 + 1e-2
-    initial_n_L = numpy.random.randint(N, size = L)
-    components_LSK = rclass_res_NSK[initial_n_L]
-
-    for i in xrange(1024):
-        # compute new responsibilities
-        log_components_LSK = numpy.log(components_LSK)
-
-        log_mass_LNS = numpy.logaddexp.reduce(rclass_log_mass_NSK[None, ...] + log_components_LSK[:, None, ...], axis = -1)
-        log_mass_LN = numpy.sum(log_mass_LNS, axis = -1)
-
-        log_responsibilities_LN = numpy.copy(log_mass_LN)
-        log_responsibilities_LN -= numpy.logaddexp.reduce(log_responsibilities_LN, axis = 0)
-
-        responsibilities_LN = numpy.exp(log_responsibilities_LN)
-
-        log_weights_L = numpy.logaddexp.reduce(log_responsibilities_LN, axis = 1)
-        log_weights_L -= numpy.log(N)
-
-        # compute ll and check for convergence
-        ll = numpy.sum(numpy.logaddexp.reduce(log_weights_L[:, None] + log_mass_LN, axis = 0))
-
-        logger.debug("ll at EM iteration %i is %f", i, ll)
-
-        if numpy.abs(ll - previous_ll) < 1e-6:
-            break
-
-        previous_ll = ll
-
-        # compute new components
-        weighted_rclass_res_LNSK = rclass_res_NSK[None, ...] * responsibilities_LN[..., None, None]
-
-        components_LSK = numpy.sum(weighted_rclass_res_LNSK, axis = 1) + prior_alpha - 1.0
-        components_LSK /= numpy.sum(components_LSK, axis = -1)[..., None]
-
-        # split duplicates
-        for l in xrange(L):
-            for m in xrange(L):
-                if l != m and numpy.sum(numpy.abs(components_LSK[l] - components_LSK[m])) < 1e-6:
-                    previous_ll = -numpy.inf
-                    n = numpy.random.randint(N)
-                    components_LSK[l] = rclass_res_NSK[n]
-
-    weights_L = numpy.exp(log_weights_L)
-
-    return (components_LSK, weights_L, responsibilities_LN, ll)
-
-class BilevelMultinomialModel(object):
-    """Two-level multinomial mixture model."""
-
-    def __init__(self, successes, attempts, features = None):
-        """Fit the model to data."""
-
-        # mise en place
-        (N, S, B) = successes.shape
-
-        successes_NSB = successes
-        attempts_NS = attempts
-
-        # fit the solver behavior classes
-        logger.info("fitting run classes")
-
-        K = 8
-        self._rclass_SKB = numpy.empty((S, K, B))
-        rclass_res = numpy.empty((S, K, N))
-        rclass_mass = numpy.empty((S, K, N))
+class MulDirMixEstimator(object):
+    def __init__(self, K = 4, alpha = None, samples_per = 64):
+        self._K = K
+        self._alpha = alpha
+        self._samples_per = samples_per
+
+    def __call__(self, run_data, bins, full_data):
+        # ...
+        counts_NSD = run_data.to_bins_array(run_data.solver_names, bins)
+        features_NF = run_data.to_features_array()
+        interval = run_data.get_common_budget() / bins
+
+        (N, S, D) = counts_NSD.shape
+        (_, F) = features_NF.shape
+        K = self._K
+        T = N * self._samples_per
+
+        # fit model parameters
+        alphas_KSD = numpy.empty((K, S, D), numpy.double)
+        log_responsibilities_KSN = numpy.empty((K, S, N), numpy.double)
 
         for s in xrange(S):
-            fit = lambda: fit_multinomial_mixture(successes_NSB[:, s], attempts_NS[:, s], K)
-            (self._rclass_SKB[s], rclass_res[s], rclass_mass[s], _) = \
-                max(
-                    [fit() for _ in xrange(4)],
-                    key = lambda x: x[-1],
+            logger.info(">>>> ESTIMATING RTDS FOR SOLVER %i", s)
+
+            (
+                alphas_KSD[:, s, :],
+                log_responsibilities_KSN[:, s, :],
+                ) = \
+                borg.statistics.dcm_mixture_estimate_ml(counts_NSD[:, s, :], K, self._alpha)
+
+        # sample individual distributions
+        logger.info("sampling %i RTD sets under dirmix", T)
+
+        samples_TSD = numpy.empty((T, S, D), numpy.double)
+        features_TF = numpy.empty((T, F), numpy.double)
+        names_N = sorted(run_data.ids)
+        names_T = numpy.empty(T, object)
+
+        for t in xrange(T):
+            n = t % N
+
+            features_TF[t, :] = features_NF[n, :]
+            names_T[t] = names_N[n]
+
+            for s in xrange(S):
+                k = borg.statistics.categorical_rv_log(log_responsibilities_KSN[:, s, n])
+
+                #samples_TSD[t, s, :] = alphas_KSD[k, s, :] + counts_NSD[n, s, :] + 1e-1
+                samples_TSD[t, s, :] = alphas_KSD[k, s, :] + counts_NSD[n, s, :] + 1e-2
+                samples_TSD[t, s, :] /= numpy.sum(samples_TSD[t, s, :])
+
+        assert numpy.all(samples_TSD >= 0.0)
+
+        return \
+            MultinomialModel(
+                interval,
+                borg.statistics.to_log_survival(samples_TSD, axis = -1),
+                log_masses = borg.statistics.floored_log(samples_TSD),
+                names = names_T,
+                features = features_TF,
+                )
+
+class MulDirMatMixEstimator(object):
+    def __init__(self, K = 32, alpha = None):
+        self._K = K
+        self._alpha = alpha
+
+    def __call__(self, run_data, bins, full_data):
+        # ...
+        counts_NSD = run_data.to_bins_array(run_data.solver_names, bins)
+        features_NF = run_data.to_features_array()
+        full_NSD = full_data.to_bins_array(full_data.solver_names, bins)
+        interval = run_data.get_common_budget() / bins
+
+        (N, S, D) = counts_NSD.shape
+        (_, F) = features_NF.shape
+        K = self._K
+
+        # fit model
+        (alphas_KSD, log_responsibilities_KN) = \
+            borg.statistics.dcm_matrix_mixture_estimate_ml(counts_NSD, K, self._alpha)
+
+        # extract RTD samples
+        T = N * K
+        #T = N
+        #T = K
+        samples_TSD = numpy.empty((T, S, D), numpy.double)
+        log_weights_T = numpy.empty(T, numpy.double)
+        features_TF = numpy.empty((T, F), numpy.double)
+        names_N = sorted(run_data.ids)
+        names_T = numpy.empty(T, object)
+
+        #samples_TSD = alphas_KSD / numpy.sum(alphas_KSD, axis = -1)[..., None] # XXX
+        #log_weights_T = numpy.logaddexp.reduce(log_responsibilities_KN, axis = -1) - numpy.log(N)
+
+        #for t in xrange(T):
+            #for s in xrange(S):
+                #z = numpy.argmax(samples_TSD[t, s])
+                #samples_TSD[t, s, :] = 0
+                #samples_TSD[t, s, z] = 1
+
+            ##with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 200, threshold = 1000000):
+                ##print
+                ##print "@ component", t, "; weight", numpy.exp(log_weights_T[t]) * N
+                ##print repr(alphas_KSD[t])
+                ##print samples_TSD[t]
+                ##print "----"
+                ##print counts_NSD[numpy.argsort(log_responsibilities_KN[t, :])[-4:][::-1]]
+
+        #return \
+            #MultinomialModel(
+                #interval,
+                #borg.statistics.to_log_survival(samples_TSD, axis = -1),
+                #log_masses = borg.statistics.floored_log(samples_TSD),
+                #log_weights = log_weights_T,
+                ##features = features_TF,
+                #)
+
+        for n in xrange(N):
+            #t = n
+            #k = borg.statistics.categorical_rv_log(log_responsibilities_KN[:, n])
+            #k = numpy.argmax(log_responsibilities_KN[:, n])
+
+            #log_weights_T[t] = -numpy.log(T)
+
+            #map_KSD = alphas_KSD + counts_NSD[None, n]
+            #map_KSD /= numpy.sum(map_KSD, axis = -1)[..., None]
+            #map_KSD *= numpy.exp(log_responsibilities_KN[:, n])[..., None, None]
+            #map_SD = numpy.sum(map_KSD, axis = 0)
+
+            ##map_SD = alphas_KSD[k]
+            ##map_SD /= numpy.sum(map_SD, axis = -1)[..., None]
+
+            #for s in xrange(S):
+                ##samples_TSD[t, s, :] = 0.0
+                ##samples_TSD[t, s, numpy.argmax(map_SD[s, :])] = 1.0
+                #samples_TSD[t, s, :] = map_SD[s, :]
+
+                #borg.statistics.assert_weights(samples_TSD[t, s, :], axis = -1)
+
+            #features_TF[t, :] = features_NF[n, :]
+
+            #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 200, threshold = 1000000):
+                #print "# t =", t, "n =", n
+                #print counts_NSD[n]
+                #print full_NSD[sorted(full_data.ids).index(sorted(run_data.ids)[n])]
+                #print samples_TSD[t]
+
+            for k in xrange(K):
+                t = n * K + k
+
+                log_weights_T[t] = log_responsibilities_KN[k, n] - numpy.log(N)
+                features_TF[t, :] = features_NF[n, :]
+                names_T[t] = names_N[n]
+
+                for s in xrange(S):
+                    samples_TSD[t, s, :] = alphas_KSD[k, s, :] + counts_NSD[n, s, :] + 1e-2
+                    samples_TSD[t, s, :] /= numpy.sum(samples_TSD[t, s, :])
+                    #samples_TSD[t, s, :] = 0.0
+                    #samples_TSD[t, s, numpy.argmax(alphas_KSD[k, s, :])] = 1.0
+
+                    #thetas = alphas_KSD[:, s, :] + counts_NSD[n, s, :]
+                    #thetas *= numpy.exp(log_responsibilities_KN[:, n])[..., None]
+
+                    #samples_NSD[n, s, :] = numpy.sum(thetas, axis = 0)
+                    #samples_NSD[n, s, :] /= numpy.sum(samples_NSD[n, s, :])
+
+                    borg.statistics.assert_weights(samples_TSD[t, s, :], axis = -1)
+
+                #if numpy.exp(log_responsibilities_KN[k, n]) > 1e-1:
+                    #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 200, threshold = 1000000):
+                        #print "# t =", t, "n =", n, "k =", k, "({0})".format(numpy.exp(log_responsibilities_KN[k, n]))
+                        #print counts_NSD[n]
+                        #print full_NSD[sorted(full_data.ids).index(sorted(run_data.ids)[n])]
+                        #print alphas_KSD[k]
+                        #print samples_TSD[t]
+
+        #raise SystemExit()
+
+        assert numpy.all(samples_TSD >= 0.0)
+
+        model = \
+            MultinomialModel(
+                interval,
+                borg.statistics.to_log_survival(samples_TSD, axis = -1),
+                log_masses = borg.statistics.floored_log(samples_TSD),
+                log_weights = log_weights_T,
+                names = names_T,
+                features = features_TF,
+                )
+
+        model.latent_classes = alphas_KSD
+        model.responsibilities = log_responsibilities_KN
+
+        return model
+
+class DiscreteLogNormalMixEstimator(object):
+    def __init__(self, int K = 32):
+        self._K = K
+
+    def __call__(self, run_data, bins):
+        """Fit parameters of the log-normal mixture model."""
+
+        # ...
+        counts_NSD = run_data.to_bins_array(run_data.solver_names, bins)
+        budget = run_data.get_common_budget()
+        interval = budget / bins
+
+        (N, S, D) = counts_NSD.shape
+        K = self._K
+
+        # estimate training RTDs
+        ps_SKD = numpy.empty((S, K, D), numpy.double)
+        log_responsibilities_SKN = numpy.empty((S, K, N), numpy.double)
+
+        for s in xrange(S):
+            print ">>>> ESTIMATING RTDS FOR SOLVER", s
+
+            (
+                ps_SKD[s, :, :],
+                log_responsibilities_SKN[s, :, :],
+                ) = \
+                borg.statistics.discrete_log_normal_mixture_estimate_ml(
+                    counts_NSD[:, s, :],
+                    budget,
+                    K,
                     )
 
-            logger.detail(
-                "rclasses for solver %i:\n%s",
-                s,
-                cargo.pretty_probability_matrix(self._rclass_SKB[s]),
+            borg.statistics.assert_log_weights(log_responsibilities_SKN[s, :], axis = 0)
+
+        samples_NSD = numpy.empty((N, S, D))
+
+        for n in xrange(N):
+            for s in xrange(S):
+                #k = borg.statistics.categorical_rv_log(log_post_weights_KSN[:, s, n])
+                #k = numpy.argmax(log_post_weights_KSN[:, s, n])
+
+                thetas = numpy.copy(ps_SKD[s, :, :])
+                thetas *= numpy.exp(log_responsibilities_SKN[s, :, n])[..., None]
+
+                samples_NSD[n, s, :] = numpy.sum(thetas, axis = 0)
+
+            with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 200, threshold = 1000000):
+                print "# instance", n
+                print counts_NSD[n]
+                print samples_NSD[n]
+
+        #raise SystemExit()
+
+        return \
+            MultinomialModel(
+                interval,
+                borg.statistics.to_log_survival(samples_NSD, axis = -1),
+                log_masses = borg.statistics.floored_log(samples_NSD),
                 )
 
-        # fit the task mixture classes
-        logger.info("fitting task classes")
+class DiscreteLogNormalMatMixEstimator(object):
+    def __init__(self, int K = 128):
+        self._K = K
 
-        L = 15
-        (self._tclass_LSK, self._tclass_weights_L, self._tclass_res_LN, _) = \
-            fit_multinomial_outer_mixture(
-                rclass_res,
-                rclass_mass,
-                L,
+    def __call__(self, run_data, bins, full_data):
+        """Fit parameters of the log-normal linked mixture model."""
+
+        # ...
+        counts_NSD = run_data.to_bins_array(run_data.solver_names, bins)
+        full_NSD = full_data.to_bins_array(full_data.solver_names, bins)
+        budget = run_data.get_common_budget()
+        interval = budget / bins
+
+        (N, S, D) = counts_NSD.shape
+        K = self._K
+
+        # estimate training RTDs
+        (ps_KSD, log_responsibilities_KN) = \
+            borg.statistics.discrete_log_normal_matrix_mixture_estimate_ml(
+                counts_NSD,
+                budget,
+                K,
                 )
 
-        # fit the classifier
-        if features is None:
-            logger.info("no features; skipping classifier construction")
+        borg.statistics.assert_log_weights(log_responsibilities_KN, axis = 0)
 
-            self._classifier = None
-        else:
-            logger.info("fitting logistic regression classifier")
+        with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 200, threshold = 1000000):
+            print "&&&&"
+            print ps_KSD
 
-            train_x = []
-            train_y = []
+        samples_TSD = ps_KSD
+        log_weights_T = numpy.logaddexp.reduce(log_responsibilities_KN, axis = -1) - numpy.log(N)
 
-            for (n, task_features) in enumerate(features):
-                counts_L = numpy.round(self._tclass_res_LN[:, n] * 100.0).astype(int)
+        #for t in xrange(T):
+            ##for s in xrange(S):
+                ##z = numpy.argmax(samples_TSD[t, s])
+                ##samples_TSD[t, s, :] = 0
+                ##samples_TSD[t, s, z] = 1
 
-                train_x.extend([task_features] * numpy.sum(counts_L))
+            #with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 200, threshold = 1000000):
+                #print
+                #print "@ component", t, "; weight", numpy.exp(log_weights_T[t]) * N
+                #print repr(alphas_KSD[t])
+                #print samples_TSD[t]
+                #print "----"
+                #print counts_NSD[numpy.argsort(log_responsibilities_KN[t, :])[-4:][::-1]]
 
-                for l in xrange(L):
-                    train_y.extend([l] * counts_L[l])
+        return \
+            MultinomialModel(
+                interval,
+                borg.statistics.to_log_survival(samples_TSD, axis = -1),
+                log_masses = borg.statistics.floored_log(samples_TSD),
+                log_weights = log_weights_T,
+                #features = features_TF,
+                )
 
-            self._classifier = sklearn.linear_model.LogisticRegression()
+        samples_NSD = numpy.empty((N, S, D))
 
-            self._classifier.fit(train_x, train_y)
+        for n in xrange(N):
+            for s in xrange(S):
+                #k = borg.statistics.categorical_rv_log(log_post_weights_KSN[:, s, n])
+                #k = numpy.argmax(log_post_weights_KSN[:, s, n])
 
-    def predict(self, failures, features = ()):
-        """Return probabilistic predictions of success."""
+                thetas = numpy.copy(ps_KSD[:, s, :])
+                thetas *= numpy.exp(log_responsibilities_KN[:, n])[..., None]
 
-        # mise en place
-        F = len(failures)
-        (L, S, K) = self._tclass_LSK.shape
+                samples_NSD[n, s, :] = numpy.sum(thetas, axis = 0)
 
-        # let the classifier seed our cluster probabilities
-        if len(features) > 1:
-            (tclass_lr_weights_L,) = self._classifier.predict_proba([features])
+            with borg.util.numpy_printing(precision = 2, suppress = True, linewidth = 200, threshold = 1000000):
+                print "# instance", n
+                print counts_NSD[n]
+                print full_NSD[sorted(full_data.ids).index(sorted(run_data.ids)[n])]
+                print samples_NSD[n]
 
-            tclass_lr_weights_L += 1e-6
-            tclass_lr_weights_L /= numpy.sum(tclass_lr_weights_L)
-        else:
-            tclass_lr_weights_L = self._tclass_weights_L
+        #raise SystemExit()
 
-        # compute conditional tclass probabilities
-        rclass_fail_cmf_SKB = numpy.cumsum(1.0 - self._rclass_SKB, axis = -1)
-        tclass_post_weights_L = numpy.log(tclass_lr_weights_L)
-
-        for l in xrange(L):
-            for (s, b) in failures:
-                p = numpy.sum(rclass_fail_cmf_SKB[s, :, b] * self._tclass_LSK[l, s])
-
-                tclass_post_weights_L[l] += numpy.log(p)
-
-        tclass_post_weights_L -= numpy.logaddexp.reduce(tclass_post_weights_L)
-        tclass_post_weights_L = numpy.exp(tclass_post_weights_L)
-
-        # compute per-tclass conditional rclass probabilities
-        conditional_LSK = numpy.log(self._tclass_LSK)
-
-        for l in xrange(L):
-            for (s, b) in failures:
-                conditional_LSK[l, s, :] += rclass_fail_cmf_SKB[s, :, b]
-
-        conditional_LSK -= numpy.logaddexp.reduce(conditional_LSK, axis = -1)[..., None]
-        conditional_LSK = numpy.exp(conditional_LSK)
-
-        # compute posterior probabilities
-        tclass_post_rates_LSB = numpy.sum(conditional_LSK[..., None] * self._rclass_SKB[None, ...], axis = -2)
-        mean_post_rates_SB = numpy.sum(tclass_post_weights_L[:, None, None] * tclass_post_rates_LSB, axis = 0)
-
-        return (tclass_post_weights_L, tclass_post_rates_LSB)
+        return \
+            MultinomialModel(
+                interval,
+                borg.statistics.to_log_survival(samples_NSD, axis = -1),
+                log_masses = borg.statistics.floored_log(samples_NSD),
+                )
 

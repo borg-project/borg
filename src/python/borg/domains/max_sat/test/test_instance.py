@@ -1,7 +1,6 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
 import os.path
-#import nose
 import borg
 
 def test_max_sat_parser():
@@ -10,8 +9,4 @@ def test_max_sat_parser():
 
     with open(task_path) as task_file:
         print parser.parse(task_file.read())
-
-if __name__ == "__main__":
-    #nose.main(defaultTest = __name__)
-    test_max_sat_parser()
 

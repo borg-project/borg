@@ -3,9 +3,9 @@
 import contextlib
 import borg
 
+from . import solvers
 from . import features
 from . import instance
-from . import solvers
 
 class SatisfiabilityTask(object):
     def __init__(self, path):
@@ -17,7 +17,7 @@ class SatisfiabilityTask(object):
 @borg.named_domain
 class Satisfiability(object):
     name = "sat"
-    extensions = ["*.cnf"]
+    extensions = [".cnf"]
 
     @contextlib.contextmanager
     def task_from_path(self, task_path):
@@ -25,9 +25,12 @@ class Satisfiability(object):
 
         task = SatisfiabilityTask(task_path)
 
-        yield task
-
-        task.clean()
+        try:
+            yield task
+        except:
+            raise
+        finally:
+            task.clean()
 
     def compute_features(self, task):
         return features.get_features_for(task.path)

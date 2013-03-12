@@ -2,10 +2,9 @@
 
 import re
 import os.path
-import cargo
 import borg
 
-logger = cargo.get_logger(__name__)
+logger = borg.get_logger(__name__)
 
 def parse_max_sat_competition(stdout):
     """Parse output from a standard competition solver."""
@@ -40,27 +39,9 @@ def parse_max_sat_competition(stdout):
 
     return None
 
-basic_commands = {
-    "akmaxsat": ["{root}/akmaxsat", "{task}"],
-    "sat4j-maxsat-v20101225": [
-        "java",
-        "-server",
-        "-jar",
-        "{root}/sat4j-maxsat-v20101225/sat4j-maxsat.jar",
-        "{task}",
-        ],
-    "sat4j-maxsat-v20101225-p": [
-        "java",
-        "-server",
-        "-jar",
-        "{root}/sat4j-maxsat-v20101225/sat4j-maxsat.jar",
-        "-p",
-        "{task}",
-        ],
-    }
-
 class MAX_SAT_BasicSolverFactory(object):
-    def __init__(self, command):
+    def __init__(self, root, command):
+        self._root = root
         self._command = command
 
     def __call__(self, task, stm_queue = None, solver_id = None):
@@ -68,19 +49,15 @@ class MAX_SAT_BasicSolverFactory(object):
             borg.solver_io.RunningSolver(
                 parse_max_sat_competition,
                 self._command,
+                self._root,
                 task.path,
                 stm_queue = stm_queue,
                 solver_id = solver_id,
                 )
 
-basic_named = dict(zip(basic_commands, map(MAX_SAT_BasicSolverFactory, basic_commands.values())))
-wbo_prefixes = {
-    #"wbo1.4a": ["{root}/wbo1.4a", "-time-limit=1000000"],
-    "wbo1.4b-fixed": ["{root}/wbo1.4b-fixed", "-time-limit=1000000"],
-    }
-
 class MAX_SAT_WBO_SolverFactory(object):
-    def __init__(self, prefix):
+    def __init__(self, root, prefix):
+        self._root = root
         self._prefix = prefix
 
     def __call__(self, task, stm_queue = None, solver_id = None):
@@ -91,29 +68,33 @@ class MAX_SAT_WBO_SolverFactory(object):
             borg.solver_io.RunningSolver(
                 parse_max_sat_competition,
                 command,
+                self._root,
                 task.path,
                 stm_queue = stm_queue,
                 solver_id = solver_id,
                 )
 
-def build_inc_solver(task, stm_queue = None, solver_id = None):
-    (_, extension) = os.path.splitext(task.path)
+class MAX_SAT_IncSatzSolverFactory(object):
+    def __init__(self, root, (inc_command, incw_command)):
+        self._root = root
+        self._inc_command = inc_command
+        self._incw_command = incw_command
 
-    if extension[1:] == "cnf":
-        command = ["{root}/inc-maxsatz", "{task}"]
-    else:
-        command = ["{root}/IncWMaxSatz", "{task}"]
+    def __call__(self, task, stm_queue = None, solver_id = None):
+        (_, extension) = os.path.splitext(task.path)
 
-    return \
-        borg.solver_io.RunningSolver(
-            parse_max_sat_competition,
-            command,
-            task.path,
-            stm_queue = stm_queue,
-            solver_id = solver_id,
-            )
+        if extension[1:] == "cnf":
+            command = self._inc_command
+        else:
+            command = self._incw_command
 
-inc_named = {"inc[w]maxsatz": build_inc_solver}
-wbo_named = dict(zip(wbo_prefixes, map(MAX_SAT_WBO_SolverFactory, wbo_prefixes.values())))
-named = dict(basic_named.items() + wbo_named.items() + inc_named.items())
+        return \
+            borg.solver_io.RunningSolver(
+                parse_max_sat_competition,
+                command,
+                self._root,
+                task.path,
+                stm_queue = stm_queue,
+                solver_id = solver_id,
+                )
 

@@ -1,32 +1,30 @@
 """@author: Bryan Silverthorn <bcs@cargo-cult.org>"""
 
-import plac
-
-if __name__ == "__main__":
-    from borg.tools.run_solvers import main
-
-    plac.call(main)
-
 import os.path
+import sys
 import csv
 import zlib
 import base64
 import cPickle as pickle
-import cargo
+import numpy
+import condor
 import borg
 
-logger = cargo.get_logger(__name__, default_level = "INFO")
+logger = borg.get_logger(__name__, default_level = "INFO")
 
-def run_solver_on(solvers_path, solver_name, task_path, budget):
+def run_solver_on(suite_path, solver_name, task_path, budget, store_answers, seed = None):
     """Run a solver."""
 
-    bundle = borg.load_solvers(solvers_path)
+    if seed is not None:
+        borg.statistics.set_prng_seeds(seed)
 
-    with bundle.domain.task_from_path(task_path) as task:
+    suite = borg.load_solvers(suite_path)
+
+    with suite.domain.task_from_path(task_path) as task:
         with borg.accounting() as accountant:
-            answer = bundle.solvers[solver_name](task)(budget)
+            answer = suite.solvers[solver_name](task)(budget)
 
-        succeeded = bundle.domain.is_final(task, answer)
+        succeeded = suite.domain.is_final(task, answer)
 
     cost = accountant.total.cpu_seconds
 
@@ -39,74 +37,97 @@ def run_solver_on(solvers_path, solver_name, task_path, budget):
         os.path.basename(task_path),
         )
 
-    return (solver_name, budget, cost, succeeded, answer)
+    if store_answers:
+        return (task_path, solver_name, budget, cost, succeeded, answer)
+    else:
+        return (task_path, solver_name, budget, cost, succeeded, None)
 
-@plac.annotations(
-    solvers_path = ("path to the solvers bundle", "positional", None, os.path.abspath),
+@borg.annotations(
+    suite_path = ("path to the solvers suite", "positional", None, os.path.abspath),
     tasks_root = ("path to task files", "positional", None, os.path.abspath),
     budget = ("per-instance budget", "positional", None, float),
-    discard = ("do not record results", "flag", "d"),
+    only_missing = ("only make missing runs", "flag"),
+    store_answers = ("store answers to instances", "flag"),
+    only_solver = ("only make runs of one solver", "option"),
     runs = ("number of runs", "option", "r", int),
-    only_solver = ("only run one solver", "option"),
     suffix = ("runs file suffix", "option"),
     workers = ("submit jobs?", "option", "w", int),
     )
 def main(
-    solvers_path,
+    suite_path,
     tasks_root,
     budget,
-    discard = False,
-    runs = 4,
+    only_missing = False,
+    store_answers = False,
     only_solver = None,
+    runs = 4,
     suffix = ".runs.csv",
     workers = 0,
     ):
     """Collect solver running-time data."""
 
-    cargo.enable_default_logging()
+    condor.defaults.condor_matching = \
+        "InMastodon" \
+        " && regexp(\"rhavan-.*\", ParallelSchedulingGroup)" \
+        " && (Arch == \"X86_64\")" \
+        " && (OpSys == \"LINUX\")" \
+        " && (Memory > 1024)"
 
     def yield_runs():
-        bundle = borg.load_solvers(solvers_path)
-        paths = list(cargo.files_under(tasks_root, bundle.domain.extensions))
+        suite = borg.load_solvers(suite_path)
+
+        logger.info("scanning paths under %s", tasks_root)
+
+        paths = list(borg.util.files_under(tasks_root, suite.domain.extensions))
 
         if not paths:
             raise ValueError("no paths found under specified root")
 
         if only_solver is None:
-            solver_names = bundle.solvers.keys()
+            solver_names = suite.solvers.keys()
         else:
-            if only_solver not in bundle.solvers:
-                raise ArgumentError("no such solver")
-
             solver_names = [only_solver]
 
-        for _ in xrange(runs):
+        for path in paths:
+            run_data = None
+
+            if only_missing and os.path.exists(path + suffix):
+                run_data = numpy.recfromcsv(path + suffix, usemask = True)
+
             for solver_name in solver_names:
-                for path in paths:
-                    yield (run_solver_on, [solvers_path, solver_name, path, budget])
+                if only_missing and run_data is not None:
+                    count = max(0, runs - numpy.sum(run_data.solver == solver_name))
+                else:
+                    count = runs
 
-    def collect_run(task, row):
-        if not discard:
-            # unpack run outcome
-            (solver_name, budget, cost, succeeded, answer) = row
+                logger.info("scheduling %i run(s) of %s on %s", count, solver_name, os.path.basename(path))
 
-            if answer is None:
-                answer_text = None
-            else:
-                answer_text = base64.b64encode(zlib.compress(pickle.dumps(answer)))
+                for _ in xrange(count):
+                    seed = numpy.random.randint(sys.maxint)
 
-            # write it to disk
-            (_, _, cnf_path, _) = task.args
-            csv_path = cnf_path + suffix
-            existed = os.path.exists(csv_path)
+                    yield (run_solver_on, [suite_path, solver_name, path, budget, store_answers, seed])
 
-            with open(csv_path, "a") as csv_file:
-                writer = csv.writer(csv_file)
+    for (task, row) in condor.do(yield_runs(), workers):
+        # unpack run outcome
+        (cnf_path, solver_name, budget, cost, succeeded, answer) = row
 
-                if not existed:
-                    writer.writerow(["solver", "budget", "cost", "succeeded", "answer"])
+        if answer is None:
+            answer_text = None
+        else:
+            answer_text = base64.b64encode(zlib.compress(pickle.dumps(answer)))
 
-                writer.writerow([solver_name, budget, cost, succeeded, answer_text])
+        # write it to disk
+        csv_path = cnf_path + suffix
+        existed = os.path.exists(csv_path)
 
-    cargo.do_or_distribute(yield_runs(), workers, collect_run)
+        with open(csv_path, "a") as csv_file:
+            writer = csv.writer(csv_file)
+
+            if not existed:
+                writer.writerow(["solver", "budget", "cost", "succeeded", "answer"])
+
+            writer.writerow([solver_name, budget, cost, succeeded, answer_text])
+
+if __name__ == "__main__":
+    borg.script(main)
 

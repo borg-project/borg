@@ -6,8 +6,6 @@ def configure(context):
     context.check_python_module("numpy")
     context.check_python_module("scipy")
     context.check_python_module("sklearn")
-    context.check_python_module("nose")
-    context.check_python_module("cargo")
 
     # extract numpy's installation path
     context.start_msg("Locating the NumPy module")
@@ -28,27 +26,46 @@ def configure(context):
 def build(context):
     install_path = "${PYTHONDIR}/borg"
 
-    context(
-        features = "c cshlib pyext",
-        source = "models.pyx",
-        target = "models",
-        install_path = install_path,
-        )
+    def cython_build(base):
+        context(
+            features = "c cshlib pyext",
+            source = "{0}.pyx".format(base),
+            target = base,
+            install_path = install_path,
+            )
+
+    cython_build("models")
+    cython_build("planners")
+    cython_build("statistics")
+    cython_build("bregman")
+
     context(
         source = [
             "__init__.py",
-            "bilevel.py",
             "defaults.py",
             "expenses.py",
-            "experimental.py",
             "portfolios.py",
             "solver_io.py",
             "storage.py",
+            "regression.py",
+            "fake.py",
+            "util.py",
+            "log.py",
             ],
         install_path = install_path,
         )
 
+    context.install_files(
+        install_path,
+        [
+            "models.pxd",
+            "statistics.pxd",
+            ],
+        )
+
+    context.recurse("unix")
     context.recurse("domains")
     context.recurse("tools")
+    context.recurse("experiments")
     context.recurse("test")
 

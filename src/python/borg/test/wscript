@@ -1,8 +1,24 @@
 def build(context):
+    install_path = "${PYTHONDIR}/borg/test"
+
+    def cython_build(base):
+        context(
+            features = "c cshlib pyext",
+            source = "{0}.pyx".format(base),
+            target = base,
+            install_path = install_path,
+            )
+
+    cython_build("test_statistics_c")
+
     context(
         source = [
             "__init__.py",
+            "test_models.py",
+            "test_statistics.py",
+            "test_planners.py",
+            "test_bregman.py",
             ],
-        install_path = "${PYTHONDIR}/borg/test",
+        install_path = install_path,
         )
 

@@ -3,12 +3,10 @@
 import os
 import re
 import tempfile
-import itertools
 import numpy
-import cargo
 import borg
 
-logger = cargo.get_logger(__name__, default_level = "INFO")
+logger = borg.get_logger(__name__, default_level = "INFO")
 
 def parse_competition(stdout):
     """Parse output from a standard competition solver."""
@@ -46,7 +44,7 @@ class PseudoBooleanSolverFactory(object):
             borg.solver_io.RunningSolver(
                 parse_competition,
                 self._command,
-                self._root(),
+                self._root,
                 task.path,
                 stm_queue = stm_queue,
                 solver_id = solver_id,
@@ -58,7 +56,7 @@ class LinearPseudoBooleanSolverFactory(PseudoBooleanSolverFactory):
             borg.solver_io.RunningSolver(
                 parse_competition,
                 self._command,
-                self._root(),
+                self._root,
                 task.get_linearized_path(),
                 stm_queue = stm_queue,
                 solver_id = solver_id,
@@ -97,13 +95,14 @@ class SCIP_SolverFactory(object):
         self._command = command
 
     def __call__(self, task, stm_queue = None, solver_id = None):
-        parse = cargo.curry(parse_scip, task.opb.N, task.opb.objective is not None)
+        def parse(stdout):
+            return parse_scip(task.opb.N, task.opb.objective is not None, stdout)
 
         return \
             borg.solver_io.RunningSolver(
                 parse,
                 self._command,
-                self._root(),
+                self._root,
                 task.path,
                 stm_queue = stm_queue,
                 solver_id = solver_id,
@@ -133,7 +132,9 @@ def parse_opbdp(variables, optimization, stdout):
 
 class OPBDP_SolverFactory(object):
     def __call__(self, task, stm_queue = None, solver_id = None):
-        parse = cargo.curry(parse_opbdp, task.opb.N, task.opb.objective is not None)
+        def parse(stdout):
+            return parse_opbdp(task.opb.N, task.opb.objective is not None)
+
         nl_flag = ["-n"] if task.nonlinear else []
 
         return \
@@ -216,9 +217,12 @@ def build_minion_pb_solver(task, stm_queue = None, solver_id = None):
 
         logger.info("wrote minion input file to %s", input_path)
 
+    def parse(stdout):
+        return parse_minion(task.opb, stdout)
+
     return \
         borg.solver_io.RunningSolver(
-            cargo.curry(parse_minion, task.opb),
+            parse,
             ["{root}/minion-0.12/bin/minion", "-noresume", "{task}"],
             input_path,
             stm_queue = stm_queue,

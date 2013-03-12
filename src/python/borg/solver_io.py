@@ -3,26 +3,23 @@
 import os.path
 import uuid
 import time
+import shutil
 import signal
 import select
 import random
+import tempfile
 import datetime
-import itertools
 import multiprocessing
 import numpy
-import cargo
-import cargo.unix.sessions
-import cargo.unix.accounting
 import borg
 
-logger = cargo.get_logger(__name__, default_level = "INFO")
+logger = borg.get_logger(__name__, default_level = "INFO")
 
 def random_seed():
     """Return a random solver seed."""
 
     return numpy.random.randint(0, 2**31)
 
-@cargo.composed(list)
 def timed_read(fds, timeout = -1):
     """Read from multiple descriptors with an optional timeout."""
 
@@ -35,29 +32,36 @@ def timed_read(fds, timeout = -1):
     changed = dict(polling.poll(timeout * 1000))
 
     # and interpret them
-    for fd in fds:
+    def make_read(fd):
         revents = changed.get(fd, 0)
 
         if revents & select.POLLIN:
-            yield os.read(fd, 65536)
+            return os.read(fd, 65536)
         elif revents & select.POLLHUP:
-            yield ""
+            return ""
         else:
-            yield None
+            return None
+
+    return map(make_read, fds)
 
 class SolverProcess(multiprocessing.Process):
     """Attempt to solve the task in a subprocess."""
 
-    def __init__(self, parse_output, arguments, stm_queue, mts_queue, solver_id):
+    def __init__(self, parse_output, arguments, stm_queue, mts_queue, solver_id, tmpdir, cwd):
         self._parse_output = parse_output
         self._arguments = arguments
         self._stm_queue = stm_queue
         self._mts_queue = mts_queue
         self._solver_id = solver_id
+        self._tmpdir = tmpdir
         self._seed = random_seed()
         self._popened = None
+        self._cwd = cwd
 
-        logger.info("running %s", arguments)
+        if self._cwd is None:
+            logger.info("running %s", arguments)
+        else:
+            logger.info("running %s under %s", arguments, cwd)
 
         multiprocessing.Process.__init__(self)
 
@@ -81,6 +85,8 @@ class SolverProcess(multiprocessing.Process):
                     signal.signal(signal.SIGUSR1, signal.SIG_IGN)
             except DeathRequestedError:
                 pass
+            except Exception, error:
+                self._stm_queue.put(error)
         except KeyboardInterrupt:
             pass
         finally:
@@ -90,6 +96,8 @@ class SolverProcess(multiprocessing.Process):
                 os.kill(self._popened.pid, signal.SIGCONT)
 
                 self._popened.wait()
+
+            shutil.rmtree(self._tmpdir, ignore_errors = True)
 
     def handle_subsolver(self):
         # spawn solver
@@ -104,7 +112,7 @@ class SolverProcess(multiprocessing.Process):
                 if self._popened is not None:
                     os.kill(popened.pid, signal.SIGSTOP)
 
-                    run_cost = cargo.seconds(expenditure - last_expenditure)
+                    run_cost = borg.util.seconds(expenditure - last_expenditure)
                     self._stm_queue.put((self._solver_id, run_cost, None, False))
 
                 additional = self._mts_queue.get()
@@ -112,11 +120,11 @@ class SolverProcess(multiprocessing.Process):
                 last_expenditure = expenditure
 
                 if self._popened is None:
-                    popened = cargo.unix.sessions.spawn_pipe_session(self._arguments, {})
+                    popened = borg.unix.sessions.spawn_pipe_session(self._arguments, cwd = self._cwd)
                     self._popened = popened
 
                     descriptors = [popened.stdout.fileno(), popened.stderr.fileno()]
-                    accountant = cargo.unix.accounting.SessionTimeAccountant(popened.pid)
+                    accountant = borg.unix.accounting.SessionTimeAccountant(popened.pid)
                 else:
                     os.kill(popened.pid, signal.SIGCONT)
 
@@ -137,17 +145,18 @@ class SolverProcess(multiprocessing.Process):
 
         # provide the outcome to the central planner
         answer = self._parse_output(stdout)
-        run_cost = cargo.seconds(expenditure - last_expenditure)
+        run_cost = borg.util.seconds(expenditure - last_expenditure)
 
         self._stm_queue.put((self._solver_id, run_cost, answer, True))
 
-def prepare(command, root, cnf_path):
+def prepare(command, root, cnf_path, tmpdir):
     """Format command for execution."""
 
     keywords = {
         "root": root,
         "task": cnf_path,
         "seed": random_seed(),
+        "tmpdir": tmpdir,
         }
 
     return [s.format(**keywords) for s in command]
@@ -155,7 +164,16 @@ def prepare(command, root, cnf_path):
 class RunningSolver(object):
     """In-progress solver process."""
 
-    def __init__(self, parse, command, root, task_path, stm_queue = None, solver_id = None):
+    def __init__(
+        self,
+        parse,
+        command,
+        root,
+        task_path,
+        stm_queue = None,
+        solver_id = None,
+        cwd = None,
+        ):
         """Initialize."""
 
         if stm_queue is None:
@@ -169,14 +187,17 @@ class RunningSolver(object):
             self._solver_id = solver_id
 
         self._mts_queue = multiprocessing.Queue()
+        self._tmpdir = tempfile.mkdtemp(prefix = "borg.")
 
         self._process = \
             SolverProcess(
                 parse,
-                prepare(command, root, task_path),
+                prepare(command, root, task_path, self._tmpdir),
                 self._stm_queue,
                 self._mts_queue,
                 self._solver_id,
+                self._tmpdir,
+                cwd,
                 )
 
     def __call__(self, budget):
@@ -184,7 +205,12 @@ class RunningSolver(object):
 
         self.unpause_for(budget)
 
-        (solver_id, run_cpu_cost, answer, terminated) = self._stm_queue.get()
+        response = self._stm_queue.get()
+
+        if isinstance(response, Exception):
+            raise response
+        else:
+            (solver_id, run_cpu_cost, answer, terminated) = response
 
         assert solver_id == self._solver_id
 
@@ -209,4 +235,50 @@ class RunningSolver(object):
             os.kill(self._process.pid, signal.SIGUSR1)
 
             self._process.join()
+
+        shutil.rmtree(self._tmpdir, ignore_errors = True)
+
+class RunningPortfolio(object):
+    """Portfolio running on a task."""
+
+    def __init__(self, portfolio, suite, task):
+        """Initialize."""
+
+        self.portfolio = portfolio
+        self.suite = suite
+        self.task = task
+
+    def run_then_stop(self, budget):
+        """Attempt to solve the associated task."""
+
+        return self.portfolio(self.task, self.suite, borg.Cost(cpu_seconds = budget))
+
+class RunningPortfolioFactory(object):
+    """Run a portfolio on tasks."""
+
+    def __init__(self, portfolio, suite):
+        """Initialize."""
+
+        self.portfolio = portfolio
+        self.suite = suite
+
+    def start(self, task):
+        """Return an instance of this portfolio running on the task."""
+
+        return RunningPortfolio(self.portfolio, self.suite, task)
+
+class EmptySolver(object):
+    """Immediately return the specified answer."""
+
+    def __init__(self, answer):
+        self._answer = answer
+
+    def __call__(self, budget):
+        return self._answer
+
+    def unpause_for(self, budget):
+        pass
+
+    def stop(self):
+        pass
 

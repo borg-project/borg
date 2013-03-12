@@ -10,8 +10,8 @@ class Cost(object):
     """Resources."""
 
     def __init__(self, cpu_seconds = None, wall_seconds = None):
-        self.cpu_seconds = cpu_seconds
-        self.wall_seconds = wall_seconds
+        self.cpu_seconds = None if cpu_seconds is None else float(cpu_seconds)
+        self.wall_seconds = None if wall_seconds is None else float(wall_seconds)
 
     def __str__(self):
         return "(CPU seconds: {0}; wall seconds: {1})".format(self.cpu_seconds, self.wall_seconds)
@@ -74,7 +74,7 @@ class Accountant(object):
     def charge_cpu(self, cpu_seconds):
         """Add an external cost."""
 
-        self.charge(Cost(cpu_seconds = cpu_seconds))
+        self.charge(Cost(cpu_seconds = float(cpu_seconds)))
 
     @property
     def total(self):
@@ -106,10 +106,13 @@ def accounting():
 
     accountant_stack.append(accountant)
 
-    yield accountant
-
-    accountant.stop()
-    accountant_stack.pop()
+    try:
+        yield accountant
+    except:
+        raise
+    finally:
+        accountant.stop()
+        accountant_stack.pop()
 
 def normal_to_machine(machine_cpu_seconds):
     return machine_cpu_seconds * borg.defaults.machine_speed
