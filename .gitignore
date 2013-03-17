@@ -1,7 +1,5 @@
 .*.swp
 *.pyc
-.waf-*
-.lock-wafbuild
 .pypirc
 /dist/
 /build/
