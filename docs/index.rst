@@ -1,5 +1,5 @@
 Borg
-====
+****
 
 Contents:
 
@@ -9,10 +9,11 @@ Contents:
    introduction
    installation
    usage
+   development
    api
 
 Indices and tables
-==================
+******************
 
 * :ref:`genindex`
 * :ref:`modindex`

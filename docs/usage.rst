@@ -1,13 +1,8 @@
 Using borg
 ==========
 
-Training a portfolio solver
----------------------------
-
-This section will walk you through the process of training a borg portfolio.
-For now, we will use subsolvers and training data distributed by the borg
-project; later sections will describe how to construct these resources
-yourself.
+Assembling a portfolio of subsolvers
+------------------------------------
 
 The first step in building a portfolio solver is to assemble its constituent
 solvers (referred to as "subsolvers") for the problem domain. The borg project
@@ -17,6 +12,9 @@ download a PB subsolver collection:
 
 http://nn.cs.utexas.edu/pages/research/borg-bulk/solvers-pb.tar.gz
 
+Collecting solver performance data
+----------------------------------
+
 The second step is to collect subsolver performance data for use in training.
 Each subsolver in the portfolio is run on each problem instance in the training
 set, often multiple times. Since this process requires an (unsurprisingly)
@@ -24,6 +22,41 @@ enormous amount of computational time, and the borg project makes sets of
 training data publicly available, let's download one of those sets:
 
 http://nn.cs.utexas.edu/pages/research/borg-bulk/tasks-pb-pre11.tar.xz
+
+File format: subsolver run records
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Run records are stored in CSV files with the suffix ``.runs.csv``. The
+following columns are expected in the following order:
+
+``solver``
+    Unique name of the solver.
+
+``budget``
+    Budget allotted to the run, in CPU seconds.
+
+``cost``
+    Computational cost of the run, in CPU seconds.
+
+``succeeded``
+    Did the solver succeed on this run?
+
+``answer``
+    Base64-encoded gzipped pickled answer returned by the solver on this run,
+    if any.
+
+File format: instance features
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Instance features are stored in CSV files with the suffix ``.features.csv``.
+The first column must be ``cost``, the computational cost of feature
+computation, in CPU seconds. The remaining columns are domain-specific, one per
+feature.
+
+Training a portfolio solver
+---------------------------
+
+This section will walk you through the process of training a borg portfolio.
 
 At this point we have both a suite of subsolvers and a set of training data.
 The third and penultimate step in constructing a borg portfolio is fitting a
@@ -79,42 +112,4 @@ above.
 Borg will parse the instance, compute instance features, condition its internal
 model, and run a sequence of solvers---replanning as necessary. In this case,
 it should quickly solve the instance with its first solver run.
-
-Assembling a portfolio of subsolvers
-------------------------------------
-
-XXX.
-
-Collecting solver performance data
-----------------------------------
-
-File format: subsolver run records
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Run records are stored in CSV files with the suffix ``.runs.csv``. The
-following columns are expected in the following order:
-
-``solver``
-    Unique name of the solver.
-
-``budget``
-    Budget allotted to the run, in CPU seconds.
-
-``cost``
-    Computational cost of the run, in CPU seconds.
-
-``succeeded``
-    Did the solver succeed on this run?
-
-``answer``
-    Base64-encoded gzipped pickled answer returned by the solver on this run,
-    if any.
-
-File format: instance features
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Instance features are stored in CSV files with the suffix ``.features.csv``.
-The first column must be ``cost``, the computational cost of feature
-computation, in CPU seconds. The remaining columns are domain-specific, one per
-feature.
 
