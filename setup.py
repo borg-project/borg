@@ -22,6 +22,9 @@ else:
         setuptools.extension.Extension("borg.test.test_statistics_c", ["src/python/borg/test/test_statistics_c.pyx"]),
         ]
 
+with open("requirements.txt") as file_:
+    requires = [line for line in file_.readlines() if not line.startswith("git+")]
+
 setuptools.setup(
     name = "borg",
     version = "2012.4.01",
@@ -29,12 +32,7 @@ setuptools.setup(
     package_dir = {"": "src/python"},
     cmdclass = cmdclass,
     ext_modules = ext_modules,
-    install_requires = [
-        "Cython>=0.15.1",
-        "numpy>=1.6.1",
-        "plac>=0.9.0",
-        "scipy>=0.10.0",
-        ],
+    install_requires = requires,
     author = "Bryan Silverthorn",
     author_email = "bsilverthorn@gmail.com",
     description = "the borg algorithm portfolio toolkit",
