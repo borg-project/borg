@@ -1,5 +1,7 @@
 .*.swp
 *.pyc
+*.c
+*.so
 .pypirc
 /dist/
 /build/
