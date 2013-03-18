@@ -1,30 +1,137 @@
 Using borg
-==========
+**********
+
+This chapter walks through the basic steps in using borg:
+
+#. assembling solvers for some problem domain together into a "portfolio";
+#. collecting performance data for each solver in that portfolio;
+#. training a single portfolio solver to make solver execution decisions; and
+#. running that portfolio solver on instances of the domain.
 
 Assembling a portfolio of subsolvers
-------------------------------------
+====================================
 
 The first step in building a portfolio solver is to assemble its constituent
-solvers (referred to as "subsolvers") for the problem domain. The borg project
-makes several subsolver collections available. Let's assume that you are
-interested in solving instances of pseudo-Boolean satisfiability (PB), and
-download a PB subsolver collection:
+solvers for the problem domain. We will often refer to these constituent
+solvers as "subsolvers", since they are wrapped by an outer "portfolio solver".
 
-http://nn.cs.utexas.edu/pages/research/borg-bulk/solvers-pb.tar.gz
+These subsolvers must be selected and prepared for execution, and then borg
+must be configured to execute them and to interpret their output. Here, we will
+build a portfolio solver for the `SAT problem
+<http://www.satisfiability.org/>`_.
+
+Fetching SAT solver binaries
+----------------------------
+
+In this example, we will build a simple portfolio consisting of several solvers
+from the `2011 SAT competition <http://www.satcompetition.org/2011/>`_. Much of
+the data from these competitions can be accessed at
+
+http://www.satcompetition.org/
+
+including static binaries of the solvers entered into the competition. Let's
+download these and unpack them:
+
+.. code-block:: bash
+
+    $ wget http://www.cril.univ-artois.fr/SAT11/solvers/SAT2011-static-binaries.tar.gz
+    $ tar zxvf SAT2011-static-binaries.tar.gz
+
+.. warning::
+
+    This tarball is 125MB compressed, and may take some time to download.
+
+After unpacking, we find the solvers under ``SAT2011/bin/static`` and
+information about how to execute them inside
+``SAT2011/bin/static/CommandLines.txt``.
+
+Selecting solvers to use
+------------------------
+
+While a portfolio solver can be a useful tool, it still requires significant
+domain knowledge to select the solvers to include in the portfolio. In this
+example, we will simply select three of the best-performing solvers from the
+`2009 SAT competition <http://www.satcompetition.org/2009/>`_ and the `2010 SAT
+race <http://baldur.iti.uka.de/sat-race-2010/>`_:
+
+- ``cryptominisat`` (Mate Soos),
+- ``clasp`` (Martin Gebser, Benjamin Kaufmann, and Torsten Schaub), and
+- ``TNM`` (Wanxia Wei and Chu Min Li).
+
+This selection follows the lead of the ``ppfolio`` tool, a basic parallel
+portfolio that performed well in the 2011 competition. More information is
+available in `its documentation
+<http://www.cril.univ-artois.fr/~roussel/ppfolio/>`_. 
+
+Since ``ppfolio`` has helpfully packaged these solvers for the 2011
+competition, we can access them inside the
+``SAT2011/bin/static/main/sat11-11-roussel/bin`` directory. Let's make a
+symlink to that directory with
+
+.. code-block:: bash
+
+    $ ln -s SAT2011/bin/static/main/sat11-11-roussel/bin ppfolio-bin
+
+so that we can access it more easily later.
+
+.. TODO provide an example trivial satisfiable instance
+.. TODO and demonstrate executing these solvers on that instance
+
+Constructing a solver suite
+---------------------------
+
+We will now write a configuration file that allows borg to execute these SAT
+solvers by name. In borg, a collection of named solvers is referred to as a
+"suite".
+
+A suite configuration file is simply a Python module that establishes how to
+execute each solver. Here is a configuration file for the suite of solvers
+selected above::
+
+    import borg
+
+    domain = borg.get_domain("sat")
+    commands = {
+        "cryptominisat": ["{root}/ppfolio-bin/cryptominisat", "--randomize={seed}", "{task}"],
+        "clasp": ["{root}/ppfolio-bin/clasp", "--seed={seed}", "{task}"],
+        "TNM": ["{root}/ppfolio-bin/TNM", "{task}", "{seed}"],
+        }
+    solvers = borg.make_solvers(borg.domains.sat.solvers.SAT_SolverFactory, __file__, commands)
+
+We will call this file ``suite_sat_ppfolio.py``.
+
+A solver suite is required to provide two top-level variables:
+
+- ``domain``, which must be an instance of a class such as
+  :class:`borg.domains.sat.Satisfiability` that allows ``borg`` to parse
+  instances of the problem domain, compute features on those instances, and
+  determine basic properties of "answers" to instances of the domain; and
+- ``solvers``, a dictionary that maps arbitrary solver names (e.g., "minisat")
+  to instances of a solver factory class, such as
+  :class:`borg.domains.sat.solvers.SAT_SolverFactory`, that allow ``borg`` to
+  initiate solver runs on problem instances and to understand their output.
+
+``borg`` includes support for the output formats of various common solver
+types. In this case, the class
+:class:`borg.domains.sat.solvers.SAT_SolverFactory` supports the typical output
+format of SAT competition entries.
+
+.. TODO link to output format documentation
 
 Collecting solver performance data
-----------------------------------
+==================================
 
 The second step is to collect subsolver performance data for use in training.
 Each subsolver in the portfolio is run on each problem instance in the training
-set, often multiple times. Since this process requires an (unsurprisingly)
-enormous amount of computational time, and the borg project makes sets of
-training data publicly available, let's download one of those sets:
+set, often multiple times.
 
-http://nn.cs.utexas.edu/pages/research/borg-bulk/tasks-pb-pre11.tar.xz
+Verifying solver operation
+--------------------------
+
+First, let's make sure that the solver suite appears to be configured correctly.
 
 File format: subsolver run records
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+----------------------------------
 
 Run records are stored in CSV files with the suffix ``.runs.csv``. The
 following columns are expected in the following order:
@@ -45,8 +152,11 @@ following columns are expected in the following order:
     Base64-encoded gzipped pickled answer returned by the solver on this run,
     if any.
 
+Generating instance feature information
+=======================================
+
 File format: instance features
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+------------------------------
 
 Instance features are stored in CSV files with the suffix ``.features.csv``.
 The first column must be ``cost``, the computational cost of feature
@@ -54,7 +164,7 @@ computation, in CPU seconds. The remaining columns are domain-specific, one per
 feature.
 
 Training a portfolio solver
----------------------------
+===========================
 
 This section will walk you through the process of training a borg portfolio.
 
@@ -97,8 +207,8 @@ Then compute the local machine calibration factor with:
 The ratio that it prints can be used as a value for the "--speed" parameter to
 the "solve" tool discussed below.
 
-Running a portfolio solver
---------------------------
+Running the trained portfolio solver
+====================================
 
 Now let's solve the same calibration using the full portfolio, with
 

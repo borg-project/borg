@@ -18,6 +18,10 @@ The project web site is:
 
 http://nn.cs.utexas.edu/pages/research/borg/
 
+The best description of the research surrounding the borg project can be found
+in `the PhD dissertation <http://nn.cs.utexas.edu/?silverthorn:dissertation>`_
+of `the primary author <http://www.cs.utexas.edu/~bsilvert/>`_.
+
 License
 =======
 
