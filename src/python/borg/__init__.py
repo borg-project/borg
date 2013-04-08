@@ -6,13 +6,14 @@ import plac
 import os.path
 import imp
 import uuid
-import condor
 import borg.log
 
 logger = borg.log.get_logger(__name__, default_level = "INFO")
 named_domains = {}
 
 def do(*args, **kwargs):
+    import condor
+
     return condor.do(*args, **kwargs)
 
 def named_domain(domain_class):
