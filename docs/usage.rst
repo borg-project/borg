@@ -39,7 +39,7 @@ download these and unpack them:
 
 .. warning::
 
-    This tarball is 125MB compressed, and may take some time to download.
+    This tarball is 125MiB compressed, and may take some time to download.
 
 After unpacking, we find the solvers under ``SAT2011/bin/static`` and
 information about how to execute them inside
@@ -125,8 +125,48 @@ The second step is to collect subsolver performance data for use in training.
 Each subsolver in the portfolio is run on each problem instance in the training
 set, often multiple times.
 
-Verifying solver operation
---------------------------
+Gathering training instances
+----------------------------
+
+In this example, we will collect such data for the ppfolio suite on a small set
+of instances from the SAT2011 competition. Unfortunately, doing so requires
+downloading the entire set of instances from the competition:
+
+.. code-block:: bash
+
+    $ mkdir benchmarks
+    $ cd benchmarks
+    $ wget http://www.cril.univ-artois.fr/SAT11/bench/SAT11-Competition-SelectedBenchmarks.tar
+    $ tar xvf SAT11-Competition-SelectedBenchmarks.tar
+
+.. warning::
+
+    This tarball is 1.7GiB compressed, and may take some time to download.
+
+The archive contains a huge number of individually compressed instances. For
+now, we will train our portfolio on a small subset of those instances. The
+easiest way to create such a subset is simply to symlink or copy the relevant
+instances into a common location---here, into a new "selected" directory:
+
+.. code-block:: bash
+
+    $ mkdir selected
+    $ cd selected
+    $ cp ../SAT11/random/large/unif-k3-r4.2-v10000* .
+    $ cp ../SAT11/application/fuhs/AProVE11/* .
+    $ bunzip2 \*.bz2
+
+We have now pulled together an arbitrarily selected set of 20 instances to use
+as our training set.
+
+Executing solvers repeatedly
+----------------------------
+
+..Parallel solver execution requires 
+
+.. code-block:: bash
+
+    $ python -m borg.tools.run_solvers suite_sat_ppfolio.py benchmarks/selected/ 300
 
 First, let's make sure that the solver suite appears to be configured correctly.
 
