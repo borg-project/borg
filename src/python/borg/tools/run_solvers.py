@@ -17,6 +17,7 @@ def run_solver_on(suite_path, solver_name, task_path, budget, store_answers, see
     """Run a solver."""
 
     # bring back relevant globals
+    import os
     import borg
 
     logger = borg.get_logger(__name__, default_level = "INFO")
