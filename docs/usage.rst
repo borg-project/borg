@@ -146,7 +146,7 @@ downloading the entire set of instances from the competition:
 The archive contains a huge number of individually compressed instances. For
 now, we will train our portfolio on a small subset of those instances. The
 easiest way to create such a subset is simply to symlink or copy the relevant
-instances into a common location---here, into a new "selected" directory:
+instances into a common location---here, into a new directory named "selected":
 
 .. code-block:: bash
 
@@ -162,13 +162,36 @@ as our training set.
 Executing solvers repeatedly
 ----------------------------
 
-..Parallel solver execution requires 
+Borg can use an [HTCondor](http://research.cs.wisc.edu/htcondor/) or [IPython
+cluster](http://ipython.org/ipython-doc/dev/parallel/index.html) to execute
+solvers repeatedly and collect training data. For this experiment, set up a
+local IPython cluster by running:
+
+.. code-block:: bash
+
+    $ ipcluster start -n 2
+
+In this invocation, the ipcluster script will launch two engines for parallel
+processing. The value of the "-n" argument can be bumped up if you have more
+cores.
+
+The borg run_solvers tool collects run duration data. By default, it uses the
+local IPython cluster. To invoke it, specify the portfolio configuration above
+(in this case, "suite_sat_ppfolio.py"), the directory containing the set of
+benchmarks on which to execute the solver suite (in this case,
+"benchmarks/selected"), and the run duration cutoff in seconds (in this case,
+300 seconds).
 
 .. code-block:: bash
 
     $ python -m borg.tools.run_solvers suite_sat_ppfolio.py benchmarks/selected/ 300
 
-First, let's make sure that the solver suite appears to be configured correctly.
+.. warning::
+
+    Even though this suite of solvers and collection of benchmark instances are
+    both quite restricted, this set of runs will take a substantial amount of
+    time---12 hours or more---to complete. Solver run data collection is
+    extremely expensive in general.
 
 File format: subsolver run records
 ----------------------------------
