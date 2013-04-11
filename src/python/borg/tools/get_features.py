@@ -2,36 +2,46 @@
 
 import os.path
 import csv
-import condor
 import borg
+import borg.distributors
 
 logger = borg.get_logger(__name__, default_level = "INFO")
 
 def features_for_path(domain, task_path):
+    # bring back relevant globals
+    import os.path
+    import borg
+
+    logger = borg.get_logger(__name__, default_level = "INFO")
+
+    # collect features
     logger.info("getting features of %s", os.path.basename(task_path))
 
     with domain.task_from_path(task_path) as task:
         with borg.accounting() as accountant:
             (names, values) = domain.compute_features(task)
 
-        return (["cpu_cost"] + list(names), [accountant.total.cpu_seconds] + list(values))
+        return (
+            task_path,
+            ["cpu_cost"] + list(names),
+            [accountant.total.cpu_seconds] + list(values))
 
 @borg.annotations(
     domain_name = ("suite path, or name of the problem domain", "positional"),
     instances_root = ("path to instances files", "positional", None, os.path.abspath),
     suffix = ("file suffix to apply", "positional"),
     skip_existing = ("skip existing features?", "flag"),
+    distributor_name = ("name of task distributor", "option"),
     workers = ("submit jobs?", "option", "w", int),
     )
-def main(domain_name, instances_root, suffix = ".features.csv", skip_existing = False, workers = 0):
+def main(
+    domain_name,
+    instances_root,
+    suffix = ".features.csv",
+    skip_existing = False,
+    distributor_name = "ipython",
+    workers = 0):
     """Collect task features."""
-
-    condor.defaults.condor_matching = \
-        "InMastodon" \
-        " && regexp(\"rhavan-.*\", ParallelSchedulingGroup)" \
-        " && (Arch == \"X86_64\")" \
-        " && (OpSys == \"LINUX\")" \
-        " && (Memory > 1024)"
 
     def yield_runs():
         if os.path.exists(domain_name):
@@ -52,8 +62,11 @@ def main(domain_name, instances_root, suffix = ".features.csv", skip_existing = 
 
         logger.info("collecting features for %i instances", count)
 
-    for (task, (names, values)) in condor.do(yield_runs(), workers):
-        (_, cnf_path) = task.args
+    distributor = borg.distributors.make(
+        distributor_name,
+        workers=workers)
+
+    for (cnf_path, names, values) in distributor.do(yield_runs()):
         csv_path = cnf_path + suffix
 
         with open(csv_path, "wb") as csv_file:
@@ -62,4 +75,3 @@ def main(domain_name, instances_root, suffix = ".features.csv", skip_existing = 
 
 if __name__ == "__main__":
     borg.script(main)
-
