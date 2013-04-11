@@ -188,16 +188,19 @@ benchmarks on which to execute the solver suite (in this case,
 
 .. warning::
 
-    Even though this suite of solvers and collection of benchmark instances are
+    Solver run data collection is extremely expensive in general. For example,
+    even though this suite of solvers and collection of benchmark instances are
     both quite restricted, this set of runs will take a substantial amount of
-    time---12 hours or more---to complete. Solver run data collection is
-    extremely expensive in general.
+    time---12 hours or more---to complete using one or two cores.
 
 File format: subsolver run records
 ----------------------------------
 
-Run records are stored in CSV files with the suffix ``.runs.csv``. The
-following columns are expected in the following order:
+Run records are typically stored in CSV files with the suffix ``.runs.csv``.
+The full suffix can be modified through the "-suffix" flag to run_solvers,
+among other borg tools.
+
+The following columns are expected in the following order:
 
 ``solver``
     Unique name of the solver.
@@ -218,6 +221,22 @@ following columns are expected in the following order:
 Generating instance feature information
 =======================================
 
+Portfolios typically use domain-specific information about a given problem
+instance to make better solver execution decisions.
+
+Borg's "get_features" tool collects such information for the domains that
+it supports. The set of features collected is built into borg.
+
+We can use this tool to collect feature information from the set of
+selected benchmarks:
+
+.. code-block:: bash
+
+    python -m borg.tools.get_features sat benchmarks/selected/
+
+Like the run_solvers tool, get_features uses the local IPython cluster by
+default.
+
 File format: instance features
 ------------------------------
 
@@ -233,9 +252,7 @@ This section will walk you through the process of training a borg portfolio.
 
 At this point we have both a suite of subsolvers and a set of training data.
 The third and penultimate step in constructing a borg portfolio is fitting a
-predictive model to these data. With subsolvers and training data downloaded
-and unpacked, after activating the virtualenv in which borg is installed, use
-the "train" tool to fit a model:
+predictive model to these data. Use the "train" tool to fit a model:
 
 .. code-block:: bash
 
