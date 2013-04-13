@@ -5,4 +5,4 @@
 .pypirc
 /dist/
 /build/
-/src/python/borg.egg-info/
+/borg.egg-info/
