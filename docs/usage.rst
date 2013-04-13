@@ -162,10 +162,10 @@ as our training set.
 Executing solvers repeatedly
 ----------------------------
 
-Borg can use an [HTCondor](http://research.cs.wisc.edu/htcondor/) or [IPython
-cluster](http://ipython.org/ipython-doc/dev/parallel/index.html) to execute
-solvers repeatedly and collect training data. For this experiment, set up a
-local IPython cluster by running:
+Borg can use an `HTCondor <http://research.cs.wisc.edu/htcondor/>`_ or
+`IPython.parallel <http://ipython.org/ipython-doc/dev/parallel/index.html>`_
+cluster to execute solvers repeatedly and collect training data. For this
+experiment, set up a local IPython cluster by running:
 
 .. code-block:: bash
 
@@ -174,6 +174,12 @@ local IPython cluster by running:
 In this invocation, the ipcluster script will launch two engines for parallel
 processing. The value of the "-n" argument can be bumped up if you have more
 cores.
+
+.. note::
+
+    If you do not have access to a cluster, `StarCluster
+    <http://star.mit.edu/cluster/>`_ and other projects let you easily run one
+    on `EC2 <http://aws.amazon.com/ec2/>`_---but you will pay for it.
 
 The borg run_solvers tool collects run duration data. By default, it uses the
 local IPython cluster. To invoke it, specify the portfolio configuration above
@@ -256,7 +262,7 @@ predictive model to these data. Use the "train" tool to fit a model:
 
 .. code-block:: bash
 
-    $ python -m borg.tools.train borg-pb.model.pickle borg-mix+class solvers/pb/portfolio.py tasks/pb/categorized/dec-smallint-lin
+    $ python -m borg.tools.train borg-sat-ppofolio.model.pickle borg-mix+class solvers/pb/portfolio.py tasks/pb/categorized/dec-smallint-lin
 
 This process can take ten minutes or more, depending on the amount of training
 data and the nubmer of subsolvers. It will write a portfolio model (of type
