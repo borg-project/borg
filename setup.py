@@ -1,35 +1,34 @@
-import setuptools
-import setuptools.extension
+from setuptools import setup
+from setuptools.extension import Extension
 
 try:
     import Cython.Distutils
 except ImportError:
     cmdclass = {}
     ext_modules = None
+
+    print "WARNING: unable to import Cython."
 else:
     cmdclass = {"build_ext": Cython.Distutils.build_ext}
     ext_modules = [
-        setuptools.extension.Extension("borg.bregman", ["src/python/borg/bregman.pyx"]),
-        setuptools.extension.Extension("borg.models", ["src/python/borg/models.pyx"]),
-        setuptools.extension.Extension("borg.planners", ["src/python/borg/planners.pyx"]),
-        setuptools.extension.Extension("borg.statistics", ["src/python/borg/statistics.pyx"]),
-        setuptools.extension.Extension("borg.domains.max_sat.features", ["src/python/borg/domains/max_sat/features.pyx"]),
-        setuptools.extension.Extension("borg.domains.max_sat.instance", ["src/python/borg/domains/max_sat/instance.pyx"]),
-        setuptools.extension.Extension("borg.domains.pb.features", ["src/python/borg/domains/pb/features.pyx"]),
-        setuptools.extension.Extension("borg.domains.pb.instance", ["src/python/borg/domains/pb/instance.pyx"]),
-        setuptools.extension.Extension("borg.domains.sat.features", ["src/python/borg/domains/sat/features.pyx"]),
-        setuptools.extension.Extension("borg.domains.sat.instance", ["src/python/borg/domains/sat/instance.pyx"]),
-        setuptools.extension.Extension("borg.test.test_statistics_c", ["src/python/borg/test/test_statistics_c.pyx"]),
-        ]
+        Extension("borg.bregman", ["borg/bregman.pyx"]),
+        Extension("borg.models", ["borg/models.pyx"]),
+        Extension("borg.planners", ["borg/planners.pyx"]),
+        Extension("borg.statistics", ["borg/statistics.pyx"]),
+        Extension("borg.domains.max_sat.features", ["borg/domains/max_sat/features.pyx"]),
+        Extension("borg.domains.max_sat.instance", ["borg/domains/max_sat/instance.pyx"]),
+        Extension("borg.domains.pb.features", ["borg/domains/pb/features.pyx"]),
+        Extension("borg.domains.pb.instance", ["borg/domains/pb/instance.pyx"]),
+        Extension("borg.domains.sat.features", ["borg/domains/sat/features.pyx"]),
+        Extension("borg.domains.sat.instance", ["borg/domains/sat/instance.pyx"]),
+        Extension("borg.test.test_statistics_c", ["borg/test/test_statistics_c.pyx"])]
 
 with open("requirements.txt") as file_:
     requires = [line for line in file_.readlines() if not line.startswith("git+")]
 
-setuptools.setup(
+setup(
     name = "borg",
     version = "2012.4.01",
-    packages = setuptools.find_packages("src/python"),
-    package_dir = {"": "src/python"},
     cmdclass = cmdclass,
     ext_modules = ext_modules,
     install_requires = requires,
@@ -45,7 +44,4 @@ setuptools.setup(
         "Operating System :: Unix",
         "Topic :: Utilities",
         "Topic :: Software Development :: Libraries",
-        "Topic :: Scientific/Engineering :: Artificial Intelligence",
-        ],
-    )
-
+        "Topic :: Scientific/Engineering :: Artificial Intelligence"])
