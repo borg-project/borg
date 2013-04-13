@@ -7,17 +7,25 @@ import zlib
 import base64
 import cPickle as pickle
 import numpy
-import condor
 import borg
+import borg.distributors
 
 logger = borg.get_logger(__name__, default_level = "INFO")
 
-def run_solver_on(suite_path, solver_name, task_path, budget, store_answers, seed = None):
+
+def run_solver_on(suite_path, solver_name, task_path, budget, store_answers, seed):
     """Run a solver."""
+
+    # bring back relevant globals
+    import os
+    import borg
+
+    logger = borg.get_logger(__name__, default_level = "INFO")
 
     if seed is not None:
         borg.statistics.set_prng_seeds(seed)
 
+    # run the solver
     suite = borg.load_solvers(suite_path)
 
     with suite.domain.task_from_path(task_path) as task:
@@ -51,6 +59,7 @@ def run_solver_on(suite_path, solver_name, task_path, budget, store_answers, see
     only_solver = ("only make runs of one solver", "option"),
     runs = ("number of runs", "option", "r", int),
     suffix = ("runs file suffix", "option"),
+    distributor_name = ("name of task distributor", "option"),
     workers = ("submit jobs?", "option", "w", int),
     )
 def main(
@@ -62,16 +71,10 @@ def main(
     only_solver = None,
     runs = 4,
     suffix = ".runs.csv",
+    distributor_name = "ipython",
     workers = 0,
     ):
     """Collect solver running-time data."""
-
-    condor.defaults.condor_matching = \
-        "InMastodon" \
-        " && regexp(\"rhavan-.*\", ParallelSchedulingGroup)" \
-        " && (Arch == \"X86_64\")" \
-        " && (OpSys == \"LINUX\")" \
-        " && (Memory > 1024)"
 
     def yield_runs():
         suite = borg.load_solvers(suite_path)
@@ -107,7 +110,11 @@ def main(
 
                     yield (run_solver_on, [suite_path, solver_name, path, budget, store_answers, seed])
 
-    for (task, row) in condor.do(yield_runs(), workers):
+    distributor = borg.distributors.make(
+        distributor_name,
+        workers=workers)
+
+    for row in distributor.do(yield_runs()):
         # unpack run outcome
         (cnf_path, solver_name, budget, cost, succeeded, answer) = row
 

@@ -1,6 +1,8 @@
 .*.swp
 *.pyc
-.waf-*
-.lock-wafbuild
-build/
-virtualenvs/
+*.c
+*.so
+.pypirc
+/dist/
+/build/
+/src/python/borg.egg-info/

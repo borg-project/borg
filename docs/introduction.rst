@@ -1,8 +1,8 @@
 Introducing borg
-================
+****************
 
 About
------
+=====
 
 Modern heuristic solvers can tackle difficult computational problems, but each
 solver performs well only on certain tasks. An algorithm portfolio uses
@@ -18,8 +18,12 @@ The project web site is:
 
 http://nn.cs.utexas.edu/pages/research/borg/
 
+The best description of the research surrounding the borg project can be found
+in `the PhD dissertation <http://nn.cs.utexas.edu/?silverthorn:dissertation>`_
+of `the primary author <http://www.cs.utexas.edu/~bsilvert/>`_.
+
 License
--------
+=======
 
 Borg is provided under the non-copyleft open-source "MIT" license. The complete
 legal notice can be found in the included LICENSE file.
